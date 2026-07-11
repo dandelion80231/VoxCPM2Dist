@@ -2,7 +2,7 @@
 
 > **一句话**：开箱即用的 VoxCPM2 语音合成工具，内置完整 Python 环境与模型权重，**已随包内置离线真实降噪（ZipEnhancer）**，有 NVIDIA 显卡自动走 CUDA，无显卡自动 CPU 回退，零预装。
 
-> **📦 关于本仓库（GitHub）**：本仓库**仅托管源代码与构建脚本**。体积较大的运行时与权重已通过 `.gitignore` 排除、**不纳入版本库**：
+> **📦 关于本仓库（GitHub）**：本仓库**仅托管源代码与构建脚本**，仓库地址 👉 https://github.com/dandelion80231/VoxCPM2Dist 。体积较大的运行时与权重已通过 `.gitignore` 排除、**不纳入版本库**：
 > - `app/python_cuda/` —— 离线 Python 3.12 + PyTorch/CUDA 运行时（约 8GB，可据下方「构建说明」现装）
 > - `app/model/`、`app/models/` —— 模型权重（VoxCPM2 ≈4.6GB + ZipEnhancer ≈18MB，均为公开可下载，见下方链接）
 > - `output/` —— 构建出的安装包（需自行 `build_installer.ps1` 生成，或另寻分发渠道）
