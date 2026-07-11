@@ -2,7 +2,7 @@
 VoxCPM2 Web UI — v5.0 一体化界面
 ================================
 本地 Web 服务器 + 浏览器 UI，无需安装任何依赖（除了 voxcpm 自带的）。
-启动后自动打开浏览器，访问 http://localhost:18978
+启动后自动打开浏览器，访问 http://localhost:8000（端口被占用时自动顺延）
 
 架构：
   - FastAPI HTTP API（模型常驻后台线程）
@@ -2579,6 +2579,29 @@ def run_server(port: int = 18978, host: str = "127.0.0.1", hide_console: bool = 
         print("请运行: pip install uvicorn fastapi")
         return
 
+    import socket as _socket
+
+    def _pick_port(p):
+        for cand in range(p, p + 50):
+            _s = _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM)
+            try:
+                _s.bind((host, cand))
+                _s.close()
+                return cand
+            except OSError:
+                _s.close()
+        return None
+
+    actual_port = _pick_port(port)
+    if actual_port is None:
+        print(f"\n[错误] 端口 {port} ~ {port + 49} 均被占用，无法启动服务器。")
+        print("请关闭占用端口的程序，或换用其他起始端口后重试。")
+        input("按回车键退出...")
+        return
+    if actual_port != port:
+        print(f"提示：端口 {port} 已被占用，已自动改用端口 {actual_port}")
+
+    port = actual_port
     url = f"http://{host}:{port}"
     print(f"\n{'='*50}")
     print(f"  VoxCPM2 Web UI 已启动")
@@ -2597,13 +2620,26 @@ def run_server(port: int = 18978, host: str = "127.0.0.1", hide_console: bool = 
     threading.Thread(target=open_browser, daemon=True).start()
 
     # 启动后自动隐藏命令行窗口（Windows），网页按钮可随时重新显示
+    # 仅当服务器确实启动成功后才隐藏，避免失败时被静默吞掉
+    started = {"ok": False}
+    try:
+        app.add_event_handler("startup", lambda: started.__setitem__("ok", True))
+    except Exception:
+        pass
     if hide_console and sys.platform == "win32":
         def hide_later():
-            time.sleep(2.0)
-            _set_console_visible(False)
+            time.sleep(2.5)
+            if started["ok"]:
+                _set_console_visible(False)
         threading.Thread(target=hide_later, daemon=True).start()
 
-    uvicorn.run(app, host=host, port=port, log_level="warning")
+    try:
+        uvicorn.run(app, host=host, port=port, log_level="warning")
+    except OSError as e:
+        print(f"\n[错误] 无法在 {host}:{port} 启动服务器：{e}")
+        print("该端口可能已被其他程序占用。请换用其他端口后重试，例如：")
+        print(f"  python vox_web_ui.py --port 8010")
+        input("按回车键退出...")
 
 
 # ══════════════════════════════════════════════════════════
