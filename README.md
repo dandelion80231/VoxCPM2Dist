@@ -2,6 +2,13 @@
 
 > **一句话**：开箱即用的 VoxCPM2 语音合成工具，内置完整 Python 环境与模型权重，**已随包内置离线真实降噪（ZipEnhancer）**，有 NVIDIA 显卡自动走 CUDA，无显卡自动 CPU 回退，零预装。
 
+> **📦 关于本仓库（GitHub）**：本仓库**仅托管源代码与构建脚本**。体积较大的运行时与权重已通过 `.gitignore` 排除、**不纳入版本库**：
+> - `app/python_cuda/` —— 离线 Python 3.12 + PyTorch/CUDA 运行时（约 8GB，可据下方「构建说明」现装）
+> - `app/model/`、`app/models/` —— 模型权重（VoxCPM2 ≈4.6GB + ZipEnhancer ≈18MB，均为公开可下载，见下方链接）
+> - `output/` —— 构建出的安装包（需自行 `build_installer.ps1` 生成，或另寻分发渠道）
+>
+> 也就是说：clone 下来是**源码 + 构建脚本**，不是开箱即用的程序。要得到可运行版本，请按「构建说明」补齐全运行时与权重后打包，或直接获取构建好的安装包。所有代码改动（归一化统一、crossfade 统一、目录清理、打包脚本修复）均在此仓库内可追溯。
+
 ## 特性一览
 
 | 特性 | 说明 |
@@ -137,6 +144,26 @@ set ENG=voxcpm_tts_v5_longtext.py
 **离线降噪模型（ZipEnhancer）** 约 18 MB，存放于 `models\zipenhancer\`（`pytorch_model.bin` + `onnx_model.onnx` + `configuration.json` 等）。
 合成时勾选「降噪」即调用它，纯本地、不联网；其运行依赖 `addict` / `Pillow` / `simplejson` / `sortedcontainers`（已写入 `requirements.txt` 并随包安装）。
 
+### 模型与权重下载（不随仓库，需自行下载）
+
+本仓库**不包含**模型权重文件。请按下方命令下载并放到对应目录（`app\` 指仓库内的 `app/` 目录），或构建时由「构建说明」步骤 5/5b 自动拉取。
+
+```bash
+# ① 主模型 VoxCPM2（HuggingFace，约 4.6GB）
+#   HF 官方源：
+huggingface-cli download openbmb/VoxCPM2 --local-dir app/model/openbmb/VoxCPM2
+#   国内镜像（免科学上网）：
+HF_ENDPOINT=https://hf-mirror.com huggingface-cli download openbmb/VoxCPM2 --local-dir app/model/openbmb/VoxCPM2
+
+# ② 离线降噪模型 ZipEnhancer（ModelScope，约 18MB）
+modelscope download --model iic/speech_zipenhancer_ans_multiloss_16k_base --local-dir app/models/zipenhancer
+```
+
+下载源：
+
+- **VoxCPM2 主模型**：[HuggingFace openbmb/VoxCPM2](https://huggingface.co/openbmb/VoxCPM2) ｜ [GitHub OpenBMB/VoxCPM](https://github.com/OpenBMB/VoxCPM) ｜ 国内网盘 [夸克](https://pan.quark.cn/s/42994c0df601)
+- **ZipEnhancer 降噪**：[ModelScope iic/speech_zipenhancer_ans_multiloss_16k_base](https://modelscope.cn/models/iic/speech_zipenhancer_ans_multiloss_16k_base)
+
 ## 项目结构
 
 ```
@@ -160,12 +187,11 @@ VoxCPM2Dist/
 │   ├── VoxCPM2_TTS.iss          # InnoSetup 安装脚本
 │   └── ChineseSimplified.isl    # 中文语言文件
 ├── build_installer.ps1          # 构建：7z 预压缩 app/ 为 payload/app.7z 后调用 ISCC
-└── output/                       # 构建产物（安装包，已生成可分发）
-│   ├── VoxCPM2_TTS_v5.0_Setup.exe    # 安装包引导
-│   ├── VoxCPM2_TTS_v5.0_Setup-1.bin  # 分卷 1
-│   ├── VoxCPM2_TTS_v5.0_Setup-2.bin  # 分卷 2
-│   ├── VoxCPM2_TTS_v5.0_Setup-3.bin  # 分卷 3
-│   └── VoxCPM2_TTS_v5.0_Setup-4.bin  # 分卷 4
+└── output/                       # 构建产物（安装包；本仓库不纳入，需自行 build）
+    ├── VoxCPM2_TTS_v5.0_Setup.exe    # 安装包引导（双击运行）
+    ├── VoxCPM2_TTS_v5.0_Setup-1.bin  # 分卷 1（~1.86GB）
+    ├── VoxCPM2_TTS_v5.0_Setup-2.bin  # 分卷 2（~2.00GB）
+    └── VoxCPM2_TTS_v5.0_Setup-3.bin  # 分卷 3（~1.22GB）
 ```
 
 ## 构建说明
