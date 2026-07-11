@@ -1,0 +1,47 @@
+# VoxCPM2 TTS 中文版 v4.0 — Python 依赖清单
+# 生成日期：2026-07-09
+# 注意：torch 需单独从 CUDA 源安装
+
+# PyTorch CUDA 12.6（需手动安装）
+# pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu126
+
+# 核心依赖
+voxcpm==2.0.3
+torchaudio==2.11.0
+transformers==5.13.0
+datasets==5.0.0
+wetext==0.1.4
+librosa==0.11.0
+einops==0.8.2
+modelscope==1.38.1
+
+# 离线降噪（ZipEnhancer）依赖 —— 随包内置 zipenhancer 模型时需要
+addict==2.4.0
+Pillow==12.3.0
+simplejson==4.1.1
+sortedcontainers==2.4.0
+
+# 工具链
+numpy==2.4.6
+pydantic==2.13.4
+safetensors==0.8.0
+huggingface-hub==1.22.0
+argbind==0.3.9
+tqdm==4.68.4
+regex==2026.6.28
+pyyaml==6.0.3
+inflect==7.5.0
+soundfile==0.14.0
+scipy==1.18.0
+scikit-learn==1.9.0
+numba==0.66.0
+kaldifst==1.8.0
+
+# 辅助
+contractions==0.1.73
+textsearch==0.0.24
+pyahocorasick==2.3.1
+rich==15.0.0
+typer==0.26.8
+httpx==0.28.1
+colorama==0.4.6

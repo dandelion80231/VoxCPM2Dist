@@ -1,0 +1,23 @@
+# ===== 构建产物与分发包（二进制，不入版本库）=====
+payload/
+output/
+
+# ===== 离线 Python 运行时（含 torch/cuda，约 8GB）=====
+app/python_cuda/
+
+# ===== 模型权重 =====
+app/model/
+app/models/
+
+# ===== Python 缓存 =====
+__pycache__/
+*.py[cod]
+
+# ===== 项目内部工作记忆（不对外）=====
+.workbuddy/
+
+# ===== 系统 / 编辑器文件 =====
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.DS_Store
