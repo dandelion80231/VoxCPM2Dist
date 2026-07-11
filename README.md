@@ -20,6 +20,16 @@
 
 > ⚠️ 安装包 4 个文件（`.exe` + 3×`.bin`）**必须放在一起**，分卷按文件名关联，少一个就装不了。
 
+## 功能介绍
+
+VoxCPM2 TTS 中文版是一个**完全离线、开箱即用**的中文语音合成分发包，把 OpenBMB 开源的 VoxCPM2 语音模型、离线降噪（ZipEnhancer）与一整套便携 Python/CUDA 运行时打包进一个安装程序。它面向三类场景：
+
+- **长文本配音**：小说 / 文章 / 课件一键转语音，自动按语义分段、交叉淡入淡出拼接，音色在整段内保持一致，消除段间爆音与断裂感。
+- **声音克隆**：上传一段参考音频即可克隆音色（可控克隆 / 终极克隆 / 自播种），或仅用文字描述期望音色让模型「设计」声音。
+- **日常语音合成**：内置 10 种预设音色、图形化 PowerShell 菜单与浏览器 Web UI，不懂命令行也能直接用。
+
+所有推理均在本地完成，**无需联网、无需预装环境**；有 NVIDIA 显卡自动走 CUDA 加速，无显卡自动 CPU 回退。
+
 ## 特性一览
 
 | 特性 | 说明 |
@@ -113,8 +123,12 @@ set ENG=voxcpm_tts_v5_longtext.py
 
 ### 网页界面（Web UI）
 
+![VoxCPM2 网页界面](assets/web-ui.svg)
+
 启动器为 `app\start_web_ui.bat`，内部调用 `python_cuda\python.exe Scripts\vox_web_ui.py --port 8000 --host 127.0.0.1`，
 随后自动打开浏览器 http://127.0.0.1:18978 。Web UI 支持麦克风录制参考音频、自定义音色描述、可编辑模型/输出目录，并会在路径面板显示「降噪模型：已内置（离线可用）」。
+
+> 📷 **截图占位**：当前为占位图。请将实际网页界面截图保存为 `assets/web-ui.svg`（或 `assets/web-ui.png` 并改上方链接）后提交；建议再补一张勾选「降噪」后的界面对比图 `assets/web-ui-denoise.svg`。
 
 ## 环境规格
 
@@ -466,3 +480,13 @@ yarl==1.24.2
 - **InnoSetup**：[innosetup.com](https://www.innosetup.com/)
 - **HF Mirror**：[hf-mirror.com](https://hf-mirror.com)
 - **ZipEnhancer 降噪模型**：[modelscope iic/speech_zipenhancer_ans_multiloss_16k_base](https://modelscope.cn/models/iic/speech_zipenhancer_ans_multiloss_16k_base)
+
+## 致谢
+
+本分发包基于 OpenBMB 开源的 **VoxCPM2** 项目构建，代码与实现思路参考下列官方资源：
+
+- **VoxCPM2 官网**：[https://voxcpm.net/](https://voxcpm.net/) —— 模型介绍、技术解析与官方 Demo
+- **VoxCPM2 GitHub**：[OpenBMB/VoxCPM](https://github.com/OpenBMB/VoxCPM) —— 开源代码、模型权重与训练脚本
+- **VoxCPM2 模型权重**：[HuggingFace openbmb/VoxCPM2](https://huggingface.co/openbmb/VoxCPM2)
+
+感谢 OpenBMB 团队开源如此优秀的语音合成模型，使本离线分发包成为可能。模型使用权请遵循其原始许可（Apache 2.0）。

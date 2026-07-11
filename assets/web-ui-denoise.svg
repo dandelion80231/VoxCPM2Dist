@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="800" viewBox="0 0 1280 800">
+  <defs>
+    <linearGradient id="bg2" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0f1115"/>
+      <stop offset="1" stop-color="#1a1f2b"/>
+    </linearGradient>
+  </defs>
+  <rect width="1280" height="800" fill="url(#bg2)"/>
+  <rect x="48" y="48" width="1184" height="704" rx="18" fill="none" stroke="#2a313c" stroke-width="2"/>
+  <text x="640" y="372" fill="#cdd5e0" font-family="-apple-system,Segoe UI,sans-serif" font-size="40" font-weight="600" text-anchor="middle">VoxCPM2 网页界面 · 降噪对比截图占位</text>
+  <text x="640" y="424" fill="#6b7686" font-family="-apple-system,Segoe UI,sans-serif" font-size="22" text-anchor="middle">请将勾选「降噪」后的界面对比图保存为 assets/web-ui-denoise.svg（或 .png）</text>
+  <text x="640" y="460" fill="#4b5566" font-family="-apple-system,Segoe UI,sans-serif" font-size="16" text-anchor="middle">建议 1280×800 以上</text>
+</svg>
