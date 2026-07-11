@@ -2,7 +2,7 @@
 VoxCPM2 Web UI — v5.0 一体化界面
 ================================
 本地 Web 服务器 + 浏览器 UI，无需安装任何依赖（除了 voxcpm 自带的）。
-启动后自动打开浏览器，访问 http://localhost:8000（端口被占用时自动顺延）
+启动后自动打开浏览器，访问 http://localhost:18978（端口被占用时自动顺延）
 
 架构：
   - FastAPI HTTP API（模型常驻后台线程）
@@ -20,6 +20,11 @@ import re
 import shutil
 import sys
 import tempfile
+
+# 内嵌版 Python(python_cuda)不会把脚本所在目录加入 sys.path，
+# 手动加入以便导入同级模块（text_norm_cn 等），否则双击 .bat 会因
+# ModuleNotFoundError 静默崩溃
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import threading
 import time
 import uuid

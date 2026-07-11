@@ -21,6 +21,10 @@ import os
 import re
 import sys
 import time
+
+# 内嵌版 Python 不自动添加脚本目录，手动加入以便可靠导入同级模块 text_norm_cn
+# （否则 build_text 内的 import 会失败并静默回退到 wetext，导致与网页端归一化不一致）
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from pathlib import Path
 
 import numpy as np

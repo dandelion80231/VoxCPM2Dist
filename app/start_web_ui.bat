@@ -11,6 +11,6 @@ echo Model: %VOXCPM_MODEL_DIR%
 echo Output: %VOXCPM_OUTPUT_DIR%
 echo.
 
-start "" "%~dp0python_cuda\python.exe" "%~dp0Scripts\vox_web_ui.py" --port 8000 --host 127.0.0.1
+start "" "%~dp0python_cuda\python.exe" "%~dp0Scripts\vox_web_ui.py" --port 18978 --host 127.0.0.1
 
 exit
