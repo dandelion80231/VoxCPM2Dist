@@ -123,8 +123,8 @@ set ENG=voxcpm_tts_v5_longtext.py
 
 ### 网页界面（Web UI）
 
-![VoxCPM2 网页界面 - 深色模式（未启用降噪）](assets/web-ui.png)
-![VoxCPM2 网页界面 - 浅色模式（已启用降噪）](assets/web-ui-denoise.png)
+![VoxCPM2 网页界面 - 深色模式（未启用降噪）](https://cdn.jsdelivr.net/gh/dandelion80231/VoxCPM2Dist@main/assets/web-ui.png)
+![VoxCPM2 网页界面 - 浅色模式（已启用降噪）](https://cdn.jsdelivr.net/gh/dandelion80231/VoxCPM2Dist@main/assets/web-ui-denoise.png)
 
 启动器为 `app\start_web_ui.bat`，内部调用 `python_cuda\python.exe Scripts\vox_web_ui.py --port 18978 --host 127.0.0.1`，
 随后自动打开浏览器 http://127.0.0.1:18978 （若 18978 被占用会自动顺延到下一个可用端口）。Web UI 支持麦克风录制参考音频、自定义音色描述、可编辑模型/输出目录，并会在路径面板显示「降噪模型：已内置（离线可用）」。
