@@ -33,7 +33,7 @@ import numpy as np
 MODEL_ID = "openbmb/VoxCPM2"
 LOCAL_MODEL_PATH = os.environ.get("VOXCPM_MODEL_DIR", "")
 DEVICE = "cuda" if os.environ.get("VOXCPM_DEVICE", "") else "auto"
-DEFAULT_OUTPUT_DIR = Path(os.environ.get("VOXCPM_OUTPUT_DIR", str(Path("D:/电脑桌面").resolve())))
+DEFAULT_OUTPUT_DIR = Path(os.environ.get("VOXCPM_OUTPUT_DIR", str(Path.home() / "Desktop")))
 MAX_CHUNK_SIZE = 240
 
 
