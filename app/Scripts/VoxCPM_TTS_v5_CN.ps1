@@ -55,7 +55,7 @@ function Show-Banner {
     Write-Host "   V    OOO  X   X  CCC  P     M   M 22222 " -ForegroundColor Cyan
     Write-Host "+==========================================+" -ForegroundColor Cyan
     Write-Host "|                                          |" -ForegroundColor Cyan
-    Write-Host "|   VoxCPM2 语音合成工具 v5.0 音色统一版   |" -ForegroundColor Cyan
+    Write-Host "|   VoxCPM2 语音合成工具 v5.0.2 音色统一版   |" -ForegroundColor Cyan
     Write-Host "|                                          |" -ForegroundColor Cyan
     Write-Host "|   长文本配音 / 音色一致 / 交叉淡入淡出   |" -ForegroundColor Cyan
     Write-Host "|                                          |" -ForegroundColor Cyan
@@ -75,7 +75,7 @@ function Show-Menu {
     Write-Host ""
     Write-Host "[长文本配音]" -ForegroundColor Yellow
     Write-Host "  9  - 长文本文件配音（方式2：固定参考音频，最稳定）"
-    Write-Host "  10 - 长文本文件配音（方式1：自播种，自动生成参考）"
+    Write-Host "  10 - 长文本文件配音（方式1：自播种，第1段当种子）"
     Write-Host "  11 - 长文本文件配音（方式3：逐段音色设计）"
     Write-Host "  12 - 生成参考音频（用于长文本统一音色）"
     Write-Host ""
@@ -156,7 +156,7 @@ function Invoke-LongText {
 
     $modeName = switch ($Mode) {
         "2" { "固定参考音频克隆（最稳定）" }
-        "1" { "自播种克隆（自动生成参考）" }
+        "1" { "自播种克隆（第1段当种子）" }
         "3" { "逐段音色设计（音色可能不一致）" }
         default { "固定参考音频克隆" }
     }
@@ -185,22 +185,11 @@ function Invoke-LongText {
             $argList += @("--reference", $refPath)
         }
         "1" {
-            # 两步法（与用户测试确认的方法一致）：
-            # 第1步：预生成专用参考音频（多句长文本，丰富语调/韵律采样）
-            # 第2步：用这个固定参考克隆全文（音色最稳定，几乎无漂移）
+            # 真正自播种：第1段 Voice Design 直接当后续段参考（不预生成参考音频）
+            # 锚定正文开头，更连贯；省去整条参考生成 pass，更快；与「>180字自动路径」行为一致
             Write-Host ""
-            Write-Host "[自播种] 第1步：正在生成专用参考音频（多语调长句）..." -ForegroundColor Cyan
-            $refText = "你好，欢迎使用语音合成系统。今天将为您带来一段精彩的语音合成演示，让我们一起体验人工智能技术带来的便捷与乐趣。我们的技术正在不断进步，力求为您提供更加自然流畅的语音体验。"
-            $refFile = Join-Path $desktop "voxcpm_seed_ref.wav"
-            # 参考音频用更高 cfg/steps 确保音色一致性
-            & $PYTHON $SCRIPT -t $refText -c $Control --cfg 3.0 --steps 20 -o $refFile
-            if (-not (Test-Path $refFile)) {
-                Write-Host "[错误] 参考音频生成失败！" -ForegroundColor Red
-                return
-            }
-            Write-Host "[自播种] 参考音频已保存: $refFile" -ForegroundColor Green
-            # 第2步：全文用固定参考克隆
-            $argList += @("--reference", $refFile, "--crossfade", "80")
+            Write-Host "[自播种] 第1段当种子：后续段锚定正文开头音色（不预生成参考）" -ForegroundColor Cyan
+            $argList += @("--self-seeding", "--crossfade", "80")
         }
         "3" {
             $argList += "--no-self-seeding"
