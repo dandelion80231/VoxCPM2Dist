@@ -384,9 +384,10 @@ pip install torch torchvision torchaudio --index-url https://download.pytorch.or
 
 ## 依赖清单
 
-完整 pip 依赖列表（共 82 个包，含离线降噪所需的 `addict` / `Pillow` / `simplejson` / `sortedcontainers`）：
+完整第三方依赖清单（共 101 个包，已排除 `pip` 安装器本身；涵盖核心推理 / 音频 / 中文文本前处理 / Web UI（FastAPI 栈：`fastapi` `starlette` `uvicorn` `jinja2` `python-multipart` `tzdata`）/ 离线降噪（`addict` `Pillow` `simplejson` `sortedcontainers`）全部依赖，与内置 `python_cuda` 环境的 `site-packages` 实测一致）：
 
 ```
+addict==2.4.0
 aiohappyeyeballs==2.7.1
 aiohttp==3.14.1
 aiosignal==1.4.0
@@ -408,6 +409,7 @@ decorator==5.3.1
 dill==0.4.1
 docstring-parser==0.18.0
 einops==0.8.2
+fastapi==0.139.0
 filelock==3.29.7
 frozenlist==1.8.0
 fsspec==2026.4.0
@@ -418,6 +420,7 @@ httpx==0.28.1
 huggingface-hub==1.22.0
 idna==3.18
 inflect==7.5.0
+jinja2==3.1.6
 joblib==1.5.3
 kaldifst==1.8.0
 lazy-loader==0.5
@@ -439,6 +442,7 @@ numba==0.66.0
 numpy==2.4.6
 packaging==26.2
 pandas==3.0.3
+pillow==12.3.0
 platformdirs==4.10.0
 pooch==1.9.0
 propcache==0.5.2
@@ -449,6 +453,7 @@ pydantic==2.13.4
 pydantic-core==2.46.4
 pygments==2.20.0
 python-dateutil==2.9.0.post0
+python-multipart==0.0.32
 pyyaml==6.0.3
 regex==2026.6.28
 requests==2.34.2
@@ -458,9 +463,12 @@ scikit-learn==1.9.0
 scipy==1.18.0
 setuptools==81.0.0
 shellingham==1.5.4
+simplejson==4.1.1
 six==1.17.0
+sortedcontainers==2.4.0
 soundfile==0.14.0
 soxr==1.1.0
+starlette==1.3.1
 sympy==1.14.0
 textsearch==0.0.24
 threadpoolctl==3.6.0
@@ -473,14 +481,16 @@ typeguard==4.5.2
 typer==0.26.8
 typing-extensions==4.16.0
 typing-inspection==0.4.2
+tzdata==2026.2
 urllib3==2.7.0
+uvicorn==0.51.0
 voxcpm==2.0.3
 wetext==0.1.4
 xxhash==3.8.1
 yarl==1.24.2
 ```
 
-> 离线降噪额外依赖（已在 `requirements.txt` 中）：`addict==2.4.0`、`Pillow==12.3.0`、`simplejson==4.1.1`、`sortedcontainers==2.4.0`。
+> 说明：`site-packages` 中另有 `pip` 安装器本身（不计入上述依赖）。离线降噪与 Web UI 所需依赖已统一合并进上表，无需额外安装。
 
 ## 原始资源
 
