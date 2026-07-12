@@ -1,7 +1,10 @@
 # ===== 构建产物与分发包（二进制，不入版本库）=====
 payload/
 output/
-VoxCPM2_TTS_v5.0_Setup.zip
+VoxCPM2_TTS_v*.zip
+
+# ===== 构建日志与临时文件 =====
+*.log
 
 # ===== 离线 Python 运行时（含 torch/cuda，约 8GB）=====
 app/python_cuda/
