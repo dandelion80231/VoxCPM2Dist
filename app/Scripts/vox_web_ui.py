@@ -1679,6 +1679,8 @@ let recState = null;
 let pollingInterval = null;
 let currentJobId = null;
 let history = [];
+let currentPlayingWav = null;    // 当前播放器加载的音频文件名
+let currentPlayBtnId = null;     // 当前显示为暂停的按钮 id
 
 // ── 初始化 ─────────────────────────────────────
 const VOICE_LIST = {
@@ -1717,6 +1719,7 @@ async function init() {
   bindTextArea();
   bindRefUpload();
   bindModelStatus();
+  bindAudioPlayer();
   loadPaths();
   // 默认预设填入音色描述
   const defBtn = document.querySelector('.voice-btn[data-id="default"]');
@@ -2288,7 +2291,7 @@ function updateProgress(pct, msg, elapsed, remaining) {
 function onDone(d) {
   showToast('合成完成！时长 ' + (d.duration || 0).toFixed(1) + 's', 'success');
   addHistory({ text: document.getElementById('textInput').value.slice(0, 50), wav: d.output_wav, duration: d.duration });
-  playAudio(d.output_wav);
+  togglePlayAudio(d.output_wav, null);
   document.getElementById('progressCard').classList.remove('visible');
   resetBtn();
 }
@@ -2300,10 +2303,51 @@ function resetBtn() {
 }
 
 // ── 音频播放 ─────────────────────────────────────
-async function playAudio(wavName) {
+function bindAudioPlayer() {
   const player = document.getElementById('audioPlayer');
+  player.onended = () => setPlayBtnState(null, false);
+  player.onpause  = () => { if (player.ended) return; setPlayBtnState(currentPlayBtnId, false); };
+  player.onplay   = () => setPlayBtnState(currentPlayBtnId, true);
+}
+
+function setPlayBtnState(btnId, isPlaying) {
+  if (!btnId) {
+    // 没有任何按钮应该显示暂停：全部重置为 ▶
+    document.querySelectorAll('.history-play').forEach(b => b.textContent = '▶');
+    currentPlayBtnId = null;
+    return;
+  }
+  const btn = document.getElementById(btnId);
+  if (btn) btn.textContent = isPlaying ? '⏸' : '▶';
+  if (isPlaying) {
+    currentPlayBtnId = btnId;
+    // 其他按钮全部重置为 ▶
+    document.querySelectorAll('.history-play').forEach(b => { if (b.id !== btnId) b.textContent = '▶'; });
+  }
+}
+
+async function togglePlayAudio(wavName, btnId) {
+  const player = document.getElementById('audioPlayer');
+  if (currentPlayingWav === wavName && !player.paused) {
+    player.pause();
+    setPlayBtnState(btnId, false);
+    return;
+  }
+  if (currentPlayingWav === wavName && player.paused) {
+    await player.play();
+    setPlayBtnState(btnId, true);
+    return;
+  }
+  // 切换到新音频
+  currentPlayingWav = wavName;
   player.src = '/api/audio/' + wavName;
-  try { await player.play(); } catch {}
+  setPlayBtnState(currentPlayBtnId, false);   // 先把旧按钮重置
+  try {
+    await player.play();
+    setPlayBtnState(btnId, true);
+  } catch {
+    setPlayBtnState(btnId, false);
+  }
 }
 
 // ── 历史记录 ─────────────────────────────────────
@@ -2326,13 +2370,19 @@ function renderHistory() {
   if (!history.length) { list.innerHTML = '<div class="history-empty">暂无记录</div>'; return; }
   list.innerHTML = history.map((h, i) => `
     <div class="history-item">
-      <button class="history-play" onclick="playAudio('${h.wav}')">▶</button>
+      <button class="history-play" id="historyPlay-${i}" onclick="togglePlayAudio('${h.wav}', 'historyPlay-${i}')">▶</button>
       <div class="history-info">
         <div class="history-text">${escHtml(h.text)}</div>
         <div class="history-meta">${h.time} · ${h.duration ? h.duration.toFixed(1) + 's' : ''}</div>
       </div>
       <a class="history-download" href="/api/audio/${h.wav}" download>下载</a>
     </div>`).join('');
+  // 重绘后如果当前播放音频仍在列表中，恢复对应按钮状态
+  if (currentPlayingWav && currentPlayBtnId) {
+    const btn = document.getElementById(currentPlayBtnId);
+    const player = document.getElementById('audioPlayer');
+    if (btn && player && !player.paused) btn.textContent = '⏸';
+  }
 }
 
 function escHtml(s) {
