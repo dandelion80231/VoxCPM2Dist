@@ -1,5 +1,6 @@
 # VoxCPM2 TTS 中文版 v5.0.2 — Python 依赖清单
 # 生成日期：2026-07-09
+# 运行环境：Python 3.12.x（随包内置 python_cuda 为 3.12.10 embed）；从源码构建请使用 3.12.x，Python 3.13 未经测试（torch CUDA 轮子/部分依赖可能不兼容）
 # 注意：torch 需单独从 CUDA 源安装
 
 # PyTorch CUDA 12.6（需手动安装）

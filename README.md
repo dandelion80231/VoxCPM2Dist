@@ -150,6 +150,8 @@ set ENG=voxcpm_tts_v5_longtext.py
 | ZipEnhancer (modelscope) | iic/speech_zipenhancer_ans_multiloss_16k_base | 离线降噪模型（随包内置） |
 | InnoSetup | 6.7.1 | 安装包编译器 |
 
+> **Python 版本要求**：随包运行环境固定为 **Python 3.12.10（embed 版）**。若从源码自行构建 `python_cuda`，请使用 **Python 3.12.x**；**Python 3.13 未经测试**（torch CUDA 轮子与部分依赖可能不兼容），不建议用于构建。
+
 ### 硬件要求
 
 | 项目 | 最低 | 推荐 |
@@ -231,7 +233,7 @@ VoxCPM2Dist/
 ### 前置工具
 
 - **InnoSetup 6.7.1**：[innosetup.com](https://www.innosetup.com/)
-- **Python 3.12.10 embed**：[python.org/downloads/windows/](https://www.python.org/downloads/windows/)（embed zip）
+- **Python 3.12.10 embed**：[python.org/downloads/windows/](https://www.python.org/downloads/windows/)（embed zip，**须用 3.12.x；Python 3.13 未验证**）
 - **PowerShell 5.1+**：Windows 自带
 - **7-Zip / NanaZip**：用于 `app.7z` 预压缩（`build_installer.ps1` 会自动探测或下载）
 
