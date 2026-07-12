@@ -1,4 +1,4 @@
-# VoxCPM2 TTS 中文版 v4.0 — Python 依赖清单
+# VoxCPM2 TTS 中文版 v5.0.2 — Python 依赖清单
 # 生成日期：2026-07-09
 # 注意：torch 需单独从 CUDA 源安装
 
