@@ -84,7 +84,7 @@ function Show-Menu {
     Write-Host "  14 - 终极克隆（Ultimate Clone）"
     Write-Host "  0  - 退出"
     Write-Host ""
-    Write-Host "[直接输入] 输入任意文本直接合成（>180字自动长文本固定参考模式）" -ForegroundColor Green
+    Write-Host "[直接输入] 输入任意文本直接合成（>180字自动长文本自播种模式）" -ForegroundColor Green
     Write-Host "[高级用法] 输入完整 Python 参数（如: -f 文件.txt --reference ref.wav）" -ForegroundColor Green
     Write-Host ""
 }
@@ -101,32 +101,23 @@ function Invoke-TTS {
         $controlStr = $VOICE_PRESETS["sweet_girl"]
     }
 
-    # 超过 180 字：自动走「方式2：固定参考音频」长文本流程
-    # （自动生成多语调参考音频 -> 固定参考克隆 -> 自动分段 -> 交叉淡入淡出 -> 段间 RMS 归一化）
+    # 超过 180 字：自动走「自播种（第1段当种子）」长文本流程
+    # （第1段 Voice Design -> 作为后续段参考克隆 -> 自动分段 -> 交叉淡入淡出 -> 段间 RMS 归一化）
+    # 不预生成参考音频，比固定参考更快，且与网页端行为一致。
     if ($Text.Length -gt 180) {
         Write-Host ""
-        Write-Host "[长文本自动模式] 文本超过 180 字，自动使用固定参考音频长文本流程（方式2，音色最稳定）" -ForegroundColor Cyan
-
-        # 第1步：生成多语调参考音频（固定克隆源，丰富韵律采样）
-        $refText = "你好，欢迎使用语音合成系统。今天将为您带来一段精彩的语音合成演示，让我们一起体验人工智能技术带来的便捷与乐趣。我们的技术正在不断进步，力求为您提供更加自然流畅的语音体验。"
-        $refFile = Join-Path $desktop "ref_voice.wav"
-        Write-Host "[参考音频] 正在生成多语调参考音频（更丰富的韵律采样）..." -ForegroundColor Yellow
-        & $PYTHON $SCRIPT -t $refText -c $controlStr --cfg 3.0 --steps 20 -o $refFile
-        if (-not (Test-Path $refFile)) {
-            Write-Host "[错误] 参考音频生成失败！" -ForegroundColor Red
-            return
-        }
-        Write-Host "[参考音频] 已保存: $refFile" -ForegroundColor Green
+        Write-Host "[长文本自动模式] 文本超过 180 字，自动使用自播种长文本流程（第1段当种子，更快）" -ForegroundColor Cyan
 
         $argList = @("-t", $Text, "-c", $controlStr,
+                     "--self-seeding",
                      "--split", "auto", "--chunk-size", "180",
-                     "--reference", $refFile, "--crossfade", "80")
+                     "--crossfade", "80")
         if ($ExtraArgs) {
             $argList += $ExtraArgs -split " "
         }
 
         Write-Host ""
-        Write-Host "[合成中] 长文本分段处理中，请稍候..." -ForegroundColor Cyan
+        Write-Host "[合成中] 长文本分段处理中（自播种模式），请稍候..." -ForegroundColor Cyan
         & $PYTHON $SCRIPT @argList
         Write-Host ""
         Write-Host "[完成] 长文本合成结束！" -ForegroundColor Green
