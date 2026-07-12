@@ -425,6 +425,57 @@ def crossfade_concat(audio_list: list, sample_rate: int, fade_ms: int = 80) -> n
     return result
 
 
+def _segment_rms(audio: np.ndarray) -> float:
+    """计算音频段 RMS（有效值）。"""
+    arr = np.asarray(audio, dtype=np.float64)
+    if len(arr) == 0:
+        return 0.0
+    return float(np.sqrt(np.mean(arr * arr)))
+
+
+def normalize_segments(audio_segments: list, target_mode: str = "mean") -> list:
+    """对多段音频做 RMS 音量归一化，使各段感知响度一致。
+
+    target_mode:
+      - "mean": 使用所有非静音段的平均 RMS 作为目标（默认，最稳）。
+      - "first": 使用第一段的 RMS 作为目标。
+    为避免削波，单段缩放后若峰值超过 0.99，会限制增益。
+    """
+    if not audio_segments or len(audio_segments) < 2:
+        return audio_segments
+    rms_values = [_segment_rms(seg) for seg in audio_segments]
+    valid_rms = [r for r in rms_values if r > 1e-9]
+    if not valid_rms:
+        return audio_segments
+    target_rms = rms_values[0] if target_mode == "first" else float(np.mean(valid_rms))
+    if target_rms < 1e-9:
+        return audio_segments
+
+    normalized = []
+    for seg, rms in zip(audio_segments, rms_values):
+        seg_arr = np.asarray(seg, dtype=np.float32)
+        if rms < 1e-9:
+            normalized.append(seg_arr)
+            continue
+        scaled = seg_arr * (target_rms / rms)
+        peak = np.max(np.abs(scaled)) if len(scaled) else 0.0
+        if peak > 0.99:
+            scaled = scaled * (0.99 / peak)
+        normalized.append(scaled)
+    return normalized
+
+
+def peak_normalize(audio: np.ndarray, peak: float = 0.95) -> np.ndarray:
+    """最终峰值限制：把整体峰值拉到目标值，避免输出过小或削波。"""
+    arr = np.asarray(audio, dtype=np.float32)
+    if len(arr) == 0:
+        return arr
+    max_amp = float(np.max(np.abs(arr)))
+    if max_amp < 1e-9:
+        return arr
+    return arr * (peak / max_amp)
+
+
 def synthesize(args: dict) -> dict:
     """
     后台 TTS 任务函数。
@@ -609,7 +660,9 @@ def synthesize(args: dict) -> dict:
                 "remaining_seconds": 0,
             })
             task_results[job_id] = r
+        audio_segments = normalize_segments(audio_segments, target_mode="mean")
         merged = crossfade_concat(audio_segments, sr, fade_ms=crossfade)
+        merged = peak_normalize(merged, peak=0.95)
     else:
         merged = audio_segments[0] if audio_segments else np.array([])
 
