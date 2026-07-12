@@ -63,7 +63,10 @@ Write-Host "[1/4] 使用压缩器 ($($c.Type)): $sevenZip"
 #       导致 7z 把 "-t7z -mmt=on ..." 当成归档类型 → "Unsupported archive type"。
 # 单线程 LZMA2：7z 24.08 多线程(-mmt=on)压 9GB+ 超大单文件(model.safetensors 4.3GB / torch 大 dll) 会间歇性 native 崩溃
 # （无报错文本、每次崩在 ~1.2GB 输出处，与文件损坏不同）。-mmt=off 稳定；去掉 -myx=9（超大文件上易崩且收益小）。
-$compressFlags = @('-t7z','-mmt=off','-mx=7')
+# 注意：本机 7z 24.08 的 LZMA2 在压缩 app/ 内 torch CUDA 大 DLL（cusparse/cublas/cudnn 等）时
+# 会 native 崩溃（无任何报错，单/多线程、限固实块均无效，每次死在 ~2 分钟 ~1GB 处）。
+# 改用 PPMd 算法（非 LZMA2 代码路径）彻底规避该 bug；PPMd 对 exe/DLL 压缩率通常优于 LZMA2。
+$compressFlags = @('-t7z','-m0=PPMd','-mmt=off','-mx=7')
 
 # ── 2. 准备 7za.exe（供安装包内解压；独立版，需真正的 7za.exe）──
 $sevenZipDir = Split-Path $sevenZip
@@ -119,7 +122,7 @@ Write-Host '[2/4] 已准备 7za.exe'
 # ── 3. 预压缩 app -> app.7z（扁平结构）──
 $app7z = Join-Path $payload 'app.7z'
 if (Test-Path $app7z) { Remove-Item $app7z -Force }
-Write-Host '[3/4] 正在压缩 app（单线程 LZMA2，稳定但较慢，约 30-60 分钟）...'
+Write-Host '[3/4] 正在压缩 app（PPMd 算法，规避 7z LZMA2 压 torch 大 DLL 的崩溃 bug，约 30-60 分钟）...'
 # 先进入 app 目录再归档 *，避免把 app\ 前缀打进归档导致解压出现双层目录
 # 注：7z 输出（含报错）重定向到 build_7z.log，避免 | Out-Null 吞掉真实错误导致盲猜
 Push-Location $app
