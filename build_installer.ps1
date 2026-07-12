@@ -119,12 +119,16 @@ $app7z = Join-Path $payload 'app.7z'
 if (Test-Path $app7z) { Remove-Item $app7z -Force }
 Write-Host '[3/4] 正在压缩 app（多线程 LZMA2，耗时约数分钟）...'
 # 先进入 app 目录再归档 *，避免把 app\ 前缀打进归档导致解压出现双层目录
+# 注：7z 输出（含报错）重定向到 build_7z.log，避免 | Out-Null 吞掉真实错误导致盲猜
 Push-Location $app
 try {
-    & $sevenZip a $compressFlags $app7z '*' | Out-Null
+    & $sevenZip a $compressFlags $app7z '*' *> (Join-Path $root 'build_7z.log')
 } finally {
     Pop-Location
 }
+if (-not (Test-Path $app7z)) { Write-Error "7z 压缩未产出 app.7z，详见 build_7z.log"; exit 1 }
+$logTail = Get-Content (Join-Path $root 'build_7z.log') -Tail 15 -ErrorAction SilentlyContinue
+if ($logTail) { Write-Host "--- 7z 日志尾部 ---`n$($logTail -join "`n")" }
 $sizeGB = [math]::Round((Get-Item $app7z).Length / 1GB, 2)
 Write-Host "[3/4] app.7z 完成: $sizeGB GB"
 
