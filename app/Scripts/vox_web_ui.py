@@ -1223,7 +1223,21 @@ HTML_CONTENT = r"""
     max-height: 280px;
     overflow-y: auto;
   }
-  .history-card h3 { font-size: 12px; color: var(--text2); margin-bottom: 10px; }
+  .history-card h3 { font-size: 12px; color: var(--text2); margin: 0; }
+  .history-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+  .history-actions { display: flex; gap: 6px; }
+  .history-action-btn {
+    padding: 3px 8px;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text2);
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .history-action-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .history-action-btn.danger:hover { border-color: var(--red); color: var(--red); }
   .history-empty { font-size: 13px; color: var(--text2); text-align: center; padding: 20px; }
   .history-item {
     display: flex;
@@ -1632,7 +1646,13 @@ HTML_CONTENT = r"""
 
     <!-- 历史 -->
     <div class="history-card">
-      <h3>最近合成记录</h3>
+      <div class="history-head">
+        <h3>最近合成记录</h3>
+        <div class="history-actions">
+          <button class="history-action-btn" onclick="restoreHistory()" title="恢复上次清除的记录">↩ 恢复</button>
+          <button class="history-action-btn danger" onclick="clearHistory()" title="清空当前列表">✕ 清除</button>
+        </div>
+      </div>
       <div id="historyList">
         <div class="history-empty">暂无记录</div>
       </div>
@@ -2290,7 +2310,7 @@ function updateProgress(pct, msg, elapsed, remaining) {
 
 function onDone(d) {
   showToast('合成完成！时长 ' + (d.duration || 0).toFixed(1) + 's', 'success');
-  addHistory({ text: document.getElementById('textInput').value.slice(0, 50), wav: d.output_wav, duration: d.duration });
+  addHistory({ text: document.getElementById('textInput').value.slice(0, 50), wav: d.output_wav, filename: d.output_wav, duration: d.duration });
   togglePlayAudio(d.output_wav, null);
   document.getElementById('progressCard').classList.remove('visible');
   resetBtn();
@@ -2365,6 +2385,33 @@ function addHistory(item) {
   renderHistory();
 }
 
+function clearHistory() {
+  if (!history.length) return;
+  // 备份到 localStorage，便于「恢复」撤销清除
+  localStorage.setItem('voxcpm_history_backup', JSON.stringify(history));
+  history = [];
+  localStorage.setItem('voxcpm_history', '[]');
+  renderHistory();
+  // 当前播放的音频按钮也要重置
+  setPlayBtnState(null, false);
+  showToast('已清空合成记录（可点击「恢复」撤销）', 'success');
+}
+
+function restoreHistory() {
+  try {
+    const backup = localStorage.getItem('voxcpm_history_backup');
+    if (!backup) { showToast('没有可恢复的记录', 'error'); return; }
+    const restored = JSON.parse(backup);
+    if (!Array.isArray(restored) || !restored.length) { showToast('没有可恢复的记录', 'error'); return; }
+    history = restored.slice(0, 20);
+    localStorage.setItem('voxcpm_history', JSON.stringify(history));
+    renderHistory();
+    showToast('已恢复上次清除的记录', 'success');
+  } catch (e) {
+    showToast('恢复失败: ' + e.message, 'error');
+  }
+}
+
 function renderHistory() {
   const list = document.getElementById('historyList');
   if (!history.length) { list.innerHTML = '<div class="history-empty">暂无记录</div>'; return; }
@@ -2373,9 +2420,9 @@ function renderHistory() {
       <button class="history-play" id="historyPlay-${i}" onclick="togglePlayAudio('${h.wav}', 'historyPlay-${i}')">▶</button>
       <div class="history-info">
         <div class="history-text">${escHtml(h.text)}</div>
-        <div class="history-meta">${h.time} · ${h.duration ? h.duration.toFixed(1) + 's' : ''}</div>
+        <div class="history-meta">${h.time} · ${h.duration ? h.duration.toFixed(1) + 's' : ''} · ${escHtml(h.filename || h.wav)}</div>
       </div>
-      <a class="history-download" href="/api/audio/${h.wav}" download>下载</a>
+      <a class="history-download" href="/api/audio/${h.wav}" download="${escHtml(h.filename || h.wav)}">下载</a>
     </div>`).join('');
   // 重绘后如果当前播放音频仍在列表中，恢复对应按钮状态
   if (currentPlayingWav && currentPlayBtnId) {
