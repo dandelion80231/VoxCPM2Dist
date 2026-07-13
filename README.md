@@ -121,14 +121,21 @@ set ENG=voxcpm_tts_v5_longtext.py
 
 ### 网页界面（Web UI）
 
-网页界面支持三种音色工作模式：音色设计（文字描述）、固定参考克隆（上传/录制参考音频）、自播种（自动生成参考）。界面提供深色/浅色主题，并显示当前模型/输出目录、降噪模型状态等关键信息。
+网页界面支持三种音色工作模式：
+
+- **音色设计**：用文字描述期望音色，让模型直接「设计」声音。
+- **固定参考克隆**：上传或录制参考音频，克隆指定音色。
+- **自播种**：自动生成参考音频，无需额外提供参考。
+
+界面提供深色/浅色主题，并显示当前模型/输出目录、降噪模型状态等关键信息。
 
 ![VoxCPM2 网页界面 - 深色模式 / 音色设计](https://cdn.jsdelivr.net/gh/dandelion80231/VoxCPM2Dist@main/assets/web-ui-dark-voice-design.png)
 ![VoxCPM2 网页界面 - 浅色模式 / 固定参考克隆](https://cdn.jsdelivr.net/gh/dandelion80231/VoxCPM2Dist@main/assets/web-ui-light-reference-clone.png)
 ![VoxCPM2 网页界面 - 浅色模式 / 自播种](https://cdn.jsdelivr.net/gh/dandelion80231/VoxCPM2Dist@main/assets/web-ui-light-self-seeding.png)
 
-启动器为 `app\start_web_ui.bat`，内部调用 `python_cuda\python.exe Scripts\vox_web_ui.py --port 18978 --host 127.0.0.1`，
-随后自动打开浏览器 http://127.0.0.1:18978 （若 18978 被占用会自动顺延到下一个可用端口）。Web UI 支持麦克风录制参考音频、自定义音色描述、可编辑模型/输出目录，并会在路径面板显示「降噪模型：已内置（离线可用）」。
+启动器为 `app\start_web_ui.bat`，内部调用 `python_cuda\python.exe Scripts\vox_web_ui.py --port 18978 --host 127.0.0.1`。启动后会自动打开浏览器访问 http://127.0.0.1:18978（若 18978 被占用会自动顺延到下一个可用端口）。
+
+Web UI 支持麦克风录制参考音频、自定义音色描述、可编辑模型/输出目录，并会在路径面板显示「降噪模型：已内置（离线可用）」。
 
 ## 环境规格
 
@@ -143,12 +150,15 @@ set ENG=voxcpm_tts_v5_longtext.py
 | ZipEnhancer (modelscope) | iic/speech_zipenhancer_ans_multiloss_16k_base | 离线降噪模型（随包内置） |
 | InnoSetup | 6.7.1 | 安装包编译器 |
 
-> **Python 版本要求**：随包运行环境固定为 **Python 3.12.10（embed 版）**。若从源码自行构建 `python_cuda`，请使用 **Python 3.12.x**；**Python 3.13 未经测试**（torch CUDA 轮子与部分依赖可能不兼容），不建议用于构建。
+> **Python 版本要求**
+> - 随包运行环境固定为 **Python 3.12.10（embed 版）**。
+> - 若从源码自行构建 `python_cuda`，请使用 **Python 3.12.x**。
+> - **Python 3.13 未经测试**（torch CUDA 轮子与部分依赖可能不兼容），不建议用于构建。
 
 ### 硬件要求
 
-| 项目 | 最低 | 推荐 |
-|------|------|------|
+| 项目 | 最低要求 | 推荐配置 |
+|------|----------|----------|
 | GPU | 无（CPU 可运行） | NVIDIA RTX 3060 及以上 |
 | 显存 | — | ≥8 GB |
 | 磁盘空间 | 10 GB | 15 GB |
@@ -168,8 +178,9 @@ set ENG=voxcpm_tts_v5_longtext.py
 | `special_tokens_map.json` | — | 特殊 token 映射 |
 | `tokenization_voxcpm2.py` | — | 分词器代码 |
 
-**离线降噪模型（ZipEnhancer）** 约 18 MB，存放于 `models\zipenhancer\`（`pytorch_model.bin` + `onnx_model.onnx` + `configuration.json` 等）。
-合成时勾选「降噪」即调用它，纯本地、不联网；其运行依赖 `addict` / `Pillow` / `simplejson` / `sortedcontainers`（已写入 `requirements.txt` 并随包安装）。
+**离线降噪模型（ZipEnhancer）** 约 18 MB，存放于 `models\zipenhancer\`（`pytorch_model.bin` + `onnx_model.onnx` + `configuration.json` 等）。合成时勾选「降噪」即调用它，纯本地、不联网。
+
+其运行依赖 `addict` / `Pillow` / `simplejson` / `sortedcontainers`（已写入 `requirements.txt` 并随包安装）。
 
 ### 模型与权重下载（不随仓库，需自行下载）
 
