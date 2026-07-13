@@ -1,6 +1,6 @@
-# VoxCPM2 TTS v5.1 引擎 — 长文本配音/音色统一/交互模式
+# VoxCPM2 TTS v5.2 引擎 — 长文本配音/音色统一/交互模式
 #
-# [v5.1 修复] 自播种（Self-Seeding）音色漂移问题
+# [v5.2 修复] 自播种（Self-Seeding）音色漂移问题
 #   - 根因：VoxCPM2 build_prompt_cache 中，仅传 reference_wav_path
 #     时进入 "reference" 模式（只编码声学特征，不知音频内容），
 #     导致模型无法彻底分离"说话人声音"与"内容韵律"。
@@ -281,7 +281,7 @@ def generate_long_text(model, text: str, cfg: float = 2.5, steps: int = 15,
     模式B（方式1）    : 无 reference_audio 但 self_seeding=True → 第1段 Voice Design，后续用第1段音频克隆
     模式C（保留原行为）: 无 reference_audio 且 self_seeding=False → 每段都带控制指令（音色可能不一致）
 
-    [v5.1]
+    [v5.2]
       - 模式B 自播种：保存第1段原文为 seed_prompt_text，后续段传入
         prompt_wav_path + prompt_text，使模型进入 "ref_continuation"
         模式（同时知声又知文），大幅提升克隆保真度。
@@ -314,7 +314,7 @@ def generate_long_text(model, text: str, cfg: float = 2.5, steps: int = 15,
         print(f"[警告] 参考音频不存在: {reference_audio}，将回退到方式1或方式3")
         current_ref = None
 
-    # [v5.1] 自播种模式下，保存第1段原文用于后续段的 prompt_text
+    # [v5.2] 自播种模式下，保存第1段原文用于后续段的 prompt_text
     seed_prompt_text = None
 
     output_files = []
@@ -335,7 +335,7 @@ def generate_long_text(model, text: str, cfg: float = 2.5, steps: int = 15,
             effective_prompt_wav = prompt_audio
             effective_prompt_text = prompt_text
         elif i > 1 and seed_prompt_text and current_ref and os.path.exists(current_ref):
-            # [v5.1] 自播种后续段：继承第1段的原文
+            # [v5.2] 自播种后续段：继承第1段的原文
             effective_prompt_wav = current_ref
             effective_prompt_text = seed_prompt_text
 
@@ -365,7 +365,7 @@ def generate_long_text(model, text: str, cfg: float = 2.5, steps: int = 15,
             )
             print(f"[段落] 第一段 Voice Design 生成完成，时长 {duration:.1f}s")
 
-            # [v5.1] 保存第1段原文，后续克隆时作为 prompt_text 传入
+            # [v5.2] 保存第1段原文，后续克隆时作为 prompt_text 传入
             seed_prompt_text = chunk_text
 
             # 保存为后续段的参考音频
@@ -377,7 +377,7 @@ def generate_long_text(model, text: str, cfg: float = 2.5, steps: int = 15,
         # 模式B 后续段，或模式C
         else:
             if current_ref and os.path.exists(current_ref):
-                # [v5.1] Self-Seeding 后续段：传入 prompt_text 使用 ref_continuation 模式
+                # [v5.2] Self-Seeding 后续段：传入 prompt_text 使用 ref_continuation 模式
                 sr, wav, elapsed, duration = generate_chunk(
                     model, chunk, cfg=cfg, steps=steps, normalize=normalize,
                     reference_wav_path=current_ref,
@@ -468,7 +468,7 @@ VOICE_PRESETS = {
 
 # ── 主入口 ─────────────────────────────────────────────────
 def main():
-    parser = argparse.ArgumentParser(description="VoxCPM2 TTS v5.1 — 长文本配音/音色统一")
+    parser = argparse.ArgumentParser(description="VoxCPM2 TTS v5.2 — 长文本配音/音色统一")
     parser.add_argument("-t", "--text", type=str, help="要合成的文本")
     parser.add_argument("-f", "--file", type=str, help="输入文本文件路径")
     parser.add_argument("-o", "--output", type=str, default=None, help="输出 WAV 文件路径")
@@ -483,7 +483,7 @@ def main():
 
     # 音色统一模式（长文本）
     parser.add_argument("--reference", type=str, help="参考音频路径（固定克隆，长文本默认方式）")
-    # [v5.1] 显式传入 prompt_audio / prompt_text 可在固定参考模式下
+    # [v5.2] 显式传入 prompt_audio / prompt_text 可在固定参考模式下
     # 使用 ref_continuation 模式，让模型既知声又知文
     parser.add_argument("--prompt-audio", type=str, help="提示音频路径（Ultimate Clone / ref_continuation）")
     parser.add_argument("--prompt-text", type=str, help="提示音频对应的文本（ref_continuation）")
@@ -514,7 +514,7 @@ def main():
     args = parser.parse_args()
 
     if args.version:
-        print("VoxCPM TTS v5.1 CN — 音色统一版")
+        print("VoxCPM TTS v5.2 CN — 音色统一版")
         sys.exit(0)
 
     if args.list_voices:

@@ -1,6 +1,6 @@
-﻿# VoxCPM2 TTS 启动器 v5.1 中文版
+﻿# VoxCPM2 TTS 启动器 v5.2 中文版
 #
-# [v5.1 改进]
+# [v5.2 改进]
 #   - 方式1/2：预生成多语调参考音频（cfg 3.0 / steps 20）
 #   - 音色几乎无漂移（与用户验证方法一致）
 #   - 默认 80ms 交叉淡入淡出
@@ -55,7 +55,7 @@ function Show-Banner {
     Write-Host "  V       OOO     X   X     CCC     P        M   M    22222 " -ForegroundColor Cyan
     Write-Host "+============================================================+" -ForegroundColor Cyan
     Write-Host "|                                                            |" -ForegroundColor Cyan
-    Write-Host "|           VoxCPM2 语音合成工具 v5.1 音色统一版           |" -ForegroundColor Cyan
+    Write-Host "|           VoxCPM2 语音合成工具 v5.2 音色统一版           |" -ForegroundColor Cyan
     Write-Host "|                                                            |" -ForegroundColor Cyan
     Write-Host "|            长文本配音 / 音色一致 / 交叉淡入淡出            |" -ForegroundColor Cyan
     Write-Host "|                                                            |" -ForegroundColor Cyan

@@ -1,5 +1,5 @@
 ﻿"""
-VoxCPM2 Web UI — v5.1 一体化界面
+VoxCPM2 Web UI — v5.2 一体化界面
 ================================
 本地 Web 服务器 + 浏览器 UI，无需安装任何依赖（除了 voxcpm 自带的）。
 启动后自动打开浏览器，访问 http://localhost:18978（端口被占用时自动顺延）
@@ -774,31 +774,52 @@ HTML_CONTENT = r"""
 <title>VoxCPM2 语音合成</title>
 <style>
   :root {
+    /* Apple-style 系统字体栈：优先 San Francisco / PingFang */
+    --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    --font-mono: "SF Mono", "SFMono-Regular", "Menlo", "Consolas", monospace;
     --bg: #0f1117;
-    --surface: #161b27;
-    --surface2: #1e2535;
-    --border: #2a3347;
+    --surface: rgba(22, 27, 39, 0.82);
+    --surface2: rgba(30, 37, 53, 0.86);
+    --surface-solid: #161b27;
+    --surface2-solid: #1e2535;
+    --border: rgba(42, 51, 71, 0.65);
     --accent: #6c8eff;
     --accent2: #4ecdc4;
-    --text: #e8eaf0;
-    --text2: #8892a8;
+    --text: #f5f7ff;
+    --text2: #a9b0c6;
+    --input-bg: rgba(21, 23, 31, 0.92);
+    --input-bg-focus: rgba(14, 15, 20, 0.96);
     --green: #4ade80;
     --yellow: #fbbf24;
     --red: #f87171;
+    --shadow-sm: 0 2px 8px rgba(0,0,0,0.18);
+    --shadow-md: 0 8px 24px rgba(0,0,0,0.22);
+    --shadow-lg: 0 18px 48px rgba(0,0,0,0.32);
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 16px;
+    --radius-xl: 20px;
   }
   /* 浅色主题 */
   [data-theme="light"] {
     --bg: #f4f6fb;
-    --surface: #ffffff;
-    --surface2: #eef1f7;
-    --border: #d8deea;
+    --surface: rgba(255, 255, 255, 0.86);
+    --surface2: rgba(238, 241, 247, 0.90);
+    --surface-solid: #ffffff;
+    --surface2-solid: #eef1f7;
+    --border: rgba(216, 222, 234, 0.72);
     --accent: #3b65ff;
     --accent2: #0fa3a3;
     --text: #1a1f2b;
     --text2: #5b6678;
+    --input-bg: rgba(255, 255, 255, 0.92);
+    --input-bg-focus: rgba(255, 255, 255, 0.96);
     --green: #16a34a;
     --yellow: #d97706;
     --red: #dc2626;
+    --shadow-sm: 0 2px 8px rgba(15, 23, 42, 0.06);
+    --shadow-md: 0 8px 24px rgba(15, 23, 42, 0.10);
+    --shadow-lg: 0 18px 48px rgba(15, 23, 42, 0.14);
   }
   /* 主题切换平滑过渡（仅颜色类属性，保证 60fps） */
   body, header, .sidebar, .content, .param-card, .text-card, .ref-card,
@@ -808,20 +829,24 @@ HTML_CONTENT = r"""
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
-    font-family: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
-    background: var(--bg);
+    font-family: var(--font-sans);
+    background: var(--bg) fixed;
+    background-size: cover;
     color: var(--text);
     min-height: 100vh;
     display: flex;
     flex-direction: column;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 
-  /* 自定义背景时：所有承载文字的区域加半透明毛玻璃层，保证深色背景也清晰可读 */
+  /* ── Apple Design 风格：自定义背景时以背景色为氛围，所有承载文字区域
+        使用独立输入/表面色，保证任何背景色下文本都清晰可读 ── */
   body.custom-bg-active .content,
   body.custom-bg-active .sidebar,
   body.custom-bg-active header {
     background: var(--surface);
-    backdrop-filter: blur(18px) saturate(160%);
+    backdrop-filter: blur(20px) saturate(180%);
   }
   body.custom-bg-active .param-card,
   body.custom-bg-active .text-card,
@@ -829,7 +854,6 @@ HTML_CONTENT = r"""
   body.custom-bg-active .ref-card,
   body.custom-bg-active .history-card,
   body.custom-bg-active .progress-card,
-  body.custom-bg-active .env-card,
   body.custom-bg-active .custom-voice-box,
   body.custom-bg-active .ref-preview,
   body.custom-bg-active .modal {
@@ -844,30 +868,38 @@ HTML_CONTENT = r"""
   body.custom-bg-active .upload-area:hover {
     background: rgba(108,142,255,0.12);
   }
+  body.custom-bg-active .voice-btn.active,
+  body.custom-bg-active .mode-btn.active {
+    background: rgba(108,142,255,0.22);
+  }
+  /* 输入框：统一使用独立输入背景色，不随自定义背景色变化，确保可读性 */
   body.custom-bg-active textarea,
   body.custom-bg-active .path-input,
   body.custom-bg-active .prompt-text-input,
   body.custom-bg-active .env-select,
   body.custom-bg-active .cv-name {
-    background: var(--bg);
+    background: var(--input-bg);
     color: var(--text);
   }
-  body.custom-bg-active .voice-btn.active,
-  body.custom-bg-active .mode-btn.active {
-    background: rgba(108,142,255,0.22);
+  body.custom-bg-active textarea:focus,
+  body.custom-bg-active .path-input:focus,
+  body.custom-bg-active .prompt-text-input:focus,
+  body.custom-bg-active .cv-name:focus {
+    background: var(--input-bg-focus);
   }
 
   /* ── 顶栏 ── */
   header {
     background: var(--surface);
     border-bottom: 1px solid var(--border);
-    padding: 8px 24px;
-    min-height: 64px;
+    padding: 8px 20px;
+    min-height: 60px;
     display: flex;
     align-items: center;
-    gap: 10px;
-    flex-wrap: wrap;
+    gap: 6px;
+    flex-wrap: nowrap;
     flex-shrink: 0;
+    overflow: hidden;
   }
   .logo {
     font-size: 18px;
@@ -876,15 +908,19 @@ HTML_CONTENT = r"""
     letter-spacing: 1px;
   }
   .logo span { color: var(--text); font-weight: 400; }
-  .header-left { display: flex; align-items: center; gap: 12px; }
+  .header-left { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
   .header-sample-rate {
-    display: flex; align-items: center; gap: 8px;
-    font-size: 12px; color: var(--text2);
-    padding: 6px 10px;
-    border: 1px solid var(--border); border-radius: 8px;
+    display: flex; align-items: center; gap: 6px;
+    font-size: 11px; color: var(--text2);
+    padding: 4px 8px;
+    border: 1px solid var(--border); border-radius: 6px;
     background: var(--surface2);
-    margin-left: 4px;
+    flex: 0 0 160px;
+    justify-content: center;
+    overflow: hidden;
+    box-sizing: border-box; height: 30px;
   }
+  .header-sample-rate .env-select { max-width: 110px; }
   .header-sample-rate .k { color: var(--text2); }
   .header-env {
     display: flex; flex-wrap: wrap; gap: 6px;
@@ -927,11 +963,13 @@ HTML_CONTENT = r"""
     width: 26px; height: 26px; padding: 0; border: none; background: none;
     border-radius: 6px; cursor: pointer; margin-left: 2px;
   }
+  .theme-switch input[type="color"].active { outline: 2px solid var(--accent); outline-offset: 1px; }
   .header-right {
     margin-left: auto;
     display: flex;
     align-items: center;
     gap: 12px;
+    flex-shrink: 0;
   }
   .status-badge {
     display: flex;
@@ -969,11 +1007,12 @@ HTML_CONTENT = r"""
     padding: 20px 16px;
     overflow-y: auto;
     background: var(--surface);
+    backdrop-filter: blur(20px) saturate(180%);
   }
   .sidebar h3 {
     font-size: 11px;
     text-transform: uppercase;
-    letter-spacing: 1.5px;
+    letter-spacing: 1px;
     color: var(--text2);
     margin-bottom: 12px;
   }
@@ -987,7 +1026,7 @@ HTML_CONTENT = r"""
     align-items: center;
     gap: 12px;
     padding: 11px 14px;
-    border-radius: 10px;
+    border-radius: var(--radius-md);
     border: 1px solid var(--border);
     background: transparent;
     color: var(--text);
@@ -1037,16 +1076,17 @@ HTML_CONTENT = r"""
   .param-card {
     background: var(--surface);
     border: 1px solid var(--border);
-    border-radius: 12px;
+    border-radius: var(--radius-lg);
     padding: 16px 18px;
     display: flex;
     flex-direction: column;
     gap: 12px;
     min-width: 200px;
     flex: 1;
+    box-shadow: var(--shadow-sm);
     transition: transform 0.15s, border-color 0.15s, box-shadow 0.15s;
   }
-  .param-card:hover { border-color: rgba(108,142,255,0.4); box-shadow: 0 6px 18px rgba(0,0,0,0.08); }
+  .param-card:hover { border-color: rgba(108,142,255,0.4); box-shadow: var(--shadow-md); transform: translateY(-2px); }
   .param-header { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; min-height: 36px; }
   .param-title { display: flex; align-items: baseline; gap: 10px; flex: 1; min-width: 0; }
   .param-label {
@@ -1066,7 +1106,12 @@ HTML_CONTENT = r"""
   .param-desc { font-size: 12px; color: var(--text2); white-space: nowrap; text-align: right; }
   .param-desc-wrap { display: flex; flex-direction: column; align-items: flex-end; text-align: right; gap: 1px; }
   .param-desc-line { font-size: 12px; color: var(--text2); line-height: 1.35; }
-  .param-desc-right { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+  .param-unit {
+    font-size: 12px; color: var(--text2); line-height: 1;
+    align-self: flex-end; padding-bottom: 3px; margin-left: 4px;
+    white-space: nowrap;
+  }
+  .param-desc-right { display: flex; align-items: flex-end; }
   .param-toggle {
     display: flex; align-items: center; gap: 6px;
     padding: 4px 10px; border-radius: 20px;
@@ -1082,7 +1127,12 @@ HTML_CONTENT = r"""
     cursor: pointer;
     -webkit-appearance: none; appearance: none;
     height: 6px; border-radius: 3px;
-    background: var(--surface2); outline: none;
+    background: transparent; outline: none;
+  }
+  input[type="range"]::-webkit-slider-runnable-track {
+    width: 100%; height: 6px; border-radius: 3px;
+    background: linear-gradient(to right, var(--accent) var(--value-percent, 0%), var(--surface2) var(--value-percent, 0%));
+    border: 1px solid var(--text2);
   }
   input[type="range"]::-webkit-slider-thumb {
     -webkit-appearance: none; appearance: none;
@@ -1090,6 +1140,7 @@ HTML_CONTENT = r"""
     background: var(--accent); border: 2px solid var(--surface);
     box-shadow: 0 2px 6px rgba(108,142,255,0.4);
     transition: transform 0.1s, box-shadow 0.1s;
+    margin-top: -5px;
   }
   input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.1); box-shadow: 0 3px 10px rgba(108,142,255,0.5); }
   input[type="range"]::-moz-range-thumb {
@@ -1098,18 +1149,41 @@ HTML_CONTENT = r"""
     box-shadow: 0 2px 6px rgba(108,142,255,0.4);
   }
   input[type="range"]::-moz-range-progress { background: var(--accent); height: 6px; border-radius: 3px; }
+  input[type="range"]::-moz-range-track {
+    background: var(--surface2); height: 6px; border-radius: 3px;
+    border: 1px solid var(--text2);
+  }
+  /* 自定义背景：滑块配色与浅色/深色主题保持一致，统一视觉语言 */
+  body.custom-bg-active input[type="range"]::-webkit-slider-runnable-track {
+    background: linear-gradient(to right, var(--accent) var(--value-percent, 0%), var(--surface2) var(--value-percent, 0%));
+    border: 1px solid var(--text2);
+  }
+  body.custom-bg-active input[type="range"]::-moz-range-track {
+    background: var(--surface2);
+    border: 1px solid var(--text2);
+  }
+  body.custom-bg-active input[type="range"]::-moz-range-progress { background: var(--accent); }
+  body.custom-bg-active input[type="range"]::-webkit-slider-thumb {
+    border: 2px solid var(--surface);
+    box-shadow: 0 2px 6px rgba(108,142,255,0.4);
+  }
+  body.custom-bg-active input[type="range"]::-moz-range-thumb {
+    border: 2px solid var(--surface);
+    box-shadow: 0 2px 6px rgba(108,142,255,0.4);
+  }
 
   /* ── 文本输入 ── */
   .text-card {
     background: var(--surface);
     border: 1px solid var(--border);
-    border-radius: 10px;
+    border-radius: var(--radius-lg);
     padding: 16px;
     display: flex;
     flex-direction: column;
     gap: 10px;
     flex: 1;
     min-height: 180px;
+    box-shadow: var(--shadow-sm);
   }
   .text-card-header {
     display: flex;
@@ -1126,34 +1200,43 @@ HTML_CONTENT = r"""
   }
   .text-area-hint {
     position: absolute;
-    right: 12px;
-    bottom: 10px;
+    right: 14px;
+    bottom: 12px;
     font-size: 12px;
     color: var(--text2);
     pointer-events: none;
-    opacity: 0.8;
+    opacity: 0.7;
   }
   textarea {
     flex: 1;
-    background: transparent;
-    border: none;
+    width: 100%;
+    background: var(--input-bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
     outline: none;
     color: var(--text);
     font-size: 15px;
     line-height: 1.7;
     resize: none;
-    font-family: inherit;
-    padding: 0 0 26px 0;
+    font-family: var(--font-sans);
+    padding: 12px 14px;
+    transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
   }
-  textarea::placeholder { color: var(--text2); }
+  textarea:focus {
+    background: var(--input-bg-focus);
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(108,142,255,0.15);
+  }
+  textarea::placeholder { color: var(--text2); opacity: 0.7; }
   textarea:not(:placeholder-shown) ~ .text-area-hint { display: none; }
 
   /* ── 参考音频上传 ── */
   .ref-card {
     background: var(--surface);
     border: 1px solid var(--border);
-    border-radius: 10px;
+    border-radius: var(--radius-lg);
     padding: 14px 16px;
+    box-shadow: var(--shadow-sm);
   }
   .ref-card h3 { font-size: 12px; color: var(--text2); margin-bottom: 10px; }
   .ref-modes {
@@ -1162,19 +1245,32 @@ HTML_CONTENT = r"""
     margin-bottom: 12px;
   }
   .mode-btn {
-    flex: 1;
-    padding: 8px;
-    border-radius: 6px;
+    padding: 8px 12px;
+    border-radius: var(--radius-md);
     border: 1px solid var(--border);
     background: transparent;
     color: var(--text2);
     cursor: pointer;
-    font-size: 12px;
+    font-size: 13px;
     text-align: center;
     transition: all 0.15s;
+    line-height: 1.35;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
   }
   .mode-btn:hover { border-color: var(--accent); color: var(--accent); }
   .mode-btn.active { border-color: var(--accent); background: rgba(108,142,255,0.15); color: var(--accent); }
+  .ref-mode-btn {
+    flex: 1;
+    flex-direction: column;
+    gap: 4px;
+    min-height: 60px;
+    padding: 10px 8px;
+  }
+  .ref-mode-btn .mode-title { font-size: 14px; font-weight: 600; color: inherit; }
+  .ref-mode-btn .mode-sub { font-size: 11px; color: var(--text2); line-height: 1.3; }
+  .ref-mode-btn.active .mode-sub { color: rgba(108,142,255,0.75); }
   .upload-area {
     border: 2px dashed var(--border);
     border-radius: 8px;
@@ -1199,7 +1295,7 @@ HTML_CONTENT = r"""
   .btn-primary {
     flex: 1;
     height: 48px;
-    border-radius: 10px;
+    border-radius: var(--radius-md);
     border: none;
     background: linear-gradient(135deg, var(--accent), #8b5cf6);
     color: #fff;
@@ -1210,7 +1306,7 @@ HTML_CONTENT = r"""
     align-items: center;
     justify-content: center;
     gap: 8px;
-    transition: opacity 0.15s, transform 0.1s;
+    transition: opacity 0.15s, transform 0.1s, box-shadow 0.15s;
   }
   .btn-primary:hover { opacity: 0.9; }
   .btn-primary:active { transform: scale(0.98); }
@@ -1218,7 +1314,7 @@ HTML_CONTENT = r"""
   .btn-secondary {
     height: 48px;
     padding: 0 20px;
-    border-radius: 10px;
+    border-radius: var(--radius-md);
     border: 1px solid var(--border);
     background: transparent;
     color: var(--text);
@@ -1232,9 +1328,10 @@ HTML_CONTENT = r"""
   .progress-card {
     background: var(--surface);
     border: 1px solid var(--border);
-    border-radius: 10px;
+    border-radius: var(--radius-lg);
     padding: 16px;
     display: none;
+    box-shadow: var(--shadow-sm);
   }
   .progress-card.visible { display: block; }
   .progress-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
@@ -1259,10 +1356,11 @@ HTML_CONTENT = r"""
   .history-card {
     background: var(--surface);
     border: 1px solid var(--border);
-    border-radius: 10px;
+    border-radius: var(--radius-lg);
     padding: 16px;
     max-height: 280px;
     overflow-y: auto;
+    box-shadow: var(--shadow-sm);
   }
   .history-card h3 { font-size: 12px; color: var(--text2); margin: 0; }
   .history-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
@@ -1331,7 +1429,7 @@ HTML_CONTENT = r"""
     right: 24px;
     background: var(--surface2);
     border: 1px solid var(--border);
-    border-radius: 10px;
+    border-radius: var(--radius-lg);
     padding: 12px 18px;
     font-size: 13px;
     color: var(--text);
@@ -1340,37 +1438,43 @@ HTML_CONTENT = r"""
     transform: translateY(10px);
     transition: all 0.3s;
     pointer-events: none;
+    box-shadow: var(--shadow-md);
   }
   .toast.visible { opacity: 1; transform: none; }
   .toast.error { border-color: var(--red); color: var(--red); }
   .toast.success { border-color: var(--green); color: var(--green); }
   /* ── 参考音频试听 / 终极克隆 / 高级 ── */
-  .ref-preview { margin-top: 10px; background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 10px; }
+  .ref-preview { margin-top: 10px; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 10px; }
   .ref-preview-head { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: var(--text2); margin-bottom: 6px; }
   .ref-dur { color: var(--accent2); }
   .ref-warn { margin-top: 6px; font-size: 11px; color: var(--yellow); display: none; }
   .prompt-text-wrap { margin-top: 10px; }
-  .prompt-text-input { width: 100%; min-height: 56px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; color: var(--text); padding: 8px; font-size: 13px; font-family: inherit; resize: vertical; outline: none; }
-  .prompt-text-input:focus { border-color: var(--accent); }
+  .prompt-text-input {
+    width: 100%;
+    min-height: 56px;
+    background: var(--input-bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    color: var(--text);
+    padding: 10px 12px;
+    font-size: 13px;
+    font-family: var(--font-sans);
+    line-height: 1.55;
+    resize: vertical;
+    outline: none;
+    transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+  }
+  .prompt-text-input:focus { background: var(--input-bg-focus); border-color: var(--accent); box-shadow: 0 0 0 3px rgba(108,142,255,0.15); }
   .toggle-row { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 13px; color: var(--text); cursor: pointer; }
   .toggle-row input { width: 16px; height: 16px; accent-color: var(--accent); }
-
-  /* ── 环境信息面板 ── */
-  .env-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; margin-top: 16px; }
-  .env-card h3 { font-size: 11px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--text2); margin-bottom: 10px; }
-  .env-row { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; padding: 5px 0; border-bottom: 1px dashed var(--border); }
-  .env-row:last-child { border-bottom: none; }
-  .env-key { color: var(--text2); flex-shrink: 0; }
-  .env-val { color: var(--text); text-align: right; word-break: break-all; }
-  .env-val.good { color: var(--green); }
-  .env-val.bad { color: var(--red); }
 
   /* ── 音色描述 + 示例芯片 ── */
   .control-card {
     background: var(--surface);
     border: 1px solid var(--border);
-    border-radius: 10px;
+    border-radius: var(--radius-lg);
     padding: 14px 16px;
+    box-shadow: var(--shadow-sm);
   }
   .control-card h3 { font-size: 12px; color: var(--text2); margin-bottom: 8px; }
   .example-chips { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 6px; }
@@ -1404,9 +1508,9 @@ HTML_CONTENT = r"""
     overflow-y: auto;
     background: var(--surface);
     border: 1px solid var(--border);
-    border-radius: 14px;
+    border-radius: var(--radius-xl);
     padding: 20px;
-    box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+    box-shadow: var(--shadow-lg);
     position: relative;
     z-index: 1;
   }
@@ -1414,30 +1518,47 @@ HTML_CONTENT = r"""
   .modal-head h3 { font-size: 15px; }
   .path-input {
     flex: 1;
-    background: var(--bg);
+    background: var(--input-bg);
     border: 1px solid var(--border);
-    border-radius: 8px;
+    border-radius: var(--radius-md);
     color: var(--text);
-    padding: 10px;
+    padding: 10px 12px;
     font-size: 13px;
-    font-family: inherit;
+    font-family: var(--font-sans);
     outline: none;
+    transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
   }
-  .path-input:focus { border-color: var(--accent); }
+  .path-input:focus { background: var(--input-bg-focus); border-color: var(--accent); box-shadow: 0 0 0 3px rgba(108,142,255,0.15); }
   .path-row { display: flex; gap: 8px; align-items: center; margin-top: 6px; }
   .path-row .btn-secondary { flex-shrink: 0; height: 38px; padding: 0 14px; font-size: 13px; }
   .modal-actions { display: flex; gap: 10px; margin-top: 18px; justify-content: flex-end; }
 
   /* ── 顶部环境栏（横向排列，现已并入 header）── */
   .envbar {
-    display: flex; flex-wrap: wrap; gap: 6px;
+    display: flex; flex-wrap: nowrap; gap: 6px;
     align-items: center;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
   }
   .env-item {
     display: flex; align-items: center; gap: 6px;
     font-size: 11px; padding: 4px 8px;
     border: 1px solid var(--border); border-radius: 6px;
     background: var(--surface2);
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .env-item.fixed {
+    flex: 0 0 160px;
+    justify-content: center;
+    overflow: hidden;
+    box-sizing: border-box; height: 30px;
+  }
+  .env-item.fixed .env-select,
+  .env-item.fixed .v {
+    overflow: hidden;
+    text-overflow: ellipsis;
     white-space: nowrap;
   }
   .env-item .k { color: var(--text2); }
@@ -1447,7 +1568,7 @@ HTML_CONTENT = r"""
   .env-path {
     flex: 1 1 0;
     min-width: 0;
-    max-width: 240px;
+    max-width: 160px;
   }
   .env-path .v {
     flex: 1 1 auto;
@@ -1459,17 +1580,24 @@ HTML_CONTENT = r"""
   }
   .env-dev-btns { display: flex; gap: 3px; }
   .env-dev-btns button {
-    padding: 3px 8px; border-radius: 4px;
+    padding: 0 8px; height: 22px; box-sizing: border-box; border-radius: 4px;
     border: 1px solid var(--border); background: transparent;
-    color: var(--text2); cursor: pointer; font-size: 11px; transition: all 0.15s;
+    color: var(--text); cursor: pointer; font-size: 11px; font-weight: 600; transition: all 0.15s;
   }
   .env-dev-btns button.active { border-color: var(--accent); background: rgba(108,142,255,0.15); color: var(--accent); }
   .env-select {
-    background: var(--bg); color: var(--text);
-    border: 1px solid var(--border); border-radius: 4px;
-    padding: 3px 5px; font-size: 11px; outline: none; cursor: pointer;
+    background: var(--input-bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0 5px; height: 22px; box-sizing: border-box;
+    font-size: 11px; font-weight: 600;
+    font-family: var(--font-sans);
+    outline: none;
+    cursor: pointer;
+    transition: background 0.2s ease, border-color 0.2s ease;
   }
-  .env-select:focus { border-color: var(--accent); }
+  .env-select:focus { background: var(--input-bg-focus); border-color: var(--accent); }
   .env-select.good { color: var(--green); border-color: var(--green); }
   .env-select.bad { color: var(--red); border-color: var(--red); }
 
@@ -1477,17 +1605,20 @@ HTML_CONTENT = r"""
   .custom-voice-box {
     margin-top: 12px;
     border: 1px dashed var(--border);
-    border-radius: 10px;
+    border-radius: var(--radius-lg);
     padding: 10px 12px;
     display: flex; flex-direction: column; gap: 8px;
+    background: var(--surface);
+    box-shadow: var(--shadow-sm);
   }
   .custom-voice-box .cv-title { font-size: 11px; color: var(--text2); text-transform: uppercase; letter-spacing: 1px; }
   .custom-voice-box input.cv-name {
-    width: 100%; background: var(--bg); border: 1px solid var(--border);
-    border-radius: 8px; color: var(--text); padding: 8px 10px; font-size: 13px;
-    font-family: inherit; outline: none;
+    width: 100%; background: var(--input-bg); border: 1px solid var(--border);
+    border-radius: var(--radius-md); color: var(--text); padding: 8px 10px; font-size: 13px;
+    font-family: var(--font-sans); outline: none;
+    transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
   }
-  .custom-voice-box input.cv-name:focus { border-color: var(--accent); }
+  .custom-voice-box input.cv-name:focus { background: var(--input-bg-focus); border-color: var(--accent); box-shadow: 0 0 0 3px rgba(108,142,255,0.15); }
   .custom-voice-box .cv-hint { font-size: 11px; color: var(--text2); line-height: 1.4; }
   .custom-voice-box .cv-saved { font-size: 11px; color: var(--green); display: none; }
   .voice-btn.custom-save {
@@ -1504,7 +1635,7 @@ HTML_CONTENT = r"""
   <button class="console-toggle" id="consoleToggle" onclick="toggleConsole()" title="显示/隐藏命令行窗口">🖥️</button>
   <div class="header-left">
     <div class="logo">Vox<span>CPM2</span></div>
-    <div style="font-size:13px;color:var(--text2);">语音合成工具 5.1</div>
+    <div style="font-size:13px;color:var(--text2);">语音合成工具 5.2</div>
   </div>
   <div class="header-sample-rate">
     <span class="k">采样率</span>
@@ -1518,9 +1649,9 @@ HTML_CONTENT = r"""
     </select>
   </div>
   <div class="envbar" id="envBar">
-    <div class="env-item"><span class="k">Python</span><span class="v" id="envPy">-</span></div>
-    <div class="env-item"><span class="k">运行设备</span><span class="env-dev-btns" id="envDev"><button data-dev="cuda" onclick="setDevice('cuda')">GPU</button><button data-dev="cpu" onclick="setDevice('cpu')">CPU</button></span></div>
-    <div class="env-item">
+    <div class="env-item fixed"><span class="k">Python</span><span class="v" id="envPy">-</span></div>
+    <div class="env-item fixed"><span class="k">运行设备</span><span class="env-dev-btns" id="envDev"><button data-dev="cuda" onclick="setDevice('cuda')">GPU</button><button data-dev="cpu" onclick="setDevice('cpu')">CPU</button></span></div>
+    <div class="env-item fixed">
       <span class="k">模型状态</span>
       <select class="env-select" id="envModel" onchange="handleModelAction(this.value)">
         <option value="status">未加载</option>
@@ -1537,7 +1668,7 @@ HTML_CONTENT = r"""
       <button data-theme="light" onclick="setTheme('light')" title="浅色">☀️</button>
       <input type="color" id="customBg" onchange="setCustomBg(this.value)" title="自定义背景色">
     </div>
-    <button class="status-badge" style="cursor:pointer; border:1px solid var(--border); background:var(--surface2)" onclick="openSettings()" title="路径设置">⚙ 设置</button>
+    <button class="status-badge" style="cursor:pointer" onclick="openSettings()" title="路径设置">⚙ 设置</button>
     <div class="status-badge">
       <div class="status-dot" id="modelDot"></div>
       <span id="modelStatus">未初始化</span>
@@ -1585,7 +1716,7 @@ HTML_CONTENT = r"""
             <div class="param-label">推理步数</div>
             <div class="param-value" id="stepsVal">15</div>
           </div>
-          <div class="param-desc">↑ 质量更好但更慢</div>
+          <div class="param-desc-wrap"><div class="param-desc-line">↑ 质量更好但更慢</div></div>
         </div>
         <input type="range" id="stepsSlider" min="5" max="30" step="1" value="15">
       </div>
@@ -1595,7 +1726,7 @@ HTML_CONTENT = r"""
             <div class="param-label">淡入淡出</div>
             <div class="param-value" id="crossfadeVal">80ms</div>
           </div>
-          <div class="param-desc">段间平滑过渡</div>
+          <div class="param-desc-wrap"><div class="param-desc-line">段间平滑过渡</div></div>
         </div>
         <input type="range" id="crossfadeSlider" min="0" max="200" step="10" value="80">
       </div>
@@ -1604,9 +1735,9 @@ HTML_CONTENT = r"""
           <div class="param-title">
             <div class="param-label">高级参数</div>
             <div class="param-value" id="chunkVal">180</div>
+            <span class="param-unit">分段长度（字）</span>
           </div>
           <div class="param-desc-right">
-            <div class="param-desc">分段长度（字）</div>
             <label class="param-toggle" title="数字归一化">
               <input type="checkbox" id="normalizeToggle" checked>
               <span>数字归一化</span>
@@ -1644,14 +1775,17 @@ HTML_CONTENT = r"""
     <div class="ref-card">
       <h3>音色统一模式（可选）</h3>
       <div class="ref-modes">
-        <button class="mode-btn active" data-mode="voice_design" onclick="setMode('voice_design', this)">
-          音色设计<br><span style="font-size:10px;color:var(--text2)">文字描述音色</span>
+        <button class="mode-btn ref-mode-btn active" data-mode="voice_design" onclick="setMode('voice_design', this)">
+          <span class="mode-title">音色设计</span>
+          <span class="mode-sub">文字描述音色</span>
         </button>
-        <button class="mode-btn" data-mode="fixed_clone" onclick="setMode('fixed_clone', this)">
-          固定参考克隆<br><span style="font-size:10px;color:var(--text2)">上传/录制参考音频</span>
+        <button class="mode-btn ref-mode-btn" data-mode="fixed_clone" onclick="setMode('fixed_clone', this)">
+          <span class="mode-title">固定参考克隆</span>
+          <span class="mode-sub">上传/录制参考音频</span>
         </button>
-        <button class="mode-btn" data-mode="self_seeding" onclick="setMode('self_seeding', this)">
-          自播种<br><span style="font-size:10px;color:var(--text2)">首段设计后续克隆</span>
+        <button class="mode-btn ref-mode-btn" data-mode="self_seeding" onclick="setMode('self_seeding', this)">
+          <span class="mode-title">自播种</span>
+          <span class="mode-sub">首段设计后续克隆</span>
         </button>
       </div>
       <div class="ref-actions" id="refActions" style="display:none">
@@ -1884,6 +2018,18 @@ function bindSliders() {
   steps.oninput = () => document.getElementById('stepsVal').textContent = steps.value;
   xf.oninput = () => document.getElementById('crossfadeVal').textContent = xf.value + 'ms';
   chunk.oninput = () => document.getElementById('chunkVal').textContent = chunk.value;
+
+  function updateRangeProgress(range) {
+    const min = range.min ? Number(range.min) : 0;
+    const max = range.max ? Number(range.max) : 100;
+    const val = Number(range.value);
+    const pct = max === min ? 0 : ((val - min) / (max - min) * 100);
+    range.style.setProperty('--value-percent', pct + '%');
+  }
+  document.querySelectorAll('input[type="range"]').forEach(r => {
+    updateRangeProgress(r);
+    r.addEventListener('input', () => updateRangeProgress(r));
+  });
 }
 
 function bindTextArea() {
@@ -2253,18 +2399,23 @@ function applyTheme(theme, customBg) {
     root.style.setProperty('--text', dark ? '#ffffff' : '#1a1f2b');
     root.style.setProperty('--text2', dark ? '#c0c6d0' : '#5b6678');
     // B 方案：半透明叠加层，与背景拉开层次（保持背景色可见但文字清晰）
-    root.style.setProperty('--surface', dark ? 'rgba(0,0,0,0.32)' : 'rgba(255,255,255,0.78)');
-    root.style.setProperty('--surface2', dark ? 'rgba(0,0,0,0.45)' : 'rgba(255,255,255,0.88)');
+    root.style.setProperty('--surface', dark ? 'rgba(0,0,0,0.36)' : 'rgba(255,255,255,0.78)');
+    root.style.setProperty('--surface2', dark ? 'rgba(0,0,0,0.48)' : 'rgba(255,255,255,0.86)');
     root.style.setProperty('--border', dark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.12)');
+    // 输入框使用独立背景色，确保任何背景色下文本清晰可读
+    root.style.setProperty('--input-bg', dark ? 'rgba(22, 23, 30, 0.92)' : 'rgba(255, 255, 255, 0.92)');
+    root.style.setProperty('--input-bg-focus', dark ? 'rgba(14, 15, 19, 0.96)' : 'rgba(255, 255, 255, 0.96)');
     document.body.classList.add('custom-bg-active');
   } else {
     root.setAttribute('data-theme', theme);
-    ['--bg','--surface','--surface2','--border','--text','--text2'].forEach(v => root.style.removeProperty(v));
+    ['--bg','--surface','--surface2','--border','--text','--text2','--input-bg','--input-bg-focus'].forEach(v => root.style.removeProperty(v));
     document.body.classList.remove('custom-bg-active');
   }
   document.querySelectorAll('#themeSwitch button[data-theme]').forEach(b => {
     b.classList.toggle('active', b.dataset.theme === theme);
   });
+  const colorInput = document.getElementById('customBg');
+  if (colorInput) colorInput.classList.toggle('active', theme === 'custom');
   localStorage.setItem('voxcpm_theme', theme);
   if (theme === 'custom') localStorage.setItem('voxcpm_custom_bg', customBg);
 }
@@ -2280,12 +2431,6 @@ function hexToRgb(hex) {
   if (hex.length === 3) hex = hex.split('').map(x => x + x).join('');
   const n = parseInt(hex, 16);
   return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
-}
-function mix(c, target, amt) {
-  const r = Math.round(c.r + (target - c.r) * amt);
-  const g = Math.round(c.g + (target - c.g) * amt);
-  const b = Math.round(c.b + (target - c.b) * amt);
-  return 'rgb(' + r + ',' + g + ',' + b + ')';
 }
 
 function clearText() { document.getElementById('textInput').value = ''; document.getElementById('charCount').textContent = '0 字符'; }
