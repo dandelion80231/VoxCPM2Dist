@@ -93,47 +93,41 @@ begin
        AppDir, SW_HIDE, ewNoWait, ResultCode);
 end;
 
+{ 等待解压完成标记（带消息泵，让进度页面仍可拖动/最小化） }
+procedure WaitForExtract(AppDir: string);
+var
+  DoneFile: string;
+begin
+  DoneFile := AppDir + '\.extract_done';
+  while not FileExists(DoneFile) do
+  begin
+    PumpMessages;
+    Sleep(100);
+  end;
+end;
+
 procedure CurStepChanged(CurStep: TSetupStep);
 var
-  AppDir, DoneFile: string;
+  AppDir: string;
 begin
-  { 静默安装：无 UI，阻塞等待解压完成再清理（不影响交互体验） }
+  { 安装后阶段：等待后台 7z 解压完成再清理，避免完成页卡按钮 }
   if CurStep = ssPostInstall then
   begin
-    if WizardSilent then
-    begin
-      AppDir := ExpandConstant('{app}');
-      DoneFile := AppDir + '\.extract_done';
-      while not FileExists(DoneFile) do
-        Sleep(200);
-      RunCleanup(AppDir);
-    end;
+    AppDir := ExpandConstant('{app}');
+    WaitForExtract(AppDir);
+    RunCleanup(AppDir);
   end;
 end;
 
 procedure CurPageChanged(CurPageID: Integer);
 var
-  AppDir, DoneFile: string;
+  AppDir: string;
 begin
-  { 完成页：若解压仍在后台进行，禁用“完成”按钮并边泵消息边等待（UI 仍响应） }
+  { 完成页：解压已在 ssPostInstall 中完成，只做保险清理 }
   if CurPageID = wpFinished then
   begin
     AppDir := ExpandConstant('{app}');
-    DoneFile := AppDir + '\.extract_done';
-    if not FileExists(DoneFile) then
-    begin
-      WizardForm.NextButton.Enabled := False;
-      while not FileExists(DoneFile) do
-      begin
-        PumpMessages;
-        Sleep(100);
-      end;
+    if FileExists(AppDir + '\.extract_done') then
       RunCleanup(AppDir);
-      WizardForm.NextButton.Enabled := True;
-    end
-    else
-    begin
-      RunCleanup(AppDir);
-    end;
   end;
 end;
