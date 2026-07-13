@@ -47,12 +47,91 @@ Name: "{autodesktop}\{#MyAppName} - 交互菜单"; Filename: "{app}\Scripts\Laun
 Name: "{autodesktop}\{#MyAppName} - 网页界面"; Filename: "{app}\start_web_ui.bat"; IconFilename: "{app}\VoxCPM_App.ico"; Tasks: desktopicon
 
 [Run]
-; 安装后解压 app.7z 到 {app}（7z 多线程解压，速度快）
-Filename: "{app}\7za.exe"; Parameters: "x ""{app}\app.7z"" -o""{app}"" -y"; WorkingDir: "{app}"; Flags: runhidden waituntilterminated
-; 清理归档与解压器
-Filename: "cmd.exe"; Parameters: "/c del /q ""{app}\app.7z"" ""{app}\7za.exe"""; Flags: runhidden
+; 异步解压（nowait 不阻塞 UI 线程，窗口可拖拽/最小化），完成后写 .extract_done 标记
+Filename: "cmd.exe"; Parameters: "/c ""{app}\7za.exe"" x ""{app}\app.7z"" -o""{app}"" -y && echo OK > ""{app}\.extract_done"""; WorkingDir: "{app}"; Flags: runhidden nowait
 ; 安装完成页"立即运行"复选框（默认勾选），以当前用户启动网页界面
 Filename: "cmd.exe"; Parameters: "/c ""{app}\start_web_ui.bat"""; Description: "启动 VoxCPM2 TTS 网页界面"; WorkingDir: "{app}"; Flags: nowait postinstall runascurrentuser skipifsilent
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}"
+
+[Code]
+type
+  TMyMsg = record
+    hwnd: HWND;
+    message: UINT;
+    wParam: LongWord;
+    lParam: LongInt;
+    time: DWORD;
+    pt: TPoint;
+  end;
+
+function PeekMessage(var Msg: TMyMsg; hWnd: HWND; wMsgFilterMin, wMsgFilterMax, wRemoveMsg: UINT): BOOL; external 'PeekMessageA@user32.dll stdcall';
+function TranslateMessage(const Msg: TMyMsg): BOOL; external 'TranslateMessage@user32.dll stdcall';
+function DispatchMessage(const Msg: TMyMsg): LongInt; external 'DispatchMessageA@user32.dll stdcall';
+
+{ 泵消息：让安装向导在等待期间仍能响应拖拽/最小化 }
+procedure PumpMessages;
+var
+  Msg: TMyMsg;
+begin
+  while PeekMessage(Msg, 0, 0, 0, 1) do
+  begin
+    TranslateMessage(Msg);
+    DispatchMessage(Msg);
+  end;
+end;
+
+{ 解压完成后清理归档与解压器（含完成标记） }
+procedure RunCleanup(AppDir: string);
+var
+  ResultCode: Integer;
+begin
+  Exec('cmd.exe', '/c del /q "' + AppDir + '\app.7z" "' + AppDir + '\7za.exe" "' + AppDir + '\.extract_done"',
+       AppDir, SW_HIDE, ewNoWait, ResultCode);
+end;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+var
+  AppDir, DoneFile: string;
+begin
+  { 静默安装：无 UI，阻塞等待解压完成再清理（不影响交互体验） }
+  if CurStep = ssPostInstall then
+  begin
+    if WizardSilent then
+    begin
+      AppDir := ExpandConstant('{app}');
+      DoneFile := AppDir + '\.extract_done';
+      while not FileExists(DoneFile) do
+        Sleep(200);
+      RunCleanup(AppDir);
+    end;
+  end;
+end;
+
+procedure CurPageChanged(CurPageID: Integer);
+var
+  AppDir, DoneFile: string;
+begin
+  { 完成页：若解压仍在后台进行，禁用“完成”按钮并边泵消息边等待（UI 仍响应） }
+  if CurPageID = wpFinished then
+  begin
+    AppDir := ExpandConstant('{app}');
+    DoneFile := AppDir + '\.extract_done';
+    if not FileExists(DoneFile) then
+    begin
+      WizardForm.NextButton.Enabled := False;
+      while not FileExists(DoneFile) do
+      begin
+        PumpMessages;
+        Sleep(100);
+      end;
+      RunCleanup(AppDir);
+      WizardForm.NextButton.Enabled := True;
+    end
+    else
+    begin
+      RunCleanup(AppDir);
+    end;
+  end;
+end;
