@@ -45,21 +45,41 @@ function Resolve-Voice {
     return $trimmed
 }
 
+function Get-DisplayWidth {
+    # 计算字符串在等宽终端的显示宽度（CJK 等东亚宽字符占 2 格）
+    param([string]$s)
+    $w = 0
+    foreach ($c in $s.ToCharArray()) {
+        if ($c -ge 0x2E80) { $w += 2 } else { $w += 1 }
+    }
+    return $w
+}
+
+function Format-BannerLine {
+    # 按显示宽度居中填充到 $width 格，两侧补 |，保证右 | 与边框对齐
+    param([string]$s, [int]$width = 58)
+    $w = Get-DisplayWidth $s
+    $pad = [Math]::Max(0, $width - $w)
+    $left = [Math]::Floor($pad / 2)
+    $right = $pad - $left
+    return '|' + (' ' * $left) + $s + (' ' * $right) + '|'
+}
+
 function Show-Banner {
     Clear-Host
     Write-Host "                                                            " -ForegroundColor Cyan
     Write-Host "V   V     OOO     X   X     CCC     PPPP     M   M     222  " -ForegroundColor Cyan
     Write-Host "V   V    O   O     X X     C   C    P   P    MM MM    2   2 " -ForegroundColor Cyan
-    Write-Host "V   V    O   O      X      C        PPPP     M M M      22  " -ForegroundColor Cyan
-    Write-Host " V V     O   O     X X     C   C    P        M   M      2   " -ForegroundColor Cyan
+    Write-Host "V   V    O   O      X      C        PPPP     M M M      2  "  -ForegroundColor Cyan
+    Write-Host " V V     O   O     X X     C   C    P        M   M     2   "  -ForegroundColor Cyan
     Write-Host "  V       OOO     X   X     CCC     P        M   M    22222 " -ForegroundColor Cyan
-    Write-Host "+============================================================+" -ForegroundColor Cyan
-    Write-Host "|                                                            |" -ForegroundColor Cyan
-    Write-Host "|           VoxCPM2 语音合成工具 v5.2 音色统一版           |" -ForegroundColor Cyan
-    Write-Host "|                                                            |" -ForegroundColor Cyan
-    Write-Host "|            长文本配音 / 音色一致 / 交叉淡入淡出            |" -ForegroundColor Cyan
-    Write-Host "|                                                            |" -ForegroundColor Cyan
-    Write-Host "+============================================================+" -ForegroundColor Cyan
+    Write-Host "+==========================================================+" -ForegroundColor Cyan
+    Write-Host (Format-BannerLine "") -ForegroundColor Cyan
+    Write-Host (Format-BannerLine "VoxCPM2 语音合成工具 v5.2 音色统一版") -ForegroundColor Cyan
+    Write-Host (Format-BannerLine "") -ForegroundColor Cyan
+    Write-Host (Format-BannerLine "长文本配音 / 音色一致 / 交叉淡入淡出") -ForegroundColor Cyan
+    Write-Host (Format-BannerLine "") -ForegroundColor Cyan
+    Write-Host "+==========================================================+" -ForegroundColor Cyan
 }
 function Show-Menu {
     Show-Banner
