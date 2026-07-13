@@ -19,9 +19,8 @@ VoxCPM2Dist/
 ├── installer/VoxCPM2_TTS.iss    # InnoSetup 安装包定义
 ├── build_installer.ps1          # 打包脚本：7z 压 app → payload/app.7z → ISCC 编译
 ├── payload/                     # 构建工作目录（app.7z + 7za.exe），保留以便原地重打
-├── output/                      # 构建产物：Setup.exe + 3×.bin 分卷（每次重建覆盖）
-├── README.md / requirements.txt / .gitignore
-└── VoxCPM2_TTS_v5.2_Setup.zip # 分发包（网盘用，被 .gitignore 排除）
+├── output/                      # 构建产物：Setup.exe + 3×.bin 分卷 + VoxCPM2_TTS_v5.2_Setup.zip（分发物，网盘用，被 .gitignore 排除）
+└── README.md / requirements.txt / .gitignore
 ```
 
 **三条入口，归一化必须一致**：
@@ -166,7 +165,7 @@ VoxCPM2Dist/
 
 每次要把修改推上 GitHub，**严格按以下顺序**，且最后一步必须等用户确认：
 
-1. **清理无用文件**：删诊断日志（`*.log`）、`nul` 等垃圾；**但 `payload/`、`output/`、`app/`、根目录分发 zip 必须保留**（保留 payload/app.7z 才能让改 .iss 仅 ISCC 重编译 + 重压 zip，整体 <1 分钟；删了每次重压 app/ 约 15–20 分钟）。
+1. **清理无用文件**：删诊断日志（`*.log`）、`nul` 等垃圾；**但 `payload/`、`output/`（含分发 zip `VoxCPM2_TTS_v5.2_Setup.zip`）、`app/` 必须保留**（保留 payload/app.7z 才能让改 .iss 仅 ISCC 重编译 + 重压 zip，整体 <1 分钟；删了每次重压 app/ 约 15–20 分钟）。
 2. **更新必要的描述文件**：改动后同步 `README.md`、`VoxCPM2Dist_开发经验与避雷手册.md` 等，版本号/修复记录/坑位与实际一致（如 64 位 7za 修复必须记进 §3.6）。
 3. **完全检查**：确认文档准确、仓库无机器专属绝对路径泄漏（`C:\Users\...`/本机用户名/`D:\AI\...` 不应出现在被提交代码里）、`git status` 符合预期。
 4. **经用户确认**：把"清理了什么 / 改了哪些文档 / 检查结果"汇总给用户，**确认后再推**。
@@ -179,7 +178,7 @@ VoxCPM2Dist/
 ## 6. 分发与文件系统
 
 - **9.4GB 二进制载荷（环境+权重）不进 git**，走网盘（阿里云盘分发链接已在 README）；`.gitignore` 排除 `VoxCPM2_TTS_v*.zip`。
-- **根目录 `VoxCPM2_TTS_v5.2_Setup.zip` 是自包含完整归档**（内含 output/ 的 exe + 3×.bin），（gitignored，走网盘分发），找回旧版只需下载解压该 zip。⚠️ **按现行约定 `payload/` 与 `output/` 均保留**（payload/app.7z + 7za 在，改 .iss 只需 ISCC 重编译 + 重压 zip，整体 <1 分钟；删 payload/app.7z 则每次重压 app/ 约 15–20 分钟），**不再视 output/ 为可随意删除的冗余**——除非已完全定稿且确认不再需要原地重打。
+- **`output/VoxCPM2_TTS_v5.2_Setup.zip` 是自包含完整归档**（内含 output/ 的 exe + 3×.bin），（gitignored，走网盘分发），找回旧版只需下载解压该 zip。⚠️ **按现行约定 `payload/` 与 `output/` 均保留**（payload/app.7z + 7za 在，改 .iss 只需 ISCC 重编译 + 重压 zip，整体 <1 分钟；删 payload/app.7z 则每次重压 app/ 约 15–20 分钟），**不再视 output/ 为可随意删除的冗余**——除非已完全定稿且确认不再需要原地重打。
 - **桌面快捷方式/卸载图标**经 .iss 的 `IconFilename`/`UninstallDisplayIcon` 指向 `installer/assets/VoxCPM_App.ico`。
 - **清理原则**：诊断日志（7z_*.log / build_7z.log）、`__pycache__/` 是垃圾可删；`build/VoxCPM_TTS.spec`（PyInstaller 备用打包模板，README/vox_web_ui.py 引用）**有意保留**，非垃圾。
 - 构建前体检：全文搜 `C:\`/`D:\`/本机用户名/项目绝对路径；配置 JSON 不带机器专属值；默认路径用 `Path.home()` 或相对 `__file__` 派生的安装目录。
@@ -197,8 +196,8 @@ VoxCPM2Dist/
 # 2) 编译（PowerShell Start-Process 调 ISCC）
 Start-Process "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" -ArgumentList "<仓库根目录>\installer\VoxCPM2_TTS.iss"
 
-# 重打根目录分发 zip（纯打包，最快）
-& "C:\Program Files\7-Zip\7z.exe" a -tzip -mx=1 VoxCPM2_TTS_v5.2_Setup.zip output\VoxCPM2_TTS_v5.2_Setup.exe output\*.bin
+# 重打 output/ 分发 zip（纯打包，最快）
+& "C:\Program Files\7-Zip\7z.exe" a -tzip -mx=1 output\VoxCPM2_TTS_v5.2_Setup.zip output\VoxCPM2_TTS_v5.2_Setup.exe output\*.bin
 
 # 验证归档完整
 & "C:\Program Files\7-Zip\7z.exe" t payload\app.7z
@@ -209,8 +208,8 @@ git push -u origin main --follow-tags
 # 长耗时重打包（脱离 Agent 会话，绕过 ~2 分钟看门狗回收）
 # 注册 Windows 计划任务，由 Task Scheduler 托管，即使对话断开也继续跑
 # 注：rebuild_v52.ps1 已废弃删除，构建统一走 build_installer.ps1（已改为相对路径、可移植）。
-#     如需重新生成根目录 zip 分发物，构建后执行单行命令：
-#     7z a -tzip "<仓库根目录>\VoxCPM2_TTS_v5.2_Setup.zip" "<仓库根目录>\output\VoxCPM2_TTS_v5.2_Setup.*"
+#     如需重新生成分发 zip，构建后执行单行命令（输出到 output/，不要生成到仓库根）：
+#     7z a -tzip "<仓库根目录>\output\VoxCPM2_TTS_v5.2_Setup.zip" "<仓库根目录>\output\VoxCPM2_TTS_v5.2_Setup.*"
 $action = New-ScheduledTaskAction -Execute "C:\Program Files\PowerShell\7\pwsh.exe" `
   -Argument "-NoProfile -ExecutionPolicy Bypass -File `"<仓库根目录>\build_installer.ps1`"" `
   -WorkingDirectory "<仓库根目录>"
@@ -224,10 +223,10 @@ Start-ScheduledTask -TaskName "VoxCPM2_Build"
 
 ## 8. 已知事项 / 待办
 - 安装包物理产物（zip/output/payload）按约定不进版本库，仍在本地，需用户上传网盘覆盖旧分发（链接不变）。
-- v5.2 已修复安装器 64 位 7za 卡死（见 §3.6）；根目录 `VoxCPM2_TTS_v5.2_Setup.zip` 已是含修复的构建产物，需重新上传网盘覆盖旧分发（链接不变）。
+- v5.2 已修复安装器 64 位 7za 卡死（见 §3.6）；`output/VoxCPM2_TTS_v5.2_Setup.zip` 已是含修复的构建产物，需重新上传网盘覆盖旧分发（链接不变）。
 - Python 3.13 兼容性未验证；如需追新版本，须重建 `python_cuda` + 重新打包 9.4GB，收益低。
 - ima 知识库 MCP 在本会话仅暴露读/搜索工具，无写入接口；本手册为 Markdown，可手动导入 ima 新建分组。
-- `output/` 冗余目录已于本轮（2026-07-13）清理（9.76 GB），D 盘释放空间；旧版安装包从根目录 `VoxCPM2_TTS_v5.2_Setup.zip` 解压即可找回（`output/` 会随重建自动生成）。
+- 旧版安装包从 `output/VoxCPM2_TTS_v5.2_Setup.zip` 解压即可找回（`output/` 会随重建自动生成）。
 
 ---
 
