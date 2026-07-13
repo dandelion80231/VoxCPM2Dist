@@ -208,12 +208,15 @@ git push -u origin main --follow-tags
 
 # 长耗时重打包（脱离 Agent 会话，绕过 ~2 分钟看门狗回收）
 # 注册 Windows 计划任务，由 Task Scheduler 托管，即使对话断开也继续跑
+# 注：rebuild_v52.ps1 已废弃删除，构建统一走 build_installer.ps1（已改为相对路径、可移植）。
+#     如需重新生成根目录 zip 分发物，构建后执行单行命令：
+#     7z a -tzip "<仓库根目录>\VoxCPM2_TTS_v5.2_Setup.zip" "<仓库根目录>\output\VoxCPM2_TTS_v5.2_Setup.*"
 $action = New-ScheduledTaskAction -Execute "C:\Program Files\PowerShell\7\pwsh.exe" `
-  -Argument "-NoProfile -ExecutionPolicy Bypass -File `"<仓库根目录>\rebuild_v52.ps1`"" `
+  -Argument "-NoProfile -ExecutionPolicy Bypass -File `"<仓库根目录>\build_installer.ps1`"" `
   -WorkingDirectory "<仓库根目录>"
-Register-ScheduledTask -TaskName "VoxCPM2_Build_v52b" -Action $action `
+Register-ScheduledTask -TaskName "VoxCPM2_Build" -Action $action `
   -Principal (New-ScheduledTaskPrincipal -LogonType Interactive) -Force
-Start-ScheduledTask -TaskName "VoxCPM2_Build_v52b"
+Start-ScheduledTask -TaskName "VoxCPM2_Build"
 # 监控：轮询 payload/app.7z 体积增长 + ISCC 进程 + output exe 时间，别依赖"等待某 PID 结束"
 ```
 
