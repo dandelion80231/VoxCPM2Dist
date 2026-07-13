@@ -1,7 +1,7 @@
 #define MyAppName "VoxCPM2 TTS 中文版"
 #define MyAppVersion "5.2"
-#define MyPayload "D:\AI\Build\VoxCPM2Dist\payload"
-#define MyAssets "D:\AI\Build\VoxCPM2Dist\installer\assets"
+#define MyPayload "..\payload"
+#define MyAssets "assets"
 
 [Setup]
 AppId={{VoxCPM2-TTS-ZH-5.0}
@@ -10,7 +10,7 @@ AppVersion={#MyAppVersion}
 AppPublisher=VoxCPM2
 DefaultDirName={autopf}\VoxCPM2 TTS
 DefaultGroupName={#MyAppName}
-OutputDir=D:\AI\Build\VoxCPM2Dist\output
+OutputDir=..\output
 OutputBaseFilename=VoxCPM2_TTS_v5.2_Setup
 Compression=lzma2/fast
 SolidCompression=no

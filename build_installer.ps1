@@ -16,7 +16,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$root    = "D:\AI\Build\VoxCPM2Dist"
+$root    = Split-Path $MyInvocation.MyCommand.Path
 $app     = Join-Path $root 'app'
 $payload = Join-Path $root 'payload'
 $assets  = Join-Path $root 'installer\assets'
@@ -167,5 +167,10 @@ $iscc = 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe'
 if (-not (Test-Path $iscc)) { $iscc = 'C:\Program Files\Inno Setup 6\ISCC.exe' }
 if (-not (Test-Path $iscc)) { Write-Error '未找到 ISCC.exe，请安装 InnoSetup 6。'; exit 1 }
 Write-Host '[4/4] 编译安装包（InnoSetup，仅打包 app.7z/7za/ico，很快）...'
-& $iscc (Join-Path $root 'installer\VoxCPM2_TTS.iss') | Out-Host
+Push-Location $root
+try {
+    & $iscc (Join-Path $root 'installer\VoxCPM2_TTS.iss') | Out-Host
+} finally {
+    Pop-Location
+}
 Write-Host "[完成] 安装包已生成于 $root\output"
