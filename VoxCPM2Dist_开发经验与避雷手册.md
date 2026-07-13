@@ -1,8 +1,8 @@
 # VoxCPM2Dist 离线发行版 · 开发经验与避雷手册
 
-> 版本：v5.2（离线 TTS 分发版）
+> 版本：v5.2.1（离线 TTS 分发版；v5.2.1 = 安装器 64 位 7za 卡死修复，安装包文件名仍为 v5.2）
 > 适用范围：基于 OpenBMB VoxCPM2 的中文 TTS 离线发行包（Windows x64 + NVIDIA CUDA，可 CPU 回退）
-> 整理日期：2026-07-12（更新：2026-07-13 补充 Banner 对齐坑、安装包选项、Releases 整理、计划任务重打包）
+> 整理日期：2026-07-12（更新：2026-07-13 补充 Banner 对齐坑、安装包选项、Releases 整理、计划任务重打包；2026-07-14 补 64 位 7za 致命坑 §3.6、升 v5.2.1）
 > 目的：把本次开发踩过的坑、验证过的治本方案、以及用户明确约定的工作流固化下来，便于日后复用。
 
 ---
@@ -103,6 +103,20 @@ VoxCPM2Dist/
 
 ---
 
+### 3.6 安装器解压卡死：32 位 7za 无法处理 >4GB 文件（2026-07-14 决定性定位，最高优先级）💥
+
+- **现象**：安装跑到"正在解压资源文件"阶段，进度条几小时几乎不动、安装永不结束；用户此前多次反馈的"卡死"均指此。
+- **根因（决定性实证）**：安装器自带的 `payload/7za.exe` 是 **32 位（x86）**。处理 >4GB 的模型权重 `model\openbmb\VoxCPM2\model.safetensors`（约 4.6GB）时，32 位进程地址空间受限，在**文件写完后收尾（设置时间/属性）阶段永久挂起** → 安装器 `WaitForExtract` 的 `while not .extract_done` 无限等待 → 进度条停在 1%。
+  - 实证链：用户真实安装目录里 7za 进程卡死数小时、`.extract_done` 从未生成、model 停在 4,580,080,592 字节不动；用与安装器完全一致的方式在本机独立复现，32 位 7za 写满 4.58GB 后同样挂起，而 64 位 7za 同条件 EXIT=0。已排除归档损坏（`7za t` 通过）、路径超长、磁盘满、Defender 拦截。
+- **治本**：
+  - `payload/7za.exe` 换成 **64 位（x64）版本**，并随包带其依赖 `7za.dll` + `7zxa.dll`（x64 7za 必须同目录；`.iss` 的 `[Files]` 已加两项，`RunCleanup` 一并删除）。
+  - `WaitForExtract` 加装**看门狗**：总上限 45 分钟；启动 30 秒后 5 分钟无进度即判定卡死/失败，弹可读提示（提示杀软实时防护可能拦截大模型写入）后 `ExitProcess(1)`，不再静默死等。
+  - `_extract_.bat` 在 7za 失败时写 `.extract_error`，主线程检测后明确报错。
+- **回归防护（关键）**：`build_installer.ps1` 改为**强制 x64**——下载解包优先 `x64\7za.exe`、校验 PE 位数（读 PE 头 `Machine`：`0x8664`=x64、`0x14C`=x86）、复制 `7za.exe`+`7za.dll`+`7zxa.dll`。**切勿把 payload/7za.exe 换回 32 位**——即使某机器只有 32 位 7-Zip，也要用 7-Zip Extra 的 `x64\7za.exe`。
+- **验证**：x64 7za 在本机 NVMe 上完整解压 9.3GB 归档约 **80 秒、exit 0**；已用 `output\VoxCPM2_TTS_v5.2_Setup.exe` `/VERYSILENT` 静默安装到测试目录实测通过（model.safetensors 完整、清理正常）。
+
+---
+
 ## 4. 依赖与环境
 
 ### 4.1 requirements.txt 必须与实际环境一致
@@ -148,12 +162,24 @@ VoxCPM2Dist/
 ### README 图片（面向国内用户）
 - 公开仓库图片用 **jsDelivr CDN**：`https://cdn.jsdelivr.net/gh/<user>/<repo>@<branch>/<path>`，避免 `raw.githubusercontent.com` 在国内被墙只显示 alt 文字。
 
+### 推送前标准作业顺序（用户硬性要求）
+
+每次要把修改推上 GitHub，**严格按以下顺序**，且最后一步必须等用户确认：
+
+1. **清理无用文件**：删诊断日志（`*.log`）、`nul` 等垃圾；**但 `payload/`、`output/`、`app/`、根目录分发 zip 必须保留**（保留 payload/app.7z 才能让改 .iss 仅 ISCC 重编译 + 重压 zip，整体 <1 分钟；删了每次重压 app/ 约 15–20 分钟）。
+2. **更新必要的描述文件**：改动后同步 `README.md`、`VoxCPM2Dist_开发经验与避雷手册.md` 等，版本号/修复记录/坑位与实际一致（如 v5.2.1 的 64 位 7za 修复必须记进 §3.6）。
+3. **完全检查**：确认文档准确、仓库无机器专属绝对路径泄漏（`C:\Users\...`/本机用户名/`D:\AI\...` 不应出现在被提交代码里）、`git status` 符合预期。
+4. **经用户确认**：把"清理了什么 / 改了哪些文档 / 检查结果"汇总给用户，**确认后再推**。
+5. **推送**：`git push origin main` + `git push origin <tag>`（Watt Toolkit 代理开 + `http.sslVerify=false`）；保留历史、禁止 `--force`/`--amend`。
+
+⚠️ 不要为"尽快推完"而跳过确认，或自建自动推送任务绕过确认闸。
+
 ---
 
 ## 6. 分发与文件系统
 
 - **9.4GB 二进制载荷（环境+权重）不进 git**，走网盘（阿里云盘分发链接已在 README）；`.gitignore` 排除 `VoxCPM2_TTS_v*.zip`。
-- **根目录 `VoxCPM2_TTS_v5.2_Setup.zip` 是自包含完整归档**（内含 output/ 的 exe + 3×.bin），找回旧版只需下载解压该 zip；`output/` 松散分卷是同字节冗余，可删（每次重建会重新生成）。
+- **根目录 `VoxCPM2_TTS_v5.2_Setup.zip` 是自包含完整归档**（内含 output/ 的 exe + 3×.bin），（gitignored，走网盘分发），找回旧版只需下载解压该 zip。⚠️ **按现行约定 `payload/` 与 `output/` 均保留**（payload/app.7z + 7za 在，改 .iss 只需 ISCC 重编译 + 重压 zip，整体 <1 分钟；删 payload/app.7z 则每次重压 app/ 约 15–20 分钟），**不再视 output/ 为可随意删除的冗余**——除非已完全定稿且确认不再需要原地重打。
 - **桌面快捷方式/卸载图标**经 .iss 的 `IconFilename`/`UninstallDisplayIcon` 指向 `installer/assets/VoxCPM_App.ico`。
 - **清理原则**：诊断日志（7z_*.log / build_7z.log）、`__pycache__/` 是垃圾可删；`build/VoxCPM_TTS.spec`（PyInstaller 备用打包模板，README/vox_web_ui.py 引用）**有意保留**，非垃圾。
 - 构建前体检：全文搜 `C:\`/`D:\`/本机用户名/项目绝对路径；配置 JSON 不带机器专属值；默认路径用 `Path.home()` 或相对 `__file__` 派生的安装目录。
@@ -164,12 +190,12 @@ VoxCPM2Dist/
 
 ```powershell
 # 重打包安装包（基于当前 app/）
-& "D:\AI\Build\VoxCPM2Dist\build_installer.ps1"
+& "<仓库根目录>\build_installer.ps1"
 # 等效拆两步（沙箱受限时）：
 # 1) 压缩（Bash 直接调 7z 后台）
 & "C:\Program Files\7-Zip\7z.exe" a -t7z -mmt=on -mx=7 ../payload/app.7z *
 # 2) 编译（PowerShell Start-Process 调 ISCC）
-Start-Process "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" -ArgumentList "D:\AI\Build\VoxCPM2Dist\installer\VoxCPM2_TTS.iss"
+Start-Process "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" -ArgumentList "<仓库根目录>\installer\VoxCPM2_TTS.iss"
 
 # 重打根目录分发 zip（纯打包，最快）
 & "C:\Program Files\7-Zip\7z.exe" a -tzip -mx=1 VoxCPM2_TTS_v5.2_Setup.zip output\VoxCPM2_TTS_v5.2_Setup.exe output\*.bin
@@ -183,8 +209,8 @@ git push -u origin main --follow-tags
 # 长耗时重打包（脱离 Agent 会话，绕过 ~2 分钟看门狗回收）
 # 注册 Windows 计划任务，由 Task Scheduler 托管，即使对话断开也继续跑
 $action = New-ScheduledTaskAction -Execute "C:\Program Files\PowerShell\7\pwsh.exe" `
-  -Argument "-NoProfile -ExecutionPolicy Bypass -File `"D:\AI\Build\VoxCPM2Dist\rebuild_v52.ps1`"" `
-  -WorkingDirectory "D:\AI\Build\VoxCPM2Dist"
+  -Argument "-NoProfile -ExecutionPolicy Bypass -File `"<仓库根目录>\rebuild_v52.ps1`"" `
+  -WorkingDirectory "<仓库根目录>"
 Register-ScheduledTask -TaskName "VoxCPM2_Build_v52b" -Action $action `
   -Principal (New-ScheduledTaskPrincipal -LogonType Interactive) -Force
 Start-ScheduledTask -TaskName "VoxCPM2_Build_v52b"
@@ -195,6 +221,7 @@ Start-ScheduledTask -TaskName "VoxCPM2_Build_v52b"
 
 ## 8. 已知事项 / 待办
 - 安装包物理产物（zip/output/payload）按约定不进版本库，仍在本地，需用户上传网盘覆盖旧分发（链接不变）。
+- v5.2.1 已修复安装器 64 位 7za 卡死（见 §3.6）；根目录 `VoxCPM2_TTS_v5.2_Setup.zip` 已是含修复的构建产物，需重新上传网盘覆盖旧分发（链接不变）。
 - Python 3.13 兼容性未验证；如需追新版本，须重建 `python_cuda` + 重新打包 9.4GB，收益低。
 - ima 知识库 MCP 在本会话仅暴露读/搜索工具，无写入接口；本手册为 Markdown，可手动导入 ima 新建分组。
 - `output/` 冗余目录已于本轮（2026-07-13）清理（9.76 GB），D 盘释放空间；旧版安装包从根目录 `VoxCPM2_TTS_v5.2_Setup.zip` 解压即可找回（`output/` 会随重建自动生成）。
