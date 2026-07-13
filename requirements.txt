@@ -1,5 +1,5 @@
 # VoxCPM2 TTS 中文版 v5.2 — Python 依赖清单
-# 生成日期：2026-07-09
+# 生成日期：2026-07-14（已逐一核对 app/python_cuda 实际安装版本，下列版本与实际完全一致）
 # 运行环境：Python 3.12.x（随包内置 python_cuda 为 3.12.10 embed）；从源码构建请使用 3.12.x，Python 3.13 未经测试（torch CUDA 轮子/部分依赖可能不兼容）
 # 注意：torch 需单独从 CUDA 源安装
 
@@ -37,6 +37,11 @@ scipy==1.18.0
 scikit-learn==1.9.0
 numba==0.66.0
 kaldifst==1.8.0
+
+# Web UI 依赖（app/Scripts/vox_web_ui.py 运行所需；FastAPI 处理文件上传依赖 python-multipart）
+fastapi==0.139.0
+uvicorn==0.51.0
+python-multipart==0.0.32
 
 # 辅助
 contractions==0.1.73
