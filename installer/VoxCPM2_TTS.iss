@@ -88,47 +88,46 @@ begin
   end;
 end;
 
-{ 从进度日志读取最新的百分比数字（7za 用 \r 覆盖同一行，所以取行内最后一个 % 前的数字） }
+{ 从进度日志读取最新的百分比数字。
+  7za 的 -bsp1 进度输出用 \r 覆盖同一行，文件中不含 \n，
+  LoadStringsFromFile 按行读取不可靠，故用 LoadStringFromFile
+  读取整个文件为一个字符串，再从末尾向前找最后一个 '%'。 }
 function ReadLastPercent(const FilePath: string): Integer;
 var
-  Lines: TArrayOfString;
-  i, cnt, start, p, j: Integer;
-  s, numStr: string;
+  s: AnsiString;
+  numStr: string;
+  p, j: Integer;
 begin
   Result := -1;
-  if not LoadStringsFromFile(FilePath, Lines) then Exit;
-  cnt := GetArrayLength(Lines);
-  start := cnt - 200;
-  if start < 0 then start := 0;
-  for i := start to cnt - 1 do
+  if not LoadStringFromFile(FilePath, s) then Exit;
+  if s = '' then Exit;
+
+  { 从字符串末尾向前找到最后一个 '%' }
+  p := 0;
+  for j := Length(s) downto 1 do
   begin
-    s := Lines[i];
-    { 从行尾向前找到最后一个 '%'，避免 7za 的 \r 覆盖行导致永远只读到 0% }
-    p := 0;
-    for j := Length(s) downto 1 do
+    if s[j] = '%' then
     begin
-      if s[j] = '%' then
-      begin
-        p := j;
-        Break;
-      end;
+      p := j;
+      Break;
     end;
-    if p > 1 then
+  end;
+
+  if p > 1 then
+  begin
+    numStr := '';
+    j := p - 1;
+    { 先跳过 % 前面的空格 }
+    while (j >= 1) and (s[j] = ' ') do
+      j := j - 1;
+    { 取连续数字 }
+    while (j >= 1) and (s[j] >= '0') and (s[j] <= '9') do
     begin
-      numStr := '';
-      j := p - 1;
-      { 先跳过 % 前面的空格 }
-      while (j >= 1) and (s[j] = ' ') do
-        j := j - 1;
-      { 取连续数字 }
-      while (j >= 1) and (s[j] >= '0') and (s[j] <= '9') do
-      begin
-        numStr := s[j] + numStr;
-        j := j - 1;
-      end;
-      if numStr <> '' then
-        Result := StrToIntDef(numStr, Result);
+      numStr := s[j] + numStr;
+      j := j - 1;
     end;
+    if numStr <> '' then
+      Result := StrToIntDef(numStr, Result);
   end;
 end;
 
@@ -193,12 +192,12 @@ begin
   end;
 end;
 
-{ 解压完成后清理归档与解压器（含完成/取消标记） }
+{ 解压完成后清理归档、解压器、临时批处理与标记文件 }
 procedure RunCleanup(AppDir: string);
 var
   ResultCode: Integer;
 begin
-  Exec('cmd.exe', '/c del /q "' + AppDir + '\app.7z" "' + AppDir + '\7za.exe" "' + AppDir + '\.extract_done" "' + AppDir + '\.extract_cancelled"',
+  Exec('cmd.exe', '/c del /q "' + AppDir + '\app.7z" "' + AppDir + '\7za.exe" "' + AppDir + '\.extract_done" "' + AppDir + '\.extract_cancelled" "' + AppDir + '\_extract_.bat"',
        AppDir, SW_HIDE, ewNoWait, ResultCode);
 end;
 
@@ -217,12 +216,19 @@ end;
 { 等待后台 7z 解压完成，其间更新真实解压进度 }
 procedure WaitForExtract(AppDir: string);
 var
-  DoneFile, CancelFile, LogFile: string;
-  ResultCode, pct: Integer;
+  DoneFile, CancelFile, LogFile, BatchPath: string;
+  BatchLines: TArrayOfString;
+  ResultCode, pct, lastPct, ticks: Integer;
 begin
   DoneFile := AppDir + '\.extract_done';
   CancelFile := AppDir + '\.extract_cancelled';
   LogFile := ExpandConstant('{tmp}') + '\extract_progress.log';
+  BatchPath := AppDir + '\_extract_.bat';
+
+  { 清除可能残留的旧标记/日志，避免误判 }
+  if FileExists(DoneFile) then DeleteFile(DoneFile);
+  if FileExists(CancelFile) then DeleteFile(CancelFile);
+  if FileExists(LogFile) then DeleteFile(LogFile);
 
   ShowExtractProgress;
 
@@ -230,41 +236,64 @@ begin
   WizardForm.CancelButton.Enabled := True;
   WizardForm.CancelButton.OnClick := @OnCancelClick;
 
-  { 启动 7za 异步解压：进度(-bsp1)与日志分离(-bso0)，进度写入日志；完成后写 .extract_done }
-  Exec('cmd.exe', '/c ""' + AppDir + '\7za.exe"" x ""' + AppDir + '\app.7z"" -o""' + AppDir + '"" -y -bsp1 -bso0 > ""' + LogFile + '"" 2>&1 && echo OK > ""' + DoneFile + '""',
-       AppDir, SW_HIDE, ewNoWait, ResultCode);
+  { 生成临时批处理文件，避免 cmd.exe 参数转义问题，并把进度写入日志 }
+  SetArrayLength(BatchLines, 5);
+  BatchLines[0] := '@echo off';
+  BatchLines[1] := 'setlocal enabledelayedexpansion';
+  BatchLines[2] := '"' + AppDir + '\7za.exe" x "' + AppDir + '\app.7z" -o"' + AppDir + '" -y -bsp1 -bso0 > "' + LogFile + '" 2>&1';
+  BatchLines[3] := 'if !errorlevel! neq 0 exit /b !errorlevel!';
+  BatchLines[4] := 'echo OK > "' + DoneFile + '"';
+  SaveStringsToFile(BatchPath, BatchLines, False);
 
+  { 启动批处理进行异步解压 }
+  Exec('cmd.exe', '/c "' + BatchPath + '"', AppDir, SW_HIDE, ewNoWait, ResultCode);
+
+  lastPct := -1;
+  ticks := 0;
   while (not FileExists(DoneFile)) and (not FileExists(CancelFile)) do
   begin
     if CancelRequested then Break;
+
     pct := ReadLastPercent(LogFile);
     if pct >= 0 then
     begin
-      ExtractBar.Position := pct;
-      ExtractLabel.Caption := '正在解压资源文件，请稍候... ' + IntToStr(pct) + '%';
-      { 保持上方文件提取完成状态始终可见 }
-      if WizardForm.StatusLabel <> nil then
+      if pct <> lastPct then
       begin
-        WizardForm.StatusLabel.Caption := '文件提取完成';
-        WizardForm.StatusLabel.Visible := True;
+        ExtractBar.Position := pct;
+        ExtractLabel.Caption := '正在解压资源文件，请稍候... ' + IntToStr(pct) + '%';
+        lastPct := pct;
       end;
     end
     else
     begin
-      { 尚未读到百分比时，状态标签保持“文件提取完成”，不空白 }
-      if WizardForm.StatusLabel <> nil then
-      begin
-        WizardForm.StatusLabel.Caption := '文件提取完成';
-        WizardForm.StatusLabel.Visible := True;
-      end;
+      { 尚未读到百分比时，显示启动中，避免用户误以为卡死 }
+      if ticks mod 20 = 0 then
+        ExtractLabel.Caption := '正在解压资源文件，请稍候...';
     end;
+
+    { 保持上方文件提取完成状态始终可见 }
+    if WizardForm.StatusLabel <> nil then
+    begin
+      WizardForm.StatusLabel.Caption := '文件提取完成';
+      WizardForm.StatusLabel.Visible := True;
+    end;
+
     PumpMessages;
     Sleep(150);
+    ticks := ticks + 1;
   end;
 
-  { 收尾：置满进度并短暂停留，让“100%”可见 }
-  ExtractBar.Position := 100;
-  ExtractLabel.Caption := '解压完成，正在收尾...';
+  { 收尾 }
+  if FileExists(CancelFile) or CancelRequested then
+  begin
+    ExtractBar.Position := 0;
+    ExtractLabel.Caption := '已取消';
+  end
+  else
+  begin
+    ExtractBar.Position := 100;
+    ExtractLabel.Caption := '解压完成，正在收尾...';
+  end;
   PumpMessages;
   Sleep(400);
 
