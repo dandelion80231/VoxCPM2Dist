@@ -47,8 +47,6 @@ Name: "{autodesktop}\{#MyAppName} - 交互菜单"; Filename: "{app}\Scripts\Laun
 Name: "{autodesktop}\{#MyAppName} - 网页界面"; Filename: "{app}\start_web_ui.bat"; IconFilename: "{app}\VoxCPM_App.ico"; Tasks: desktopicon
 
 [Run]
-; 异步解压（nowait 不阻塞 UI 线程，窗口可拖拽/最小化），完成后写 .extract_done 标记
-Filename: "cmd.exe"; Parameters: "/c ""{app}\7za.exe"" x ""{app}\app.7z"" -o""{app}"" -y && echo OK > ""{app}\.extract_done"""; WorkingDir: "{app}"; Flags: runhidden nowait
 ; 安装完成页"立即运行"复选框（默认勾选），以当前用户启动网页界面
 Filename: "cmd.exe"; Parameters: "/c ""{app}\start_web_ui.bat"""; Description: "启动 VoxCPM2 TTS 网页界面"; WorkingDir: "{app}"; Flags: nowait postinstall runascurrentuser skipifsilent
 ; 安装完成页可选启动交互菜单（默认不勾选）
@@ -60,6 +58,9 @@ Type: filesandordirs; Name: "{app}"
 [Code]
 var
   CancelRequested: Boolean;
+  ProgressForm: TForm;
+  ProgressBar: TNewProgressBar;
+  ProgressLabel: TLabel;
 
 type
   TMyMsg = record
@@ -88,7 +89,76 @@ begin
   end;
 end;
 
-{ 解压完成后清理归档与解压器（含完成标记） }
+{ 从进度日志读取最后一个百分比数字（-1 表示尚未出现） }
+function ReadLastPercent(const FilePath: string): Integer;
+var
+  Lines: TArrayOfString;
+  i, cnt, start, p: Integer;
+  s, numStr: string;
+begin
+  Result := -1;
+  if not LoadStringsFromFile(FilePath, Lines) then Exit;
+  cnt := GetArrayLength(Lines);
+  start := cnt - 200;
+  if start < 0 then start := 0;
+  for i := start to cnt - 1 do
+  begin
+    s := Lines[i];
+    p := Pos('%', s);
+    if p > 0 then
+    begin
+      numStr := '';
+      while (p > 1) and (s[p-1] >= '0') and (s[p-1] <= '9') do
+      begin
+        numStr := s[p-1] + numStr;
+        p := p - 1;
+      end;
+      if numStr <> '' then
+        Result := StrToIntDef(numStr, Result);
+    end;
+  end;
+end;
+
+{ 创建并显示真实的解压进度表单（覆盖在内置进度条“完成”后的等待期） }
+procedure ShowExtractProgress;
+begin
+  ProgressForm := TForm.Create(nil);
+  ProgressForm.Caption := 'VoxCPM2 TTS 安装';
+  ProgressForm.Width := 460;
+  ProgressForm.Height := 150;
+  ProgressForm.BorderStyle := bsDialog;
+  ProgressForm.BorderIcons := [];
+  ProgressForm.Position := poScreenCenter;
+  ProgressLabel := TLabel.Create(ProgressForm);
+  ProgressLabel.Parent := ProgressForm;
+  ProgressLabel.Left := 24;
+  ProgressLabel.Top := 28;
+  ProgressLabel.Width := 412;
+  ProgressLabel.Caption := '正在解压资源文件，请稍候...';
+  ProgressBar := TNewProgressBar.Create(ProgressForm);
+  ProgressBar.Parent := ProgressForm;
+  ProgressBar.Left := 24;
+  ProgressBar.Top := 64;
+  ProgressBar.Width := 412;
+  ProgressBar.Height := 22;
+  ProgressBar.Min := 0;
+  ProgressBar.Max := 100;
+  ProgressBar.Position := 0;
+  ProgressForm.Show;
+  ProgressForm.BringToFront;
+end;
+
+procedure HideExtractProgress;
+begin
+  if ProgressForm <> nil then
+  begin
+    ProgressForm.Hide;
+    ProgressForm.Free;
+    ProgressForm := nil;
+  end;
+end;
+
+{ 解压完成后清理归档与解压器（含完成/取消标记） }
 procedure RunCleanup(AppDir: string);
 var
   ResultCode: Integer;
@@ -97,22 +167,45 @@ begin
        AppDir, SW_HIDE, ewNoWait, ResultCode);
 end;
 
-{ 等待解压完成标记（带消息泵，让进度页面仍可拖动/最小化/取消） }
+{ 等待后台 7z 解压完成，其间更新真实解压进度 }
 procedure WaitForExtract(AppDir: string);
 var
-  DoneFile, CancelFile: string;
+  DoneFile, CancelFile, LogFile: string;
+  ResultCode, pct: Integer;
 begin
   DoneFile := AppDir + '\.extract_done';
   CancelFile := AppDir + '\.extract_cancelled';
+  LogFile := ExpandConstant('{tmp}') + '\extract_progress.log';
+
+  ShowExtractProgress;
+
   { ssPostInstall 期间默认禁用取消按钮，这里强制启用 }
   WizardForm.CancelButton.Enabled := True;
+
+  { 启动 7za 异步解压：进度(-bsp1)与日志分离(-bso0)，进度写入日志；完成后写 .extract_done }
+  Exec('cmd.exe', '/c ""' + AppDir + '\7za.exe"" x ""' + AppDir + '\app.7z"" -o""' + AppDir + '"" -y -bsp1 -bso0 > ""' + LogFile + '"" 2>&1 && echo OK > ""' + DoneFile + '""',
+       AppDir, SW_HIDE, ewNoWait, ResultCode);
+
   while (not FileExists(DoneFile)) and (not FileExists(CancelFile)) do
   begin
-    if CancelRequested then
-      Exit;
+    if CancelRequested then Break;
+    pct := ReadLastPercent(LogFile);
+    if pct >= 0 then
+    begin
+      ProgressBar.Position := pct;
+      ProgressLabel.Caption := '正在解压资源文件，请稍候... ' + IntToStr(pct) + '%';
+    end;
     PumpMessages;
-    Sleep(100);
+    Sleep(150);
   end;
+
+  { 收尾：置满进度并短暂停留，让“100%”可见 }
+  ProgressBar.Position := 100;
+  ProgressLabel.Caption := '解压完成，正在收尾...';
+  PumpMessages;
+  Sleep(400);
+
+  HideExtractProgress;
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
@@ -120,7 +213,7 @@ var
   AppDir, CancelFile: string;
   ResultCode: Integer;
 begin
-  { 安装后阶段：等待后台 7z 解压完成再清理，避免完成页卡按钮 }
+  { 安装后阶段：真实解压进度，完成后清理，避免完成页“假完成” }
   if CurStep = ssPostInstall then
   begin
     AppDir := ExpandConstant('{app}');
