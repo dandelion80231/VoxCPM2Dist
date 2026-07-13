@@ -38,6 +38,8 @@ Source: "{#MyPayload}\app.7z"; DestDir: "{app}"; Flags: nocompression
 Source: "{#MyPayload}\7za.exe"; DestDir: "{app}"; Flags: nocompression
 Source: "{#MyPayload}\7za.dll"; DestDir: "{app}"; Flags: nocompression
 Source: "{#MyPayload}\7zxa.dll"; DestDir: "{app}"; Flags: nocompression
+; app.7z 未压缩总大小（字节），安装器据此计算实时解压进度（因 7za 日志在重定向下不实时）
+Source: "{#MyPayload}\app_7z_uncompressed_size.txt"; DestDir: "{app}"; Flags: nocompression
 ; 应用图标
 Source: "{#MyAssets}\VoxCPM_App.ico"; DestDir: "{app}"; Flags: nocompression
 
@@ -83,6 +85,7 @@ function PeekMessage(var Msg: TMyMsg; hWnd: HWND; wMsgFilterMin, wMsgFilterMax, 
 function TranslateMessage(const Msg: TMyMsg): BOOL; external 'TranslateMessage@user32.dll stdcall';
 function DispatchMessage(const Msg: TMyMsg): LongInt; external 'DispatchMessageA@user32.dll stdcall';
 procedure ExitProcess(uExitCode: UINT); external 'ExitProcess@kernel32.dll stdcall';
+function GetTickCount: DWORD; external 'GetTickCount@kernel32.dll stdcall';
 
 { 泵消息：让安装向导在等待期间仍能响应拖拽/最小化/取消 }
 procedure PumpMessages;
@@ -96,47 +99,58 @@ begin
   end;
 end;
 
-{ 从进度日志读取最新的百分比数字。
-  7za 的 -bsp1 进度输出用 \r 覆盖同一行，文件中不含 \n，
-  LoadStringsFromFile 按行读取不可靠，故用 LoadStringFromFile
-  读取整个文件为一个字符串，再从末尾向前找最后一个 '%'。 }
-function ReadLastPercent(const FilePath: string): Integer;
+{ 递归计算目录下所有文件总大小（字节）。不跟随符号链接，遇到失败项目则跳过。 }
+function GetFolderSize(const Dir: string): Int64;
 var
-  s: AnsiString;
-  numStr: string;
-  p, j: Integer;
+  FindRec: TFindRec;
+  Path: string;
+begin
+  Result := 0;
+  if FindFirst(Dir + '\*', FindRec) then
+  begin
+    repeat
+      if (FindRec.Name = '.') or (FindRec.Name = '..') then Continue;
+      Path := Dir + '\' + FindRec.Name;
+      if FindRec.Attributes and $00000010 <> 0 then
+        Result := Result + GetFolderSize(Path)
+      else
+        Result := Result + Int64(FindRec.SizeLow) + Int64(FindRec.SizeHigh) * 4294967296;
+    until not FindNext(FindRec);
+  end;
+end;
+
+{ 从构建时生成的 size 文件读取 app.7z 未压缩总大小；失败返回 -1。 }
+function ReadTotalBytes(const FilePath: string): Int64;
+var
+  Lines: TArrayOfString;
+  s: string;
 begin
   Result := -1;
-  if not LoadStringFromFile(FilePath, s) then Exit;
-  if s = '' then Exit;
-
-  { 从字符串末尾向前找到最后一个 '%' }
-  p := 0;
-  for j := Length(s) downto 1 do
+  if LoadStringsFromFile(FilePath, Lines) then
   begin
-    if s[j] = '%' then
+    if GetArrayLength(Lines) >= 1 then
     begin
-      p := j;
-      Break;
+      s := Trim(Lines[0]);
+      if s <> '' then
+      begin
+        try
+          Result := StrToInt64(s);
+        except
+          Result := -1;
+        end;
+      end;
     end;
   end;
+end;
 
-  if p > 1 then
-  begin
-    numStr := '';
-    j := p - 1;
-    { 先跳过 % 前面的空格 }
-    while (j >= 1) and (s[j] = ' ') do
-      j := j - 1;
-    { 取连续数字 }
-    while (j >= 1) and (s[j] >= '0') and (s[j] <= '9') do
-    begin
-      numStr := s[j] + numStr;
-      j := j - 1;
-    end;
-    if numStr <> '' then
-      Result := StrToIntDef(numStr, Result);
-  end;
+{ 获取单个文件大小；失败返回 -1。 }
+function GetFileSizeInt64(const Path: string): Int64;
+var
+  FindRec: TFindRec;
+begin
+  Result := -1;
+  if FindFirst(Path, FindRec) then
+    Result := Int64(FindRec.SizeLow) + Int64(FindRec.SizeHigh) * 4294967296;
 end;
 
 { 创建并显示真实的解压进度控件（嵌在安装向导内置进度条下方） }
@@ -200,12 +214,12 @@ begin
   end;
 end;
 
-{ 解压完成后清理归档、解压器、临时批处理与标记文件 }
+{ 解压完成后清理归档、解压器、临时标记文件与 size 文件 }
 procedure RunCleanup(AppDir: string);
 var
   ResultCode: Integer;
 begin
-  Exec('cmd.exe', '/c del /q "' + AppDir + '\app.7z" "' + AppDir + '\7za.exe" "' + AppDir + '\7za.dll" "' + AppDir + '\7zxa.dll" "' + AppDir + '\.extract_done" "' + AppDir + '\.extract_error" "' + AppDir + '\.extract_cancelled" "' + AppDir + '\_extract_.bat"',
+  Exec('cmd.exe', '/c del /q "' + AppDir + '\app.7z" "' + AppDir + '\7za.exe" "' + AppDir + '\7za.dll" "' + AppDir + '\7zxa.dll" "' + AppDir + '\app_7z_uncompressed_size.txt" "' + AppDir + '\.extract_done" "' + AppDir + '\.extract_error" "' + AppDir + '\.extract_cancelled" "' + AppDir + '\_extract_.bat"',
        AppDir, SW_HIDE, ewNoWait, ResultCode);
 end;
 
@@ -224,21 +238,23 @@ end;
 { 等待后台 7z 解压完成，其间更新真实解压进度；带看门狗，绝不无限等待 }
 procedure WaitForExtract(AppDir: string);
 var
-  DoneFile, CancelFile, ErrorFile, LogFile, BatchPath: string;
+  DoneFile, CancelFile, ErrorFile, BatchPath, SizeFile: string;
   BatchLines: TArrayOfString;
   ResultCode, pct, lastPct, ticks, lastProgressTick: Integer;
+  TotalBytes, InitialSize, CurrentSize, DoneBytes, App7zSize: Int64;
+  HasTotalBytes: Boolean;
+  startTick, elapsedSec, estTotalSec: Integer;
 begin
   DoneFile := AppDir + '\.extract_done';
   CancelFile := AppDir + '\.extract_cancelled';
   ErrorFile := AppDir + '\.extract_error';
-  LogFile := ExpandConstant('{tmp}') + '\extract_progress.log';
   BatchPath := AppDir + '\_extract_.bat';
+  SizeFile := AppDir + '\app_7z_uncompressed_size.txt';
 
-  { 清除可能残留的旧标记/日志，避免误判 }
+  { 清除可能残留的旧标记，避免误判 }
   if FileExists(DoneFile) then DeleteFile(DoneFile);
   if FileExists(CancelFile) then DeleteFile(CancelFile);
   if FileExists(ErrorFile) then DeleteFile(ErrorFile);
-  if FileExists(LogFile) then DeleteFile(LogFile);
 
   ShowExtractProgress;
 
@@ -246,11 +262,30 @@ begin
   WizardForm.CancelButton.Enabled := True;
   WizardForm.CancelButton.OnClick := @OnCancelClick;
 
-  { 生成临时批处理文件，避免 cmd.exe 参数转义问题，并把进度写入日志 }
+  { 记录初始目录大小（包含 app.7z/7za 等）。解压新增大小 = 当前目录大小 - 初始大小。 }
+  InitialSize := GetFolderSize(AppDir);
+
+  { 读取构建时预记录的 app.7z 未压缩总大小，作为真实进度的分母 }
+  TotalBytes := ReadTotalBytes(SizeFile);
+  HasTotalBytes := TotalBytes > 0;
+
+  { 没有 size 文件时，按 app.7z 压缩大小估算总时间（fallback，避免进度条完全不动） }
+  if not HasTotalBytes then
+  begin
+    App7zSize := GetFileSizeInt64(AppDir + '\app.7z');
+    if App7zSize > 0 then
+      estTotalSec := Trunc(App7zSize / (1024 * 1024 * 1024)) * 16  { 约 16 秒/GB（NVMe SSD 实测约 80s/4.9GB） }
+    else
+      estTotalSec := 120;
+    if estTotalSec < 60 then estTotalSec := 60;
+  end;
+
+  { 生成临时批处理文件，避免 cmd.exe 参数转义问题 }
   SetArrayLength(BatchLines, 5);
   BatchLines[0] := '@echo off';
   BatchLines[1] := 'setlocal enabledelayedexpansion';
-  BatchLines[2] := '"' + AppDir + '\7za.exe" x "' + AppDir + '\app.7z" -o"' + AppDir + '" -y -bsp1 -bso0 > "' + LogFile + '" 2>&1';
+  { 不再使用 -bsp1 日志：7za 在文件重定向下不会实时刷新进度，只保留 -bso0 避免控制台刷屏 }
+  BatchLines[2] := '"' + AppDir + '\7za.exe" x "' + AppDir + '\app.7z" -o"' + AppDir + '" -y -bso0';
   { 失败时把错误码写入 .extract_error，供安装器检测并明确报错（而非无限等待） }
   BatchLines[3] := 'if !errorlevel! neq 0 ( echo ERR!errorlevel! > "' + AppDir + '\.extract_error" & exit /b !errorlevel! )';
   BatchLines[4] := 'echo OK > "' + DoneFile + '"';
@@ -259,9 +294,12 @@ begin
   { 启动批处理进行异步解压（注意：7za 必须为 64 位，否则解压 >4GB 模型文件会卡死） }
   Exec('cmd.exe', '/c "' + BatchPath + '"', AppDir, SW_HIDE, ewNoWait, ResultCode);
 
-  lastPct := -1;
+  startTick := GetTickCount;
+  lastPct := 0;
   lastProgressTick := 0;
   ticks := 0;
+  pct := 0;
+
   while (not FileExists(DoneFile)) and (not FileExists(CancelFile)) and (not FileExists(ErrorFile)) do
   begin
     if CancelRequested then Break;
@@ -278,7 +316,8 @@ begin
       ExitProcess(1);
     end;
 
-    { 看门狗②：启动 30 秒宽限后，长时间无进度变化判定卡死 }
+    { 看门狗②：启动 30 秒宽限后，长时间无进度变化判定卡死。 }
+    { 注意：现在进度由目录大小驱动，若目录大小长时间不增加也会触发。 }
     if (ticks > 200) and (ticks - lastProgressTick > STALL_LIMIT) then
     begin
       ExtractLabel.Caption := '解压疑似卡死';
@@ -289,22 +328,40 @@ begin
       ExitProcess(1);
     end;
 
-    pct := ReadLastPercent(LogFile);
-    if pct >= 0 then
+    { 进度计算：优先按目录大小增量（真实解压进度）；否则按时间平滑推进 }
+    if HasTotalBytes then
     begin
-      if pct <> lastPct then
+      { 每 10 个 ticks（约 1.5 秒）计算一次目录大小，避免频繁遍历大量文件 }
+      if (ticks mod 10 = 0) or (ticks = 0) then
       begin
-        ExtractBar.Position := pct;
-        ExtractLabel.Caption := '正在解压资源文件，请稍候... ' + IntToStr(pct) + '%';
-        lastPct := pct;
-        lastProgressTick := ticks;
+        CurrentSize := GetFolderSize(AppDir);
+        DoneBytes := CurrentSize - InitialSize;
+        if DoneBytes < 0 then DoneBytes := 0;
+        if TotalBytes > 0 then
+          pct := Trunc(DoneBytes * 100 / TotalBytes)
+        else
+          pct := 0;
+        if pct < 0 then pct := 0;
+        if pct > 95 then pct := 95;
       end;
     end
     else
     begin
-      { 尚未读到百分比时，显示启动中，避免用户误以为卡死 }
-      if ticks mod 20 = 0 then
-        ExtractLabel.Caption := '正在解压资源文件，请稍候...';
+      elapsedSec := (GetTickCount - startTick) div 1000;
+      if elapsedSec < 0 then elapsedSec := 0;
+      pct := Trunc(elapsedSec * 100 / estTotalSec);
+      if pct > 95 then pct := 95;
+    end;
+
+    if pct < 0 then pct := 0;
+    if pct > 100 then pct := 100;
+
+    if pct <> lastPct then
+    begin
+      ExtractBar.Position := pct;
+      ExtractLabel.Caption := '正在解压资源文件，请稍候... ' + IntToStr(pct) + '%';
+      lastPct := pct;
+      lastProgressTick := ticks;
     end;
 
     { 保持上方文件提取完成状态始终可见 }

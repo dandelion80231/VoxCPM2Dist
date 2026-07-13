@@ -162,6 +162,15 @@ if ($logTail) { Write-Host "--- 7z 日志尾部 ---`n$($logTail -join "`n")" }
 $sizeGB = [math]::Round((Get-Item $app7z).Length / 1GB, 2)
 Write-Host "[3/4] app.7z 完成: $sizeGB GB"
 
+# 生成 app.7z 未压缩总大小文件，供安装器按目录大小计算真实解压进度
+$sizeList = & $sevenZip l $app7z
+$summaryLine = $sizeList | Where-Object { $_ -match 'files,\s*\d+\s*folders' } | Select-Object -Last 1
+$sizeParts = $summaryLine -split '\s+'
+$uncompressedBytes = [int64]$sizeParts[2]
+$sizeTxt = Join-Path $payload 'app_7z_uncompressed_size.txt'
+Set-Content -Path $sizeTxt -Value $uncompressedBytes.ToString() -Encoding UTF8
+Write-Host "[3/4] app.7z 未压缩大小: $uncompressedBytes bytes ($([math]::Round($uncompressedBytes/1GB,2)) GB)"
+
 # ── 4. 编译安装包 ──
 $iscc = 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe'
 if (-not (Test-Path $iscc)) { $iscc = 'C:\Program Files\Inno Setup 6\ISCC.exe' }

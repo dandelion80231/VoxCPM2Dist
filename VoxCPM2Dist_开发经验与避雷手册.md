@@ -2,7 +2,7 @@
 
 > 版本：v5.2（离线 TTS 分发版；安装包文件名 VoxCPM2_TTS_v5.2_Setup）
 > 适用范围：基于 OpenBMB VoxCPM2 的中文 TTS 离线发行包（Windows x64 + NVIDIA CUDA，可 CPU 回退）
-> 整理日期：2026-07-12（更新：2026-07-13 补充 Banner 对齐坑、安装包选项、Releases 整理、计划任务重打包；2026-07-14 补 64 位 7za 致命坑 §3.6）
+> 整理日期：2026-07-12（更新：2026-07-13 补充 Banner 对齐坑、安装包选项、Releases 整理、计划任务重打包；2026-07-14 补 64 位 7za 致命坑 §3.6、进度条真实进度 §3.7）
 > 目的：把本次开发踩过的坑、验证过的治本方案、以及用户明确约定的工作流固化下来，便于日后复用。
 
 ---
@@ -114,6 +114,17 @@ VoxCPM2Dist/
 - **回归防护（关键）**：`build_installer.ps1` 改为**强制 x64**——下载解包优先 `x64\7za.exe`、校验 PE 位数（读 PE 头 `Machine`：`0x8664`=x64、`0x14C`=x86）、复制 `7za.exe`+`7za.dll`+`7zxa.dll`。**切勿把 payload/7za.exe 换回 32 位**——即使某机器只有 32 位 7-Zip，也要用 7-Zip Extra 的 `x64\7za.exe`。
 - **验证**：x64 7za 在本机 NVMe 上完整解压 9.3GB 归档约 **80 秒、exit 0**；已用 `output\VoxCPM2_TTS_v5.2_Setup.exe` `/VERYSILENT` 静默安装到测试目录实测通过（model.safetensors 完整、清理正常）。
 
+### 3.7 进度条无中间过程：改目录大小估算真实进度（2026-07-14）
+
+- **现象**：把 32 位 7za 卡死修掉（§3.6）后，解压能正常完成（约 80 秒），但下方自定义进度条仍是 **0% → 100% 瞬跳、没有中间过程**（用户截图反馈）。
+- **根因（决定性实证）**：原进度来自读 7za `-bsp1 -bso0` 的进度日志。实测 7za 在 `> log 2>&1` 重定向下**不会实时刷新进度**，只在开始输出一次 `0%`、最后输出一次 `96%/100%`，中间百分比被 stdout 缓冲吞掉（300MB 文件日志仅 66 字节，内容为 `0%` 与 `96%` 两行）。所以轮询日志只能看到 0→100，天然无法呈现中间过程。
+- **治本（已验证可行）**：放弃读日志，改为**目录大小估算法**——
+  - 构建时 `build_installer.ps1` 用 `7za l payload\app.7z` 抓汇总行（`未压缩大小 压缩大小 files folders`），取未压缩总字节数写入 `payload\app_7z_uncompressed_size.txt`（当前值 `10003650888` ≈ 9.32GB），随包进 `{app}`。
+  - 安装时 `WaitForExtract` 在启动 7za 前记 `InitialSize = GetFolderSize({app})`；每 ~1.5s 重算 `CurrentSize`，`DoneBytes = CurrentSize - InitialSize`，`pct = DoneBytes*100/TotalBytes`（clamp ≤95，收尾置 100）。`GetFolderSize` 用 `TFindRec` 递归，`文件大小 = Int64(SizeLow) + Int64(SizeHigh)*4294967296`（避开 `shl`/`or` 的 Int64/DWORD 类型坑）。
+  - 无 size 文件时，按 `app.7z` 压缩大小估算 `约 16 秒/GB`（下限 60s）做时间线性推进兜底，保证条至少会动。
+  - 7za 命令写入临时 `_extract_.bat` 再 `Exec` 执行（避免 `cmd.exe` 长命令行转义），批处理只保留 `-bso0`（不刷屏，进度不再依赖日志）。
+- **验证**：`/VERYSILENT` 静默安装到测试目录，外部每 5s 采样 `{app}` 目录大小换算百分比，曲线为 `0% → 49% → 50% → 53% → 56% → 57% → 98% → 100%`，平滑无瞬跳；安装器 EXIT=0，最终提取目录 9.32GB 与 size 文件一致。下方进度条已呈现真实中间过程。
+
 ---
 
 ## 4. 依赖与环境
@@ -223,7 +234,7 @@ Start-ScheduledTask -TaskName "VoxCPM2_Build"
 
 ## 8. 已知事项 / 待办
 - 安装包物理产物（zip/output/payload）按约定不进版本库，仍在本地，需用户上传网盘覆盖旧分发（链接不变）。
-- v5.2 已修复安装器 64 位 7za 卡死（见 §3.6）；`output/VoxCPM2_TTS_v5.2_Setup.zip` 已是含修复的构建产物，需重新上传网盘覆盖旧分发（链接不变）。
+- v5.2 已修复：① 安装器 64 位 7za 卡死（§3.6）；② 解压进度条无中间过程（改为目录大小估算真实进度，§3.7）。`output/VoxCPM2_TTS_v5.2_Setup.zip` 已是含修复的构建产物，需重新上传网盘覆盖旧分发（链接不变）。
 - Python 3.13 兼容性未验证；如需追新版本，须重建 `python_cuda` + 重新打包 9.4GB，收益低。
 - ima 知识库 MCP 在本会话仅暴露读/搜索工具，无写入接口；本手册为 Markdown，可手动导入 ima 新建分组。
 - 旧版安装包从 `output/VoxCPM2_TTS_v5.2_Setup.zip` 解压即可找回（`output/` 会随重建自动生成）。
