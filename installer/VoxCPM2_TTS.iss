@@ -171,6 +171,18 @@ begin
        AppDir, SW_HIDE, ewNoWait, ResultCode);
 end;
 
+{ 取消按钮点击：终止后台 7z，写取消标记，让等待循环退出后再清理退出 }
+procedure OnCancelClick(Sender: TObject);
+var
+  AppDir: string;
+  ResultCode: Integer;
+begin
+  AppDir := ExpandConstant('{app}');
+  Exec('taskkill.exe', '/f /im 7za.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Exec('cmd.exe', '/c echo CANCELLED > "' + AppDir + '\.extract_cancelled"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  CancelRequested := True;
+end;
+
 { 等待后台 7z 解压完成，其间更新真实解压进度 }
 procedure WaitForExtract(AppDir: string);
 var
@@ -183,8 +195,9 @@ begin
 
   ShowExtractProgress;
 
-  { ssPostInstall 期间默认禁用取消按钮，这里强制启用 }
+  { ssPostInstall 期间默认禁用取消按钮，这里强制启用并挂上回调 }
   WizardForm.CancelButton.Enabled := True;
+  WizardForm.CancelButton.OnClick := @OnCancelClick;
 
   { 启动 7za 异步解压：进度(-bsp1)与日志分离(-bso0)，进度写入日志；完成后写 .extract_done }
   Exec('cmd.exe', '/c ""' + AppDir + '\7za.exe"" x ""' + AppDir + '\app.7z"" -o""' + AppDir + '"" -y -bsp1 -bso0 > ""' + LogFile + '"" 2>&1 && echo OK > ""' + DoneFile + '""',
@@ -247,18 +260,4 @@ begin
     if FileExists(AppDir + '\.extract_done') then
       RunCleanup(AppDir);
   end;
-end;
-
-{ 取消按钮：终止后台 7z，写取消标记，让安装退出 }
-procedure CancelButtonClick(CurPageID: Integer; var Cancel, Confirm: Boolean);
-var
-  AppDir: string;
-  ResultCode: Integer;
-begin
-  Cancel := True;
-  Confirm := False; { 不显示确认对话框，点击取消直接退出 }
-  AppDir := ExpandConstant('{app}');
-  Exec('taskkill.exe', '/f /im 7za.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-  Exec('cmd.exe', '/c echo CANCELLED > "' + AppDir + '\.extract_cancelled"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-  CancelRequested := True;
 end;
