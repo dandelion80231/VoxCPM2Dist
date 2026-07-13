@@ -88,11 +88,11 @@ begin
   end;
 end;
 
-{ 从进度日志读取最后一个百分比数字（-1 表示尚未出现） }
+{ 从进度日志读取最新的百分比数字（7za 用 \r 覆盖同一行，所以取行内最后一个 % 前的数字） }
 function ReadLastPercent(const FilePath: string): Integer;
 var
   Lines: TArrayOfString;
-  i, cnt, start, p: Integer;
+  i, cnt, start, p, j: Integer;
   s, numStr: string;
 begin
   Result := -1;
@@ -103,14 +103,28 @@ begin
   for i := start to cnt - 1 do
   begin
     s := Lines[i];
-    p := Pos('%', s);
-    if p > 0 then
+    { 从行尾向前找到最后一个 '%'，避免 7za 的 \r 覆盖行导致永远只读到 0% }
+    p := 0;
+    for j := Length(s) downto 1 do
+    begin
+      if s[j] = '%' then
+      begin
+        p := j;
+        Break;
+      end;
+    end;
+    if p > 1 then
     begin
       numStr := '';
-      while (p > 1) and (s[p-1] >= '0') and (s[p-1] <= '9') do
+      j := p - 1;
+      { 先跳过 % 前面的空格 }
+      while (j >= 1) and (s[j] = ' ') do
+        j := j - 1;
+      { 取连续数字 }
+      while (j >= 1) and (s[j] >= '0') and (s[j] <= '9') do
       begin
-        numStr := s[p-1] + numStr;
-        p := p - 1;
+        numStr := s[j] + numStr;
+        j := j - 1;
       end;
       if numStr <> '' then
         Result := StrToIntDef(numStr, Result);
@@ -128,6 +142,18 @@ begin
   labelTop := gauge.Top + gauge.Height + ScaleY(24);
   barTop := labelTop + ScaleY(20);
 
+  { 保持上面“正在安装”标题与描述文字始终可见 }
+  if WizardForm.PageNameLabel <> nil then
+  begin
+    WizardForm.PageNameLabel.Caption := '正在安装';
+    WizardForm.PageNameLabel.Visible := True;
+  end;
+  if WizardForm.PageDescriptionLabel <> nil then
+  begin
+    WizardForm.PageDescriptionLabel.Caption := '安装程序正在安装 VoxCPM2 TTS 中文版到您的计算机，请稍候。';
+    WizardForm.PageDescriptionLabel.Visible := True;
+  end;
+
   ExtractLabel := TLabel.Create(WizardForm);
   ExtractLabel.Parent := WizardForm.ProgressGauge.Parent;
   ExtractLabel.Left := gauge.Left;
@@ -144,7 +170,7 @@ begin
   ExtractBar.Height := gauge.Height;
   ExtractBar.Min := 0;
   ExtractBar.Max := 100;
-  ExtractBar.Position := 0;
+  ExtractBar.Position := 1; { 初始显示一点，避免被误认为未启动 }
   ExtractBar.Visible := True;
 end;
 
