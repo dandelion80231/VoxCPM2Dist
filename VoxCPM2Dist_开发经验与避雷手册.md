@@ -1,6 +1,6 @@
 # VoxCPM2Dist 离线发行版 · 开发经验与避雷手册
 
-> 版本：v5.0.2（离线 TTS 分发版）
+> 版本：v5.1（离线 TTS 分发版）
 > 适用范围：基于 OpenBMB VoxCPM2 的中文 TTS 离线发行包（Windows x64 + NVIDIA CUDA，可 CPU 回退）
 > 整理日期：2026-07-12
 > 目的：把本次开发踩过的坑、验证过的治本方案、以及用户明确约定的工作流固化下来，便于日后复用。
@@ -21,7 +21,7 @@ VoxCPM2Dist/
 ├── payload/                     # 构建工作目录（app.7z + 7za.exe），保留以便原地重打
 ├── output/                      # 构建产物：Setup.exe + 3×.bin 分卷（每次重建覆盖）
 ├── README.md / requirements.txt / .gitignore
-└── VoxCPM2_TTS_v5.0.2_Setup.zip # 分发包（网盘用，被 .gitignore 排除）
+└── VoxCPM2_TTS_v5.1_Setup.zip # 分发包（网盘用，被 .gitignore 排除）
 ```
 
 **三条入口，归一化必须一致**：
@@ -98,7 +98,7 @@ VoxCPM2Dist/
 ## 4. 依赖与环境
 
 ### 4.1 requirements.txt 必须与实际环境一致
-- 头里版本注释曾过期（`v4.0` → 已改 `v5.0.2`）。
+- 头里版本注释曾过期（`v4.0` → 已改 `v5.1`）。
 - 逐条比对 `requirements.txt` 的 33 项直接依赖 与 `app/python_cuda/Lib/site-packages` 实际安装：OK=33 / DIFF=0 / MISS=0，**完全一致**。
 - ⚠️ 依赖清单口径坑：README 曾写"共 82 个包"但实列 91、且漏列 10 个（Web UI 栈 fastapi/starlette/uvicorn/jinja2/python-multipart/tzdata + 离线降噪 addict/Pillow/simplejson/sortedcontainers）。**真实第三方依赖数 = 101**（= site-packages 的 102 个 dist-info − pip 安装器本身）。已按实测重生成完整 101 个写进 README。
 
@@ -117,7 +117,7 @@ VoxCPM2Dist/
 
 - **必须保留提交历史**：每次修改用普通 `git commit` + `git push`，**禁止** `git push -f` / `git commit --amend` 改写历史。
 - **版本用 Git Tag 标记**：重要节点打 annotated tag（`git tag -a vX.Y.Z -m "..."` 并 `git push origin vX.Y.Z`），让 GitHub Releases 有可追溯版本。
-- **连续小调整可继续在同一版本内**（如本次 v5.0.2 一系列修正都没新建 tag、没改版本号）。
+- **连续小调整可继续在同一版本内**（如本次 v5.1 一系列修正都没新建 tag、没改版本号）。
 - ⚠️ **提交用显式 add 具体文件，绝不 `git add -A`**：曾误把 `build_7z.log` 带进库，靠 `git rm --cached` + `.gitignore` 修复。构建日志 `*.log`、分发 zip `VoxCPM2_TTS_v*.zip` 应提前写进 `.gitignore`。
 
 ### 国内直连 GitHub 推送（必读）
@@ -135,7 +135,7 @@ VoxCPM2Dist/
 ## 6. 分发与文件系统
 
 - **9.4GB 二进制载荷（环境+权重）不进 git**，走网盘（阿里云盘分发链接已在 README）；`.gitignore` 排除 `VoxCPM2_TTS_v*.zip`。
-- **根目录 `VoxCPM2_TTS_v5.0.2_Setup.zip` 是自包含完整归档**（内含 output/ 的 exe + 3×.bin），找回旧版只需下载解压该 zip；`output/` 松散分卷是同字节冗余，可删（每次重建会重新生成）。
+- **根目录 `VoxCPM2_TTS_v5.1_Setup.zip` 是自包含完整归档**（内含 output/ 的 exe + 3×.bin），找回旧版只需下载解压该 zip；`output/` 松散分卷是同字节冗余，可删（每次重建会重新生成）。
 - **桌面快捷方式/卸载图标**经 .iss 的 `IconFilename`/`UninstallDisplayIcon` 指向 `installer/assets/VoxCPM_App.ico`。
 - **清理原则**：诊断日志（7z_*.log / build_7z.log）、`__pycache__/` 是垃圾可删；`build/VoxCPM_TTS.spec`（PyInstaller 备用打包模板，README/vox_web_ui.py 引用）**有意保留**，非垃圾。
 - 构建前体检：全文搜 `C:\`/`D:\`/本机用户名/项目绝对路径；配置 JSON 不带机器专属值；默认路径用 `Path.home()` 或相对 `__file__` 派生的安装目录。
@@ -154,7 +154,7 @@ VoxCPM2Dist/
 Start-Process "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" -ArgumentList "D:\AI\Build\VoxCPM2Dist\installer\VoxCPM2_TTS.iss"
 
 # 重打根目录分发 zip（纯打包，最快）
-& "C:\Program Files\7-Zip\7z.exe" a -tzip -mx=1 VoxCPM2_TTS_v5.0.2_Setup.zip output\VoxCPM2_TTS_v5.0.2_Setup.exe output\*.bin
+& "C:\Program Files\7-Zip\7z.exe" a -tzip -mx=1 VoxCPM2_TTS_v5.1_Setup.zip output\VoxCPM2_TTS_v5.1_Setup.exe output\*.bin
 
 # 验证归档完整
 & "C:\Program Files\7-Zip\7z.exe" t payload\app.7z
@@ -172,4 +172,4 @@ git push -u origin main --follow-tags
 
 ---
 
-*整理自 v5.0.2 全周期开发记录（自播种统一、Web UI 修复、7z 打包崩溃治本、依赖核对、Python 版本说明等）。*
+*整理自 v5.1 全周期开发记录（自播种统一、Web UI 修复、7z 打包崩溃治本、依赖核对、Python 版本说明等）。*

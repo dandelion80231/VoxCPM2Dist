@@ -1,6 +1,6 @@
-﻿# VoxCPM2 TTS 启动器 v5.0 中文版
+﻿# VoxCPM2 TTS 启动器 v5.1 中文版
 #
-# [v5.0 改进]
+# [v5.1 改进]
 #   - 方式1/2：预生成多语调参考音频（cfg 3.0 / steps 20）
 #   - 音色几乎无漂移（与用户验证方法一致）
 #   - 默认 80ms 交叉淡入淡出
@@ -47,19 +47,19 @@ function Resolve-Voice {
 
 function Show-Banner {
     Clear-Host
-    Write-Host "                                          " -ForegroundColor Cyan
-    Write-Host " V   V  OOO  X   X  CCC  PPPP  M   M  222  " -ForegroundColor Cyan
-    Write-Host " V   V O   O  X X  C   C P   P MM MM 2   2 " -ForegroundColor Cyan
-    Write-Host " V   V O   O   X   C     PPPP  M M M   22  " -ForegroundColor Cyan
-    Write-Host "  V V  O   O  X X  C   C P     M   M  2    " -ForegroundColor Cyan
-    Write-Host "   V    OOO  X   X  CCC  P     M   M 22222 " -ForegroundColor Cyan
-    Write-Host "+==========================================+" -ForegroundColor Cyan
-    Write-Host "|                                          |" -ForegroundColor Cyan
-    Write-Host "|   VoxCPM2 语音合成工具 v5.0.2 音色统一版   |" -ForegroundColor Cyan
-    Write-Host "|                                          |" -ForegroundColor Cyan
-    Write-Host "|   长文本配音 / 音色一致 / 交叉淡入淡出   |" -ForegroundColor Cyan
-    Write-Host "|                                          |" -ForegroundColor Cyan
-    Write-Host "+==========================================+" -ForegroundColor Cyan
+    Write-Host "                                                            " -ForegroundColor Cyan
+    Write-Host "V   V     OOO     X   X     CCC     PPPP     M   M     222  " -ForegroundColor Cyan
+    Write-Host "V   V    O   O     X X     C   C    P   P    MM MM    2   2 " -ForegroundColor Cyan
+    Write-Host "V   V    O   O      X      C        PPPP     M M M      22  " -ForegroundColor Cyan
+    Write-Host " V V     O   O     X X     C   C    P        M   M      2   " -ForegroundColor Cyan
+    Write-Host "  V       OOO     X   X     CCC     P        M   M    22222 " -ForegroundColor Cyan
+    Write-Host "+============================================================+" -ForegroundColor Cyan
+    Write-Host "|                                                            |" -ForegroundColor Cyan
+    Write-Host "|           VoxCPM2 语音合成工具 v5.1 音色统一版           |" -ForegroundColor Cyan
+    Write-Host "|                                                            |" -ForegroundColor Cyan
+    Write-Host "|            长文本配音 / 音色一致 / 交叉淡入淡出            |" -ForegroundColor Cyan
+    Write-Host "|                                                            |" -ForegroundColor Cyan
+    Write-Host "+============================================================+" -ForegroundColor Cyan
 }
 function Show-Menu {
     Show-Banner

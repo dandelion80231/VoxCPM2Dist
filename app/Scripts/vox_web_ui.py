@@ -1,5 +1,5 @@
 ﻿"""
-VoxCPM2 Web UI — v5.0 一体化界面
+VoxCPM2 Web UI — v5.1 一体化界面
 ================================
 本地 Web 服务器 + 浏览器 UI，无需安装任何依赖（除了 voxcpm 自带的）。
 启动后自动打开浏览器，访问 http://localhost:18978（端口被占用时自动顺延）
@@ -816,6 +816,47 @@ HTML_CONTENT = r"""
     flex-direction: column;
   }
 
+  /* 自定义背景时：所有承载文字的区域加半透明毛玻璃层，保证深色背景也清晰可读 */
+  body.custom-bg-active .content,
+  body.custom-bg-active .sidebar,
+  body.custom-bg-active header {
+    background: var(--surface);
+    backdrop-filter: blur(18px) saturate(160%);
+  }
+  body.custom-bg-active .param-card,
+  body.custom-bg-active .text-card,
+  body.custom-bg-active .control-card,
+  body.custom-bg-active .ref-card,
+  body.custom-bg-active .history-card,
+  body.custom-bg-active .progress-card,
+  body.custom-bg-active .env-card,
+  body.custom-bg-active .custom-voice-box,
+  body.custom-bg-active .ref-preview,
+  body.custom-bg-active .modal {
+    background: var(--surface2);
+    border-color: var(--border);
+  }
+  body.custom-bg-active .voice-btn:hover,
+  body.custom-bg-active .mode-btn:hover,
+  body.custom-bg-active .example-chip:hover,
+  body.custom-bg-active .history-action-btn:hover,
+  body.custom-bg-active .history-item:hover,
+  body.custom-bg-active .upload-area:hover {
+    background: rgba(108,142,255,0.12);
+  }
+  body.custom-bg-active textarea,
+  body.custom-bg-active .path-input,
+  body.custom-bg-active .prompt-text-input,
+  body.custom-bg-active .env-select,
+  body.custom-bg-active .cv-name {
+    background: var(--bg);
+    color: var(--text);
+  }
+  body.custom-bg-active .voice-btn.active,
+  body.custom-bg-active .mode-btn.active {
+    background: rgba(108,142,255,0.22);
+  }
+
   /* ── 顶栏 ── */
   header {
     background: var(--surface);
@@ -1359,11 +1400,15 @@ HTML_CONTENT = r"""
   }
   .modal {
     width: 540px; max-width: 92vw;
+    max-height: 90vh;
+    overflow-y: auto;
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: 14px;
     padding: 20px;
     box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+    position: relative;
+    z-index: 1;
   }
   .modal-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
   .modal-head h3 { font-size: 15px; }
@@ -1399,6 +1444,19 @@ HTML_CONTENT = r"""
   .env-item .v { color: var(--text); font-weight: 600; }
   .env-item .v.good { color: var(--green); }
   .env-item .v.bad { color: var(--red); }
+  .env-path {
+    flex: 1 1 0;
+    min-width: 0;
+    max-width: 240px;
+  }
+  .env-path .v {
+    flex: 1 1 auto;
+    min-width: 0;
+    max-width: none;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
   .env-dev-btns { display: flex; gap: 3px; }
   .env-dev-btns button {
     padding: 3px 8px; border-radius: 4px;
@@ -1446,7 +1504,7 @@ HTML_CONTENT = r"""
   <button class="console-toggle" id="consoleToggle" onclick="toggleConsole()" title="显示/隐藏命令行窗口">🖥️</button>
   <div class="header-left">
     <div class="logo">Vox<span>CPM2</span></div>
-    <div style="font-size:13px;color:var(--text2);">语音合成工具 v5.0</div>
+    <div style="font-size:13px;color:var(--text2);">语音合成工具 5.1</div>
   </div>
   <div class="header-sample-rate">
     <span class="k">采样率</span>
@@ -1469,9 +1527,9 @@ HTML_CONTENT = r"""
         <option value="load">加载模型</option>
       </select>
     </div>
-    <div class="env-item"><span class="k">模型目录</span><span class="v" id="envModelDir" style="max-width:220px;overflow:hidden;text-overflow:ellipsis;">-</span></div>
-    <div class="env-item"><span class="k">输出目录</span><span class="v" id="envOutDir" style="max-width:180px;overflow:hidden;text-overflow:ellipsis;">-</span></div>
-    <div class="env-item"><span class="k">音频保存于</span><span class="v" id="envOutSub" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;">-</span></div>
+    <div class="env-item env-path"><span class="k">模型目录</span><span class="v" id="envModelDir">-</span></div>
+    <div class="env-item env-path"><span class="k">输出目录</span><span class="v" id="envOutDir">-</span></div>
+    <div class="env-item env-path"><span class="k">音频保存于</span><span class="v" id="envOutSub">-</span></div>
   </div>
   <div class="header-right">
     <div class="theme-switch" id="themeSwitch">
@@ -2191,14 +2249,18 @@ function applyTheme(theme, customBg) {
     const c = hexToRgb(customBg);
     const lum = (0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b) / 255;
     const dark = lum < 0.5;
-    root.style.setProperty('--text', dark ? '#e8eaf0' : '#1a1f2b');
-    root.style.setProperty('--text2', dark ? '#8892a8' : '#5b6678');
-    root.style.setProperty('--surface', mix(c, dark ? 255 : 0, 0.08));
-    root.style.setProperty('--surface2', mix(c, dark ? 255 : 0, 0.14));
-    root.style.setProperty('--border', mix(c, dark ? 255 : 0, 0.22));
+    // A 方案：文字颜色自动反色
+    root.style.setProperty('--text', dark ? '#ffffff' : '#1a1f2b');
+    root.style.setProperty('--text2', dark ? '#c0c6d0' : '#5b6678');
+    // B 方案：半透明叠加层，与背景拉开层次（保持背景色可见但文字清晰）
+    root.style.setProperty('--surface', dark ? 'rgba(0,0,0,0.32)' : 'rgba(255,255,255,0.78)');
+    root.style.setProperty('--surface2', dark ? 'rgba(0,0,0,0.45)' : 'rgba(255,255,255,0.88)');
+    root.style.setProperty('--border', dark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.12)');
+    document.body.classList.add('custom-bg-active');
   } else {
     root.setAttribute('data-theme', theme);
     ['--bg','--surface','--surface2','--border','--text','--text2'].forEach(v => root.style.removeProperty(v));
+    document.body.classList.remove('custom-bg-active');
   }
   document.querySelectorAll('#themeSwitch button[data-theme]').forEach(b => {
     b.classList.toggle('active', b.dataset.theme === theme);
@@ -2635,11 +2697,14 @@ if HAS_WEB:
 
         Ole32 = ctypes.OleDLL("ole32")
         Shell32 = ctypes.windll.shell32
+        User32 = ctypes.windll.user32
         Ole32.CoInitialize(None)
         try:
             bi = BROWSEINFO()
             display_name = ctypes.create_unicode_buffer(260)
-            bi.hwndOwner = 0
+            # 以当前前台窗口作为父窗口，避免文件夹选择对话框被全屏浏览器压在底部
+            owner = User32.GetForegroundWindow()
+            bi.hwndOwner = owner
             bi.pidlRoot = None
             bi.pszDisplayName = ctypes.cast(ctypes.addressof(display_name), wintypes.LPWSTR)
             bi.lpszTitle = title
@@ -2647,6 +2712,9 @@ if HAS_WEB:
             bi.lpfn = None
             bi.lParam = 0
             bi.iImage = 0
+            # 弹出前强制父窗口置前，进一步保证选择框位于最顶层
+            if owner:
+                User32.SetForegroundWindow(owner)
             pidl = Shell32.SHBrowseForFolderW(ctypes.byref(bi))
             if not pidl:
                 return None
