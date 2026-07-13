@@ -26,6 +26,9 @@ DiskSliceSize=2000000000
 [Languages]
 Name: "chinesesimplified"; MessagesFile: "ChineseSimplified.isl"
 
+[Tasks]
+Name: "desktopicon"; Description: "创建桌面快捷方式(&D)"; GroupDescription: "附加任务:"
+
 [Files]
 ; 预压缩的 app 归档（7z 多线程解压，比 InnoSetup 原生 LZMA 快 2-3x）
 Source: "{#MyPayload}\app.7z"; DestDir: "{app}"; Flags: nocompression
@@ -40,14 +43,16 @@ Source: "{#MyAssets}\VoxCPM_App.ico"; DestDir: "{app}"; Flags: nocompression
 ; 既保留双击图标体验，又无需重新冻结，且天然包含新增的降噪依赖与模型。
 Name: "{group}\{#MyAppName} - 交互菜单"; Filename: "{app}\Scripts\Launch_TTS_Menu.bat"; IconFilename: "{app}\VoxCPM_App.ico"; Comment: "交互式菜单界面（控制台）"
 Name: "{group}\{#MyAppName} - 网页界面"; Filename: "{app}\start_web_ui.bat"; IconFilename: "{app}\VoxCPM_App.ico"; Comment: "浏览器图形界面"
-Name: "{autodesktop}\{#MyAppName} - 交互菜单"; Filename: "{app}\Scripts\Launch_TTS_Menu.bat"; IconFilename: "{app}\VoxCPM_App.ico"
-Name: "{autodesktop}\{#MyAppName} - 网页界面"; Filename: "{app}\start_web_ui.bat"; IconFilename: "{app}\VoxCPM_App.ico"
+Name: "{autodesktop}\{#MyAppName} - 交互菜单"; Filename: "{app}\Scripts\Launch_TTS_Menu.bat"; IconFilename: "{app}\VoxCPM_App.ico"; Tasks: desktopicon
+Name: "{autodesktop}\{#MyAppName} - 网页界面"; Filename: "{app}\start_web_ui.bat"; IconFilename: "{app}\VoxCPM_App.ico"; Tasks: desktopicon
 
 [Run]
 ; 安装后解压 app.7z 到 {app}（7z 多线程解压，速度快）
 Filename: "{app}\7za.exe"; Parameters: "x ""{app}\app.7z"" -o""{app}"" -y"; WorkingDir: "{app}"; Flags: runhidden waituntilterminated
 ; 清理归档与解压器
 Filename: "cmd.exe"; Parameters: "/c del /q ""{app}\app.7z"" ""{app}\7za.exe"""; Flags: runhidden
+; 安装完成页"立即运行"复选框（默认勾选），以当前用户启动交互菜单
+Filename: "cmd.exe"; Parameters: "/c ""{app}\Scripts\Launch_TTS_Menu.bat"""; Description: "启动 VoxCPM2 TTS 交互菜单"; WorkingDir: "{app}"; Flags: nowait postinstall runascurrentuser skipifsilent
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}"
