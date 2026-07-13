@@ -51,6 +51,8 @@ Name: "{autodesktop}\{#MyAppName} - 网页界面"; Filename: "{app}\start_web_ui
 Filename: "cmd.exe"; Parameters: "/c ""{app}\7za.exe"" x ""{app}\app.7z"" -o""{app}"" -y && echo OK > ""{app}\.extract_done"""; WorkingDir: "{app}"; Flags: runhidden nowait
 ; 安装完成页"立即运行"复选框（默认勾选），以当前用户启动网页界面
 Filename: "cmd.exe"; Parameters: "/c ""{app}\start_web_ui.bat"""; Description: "启动 VoxCPM2 TTS 网页界面"; WorkingDir: "{app}"; Flags: nowait postinstall runascurrentuser skipifsilent
+; 安装完成页可选启动交互菜单（默认不勾选）
+Filename: "cmd.exe"; Parameters: "/c ""{app}\Scripts\Launch_TTS_Menu.bat"""; Description: "启动 VoxCPM2 TTS 交互菜单"; WorkingDir: "{app}"; Flags: nowait postinstall runascurrentuser skipifsilent unchecked
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}"
