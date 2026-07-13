@@ -58,6 +58,9 @@ Filename: "cmd.exe"; Parameters: "/c ""{app}\Scripts\Launch_TTS_Menu.bat"""; Des
 Type: filesandordirs; Name: "{app}"
 
 [Code]
+var
+  CancelRequested: Boolean;
+
 type
   TMyMsg = record
     hwnd: HWND;
@@ -71,8 +74,9 @@ type
 function PeekMessage(var Msg: TMyMsg; hWnd: HWND; wMsgFilterMin, wMsgFilterMax, wRemoveMsg: UINT): BOOL; external 'PeekMessageA@user32.dll stdcall';
 function TranslateMessage(const Msg: TMyMsg): BOOL; external 'TranslateMessage@user32.dll stdcall';
 function DispatchMessage(const Msg: TMyMsg): LongInt; external 'DispatchMessageA@user32.dll stdcall';
+procedure ExitProcess(uExitCode: UINT); external 'ExitProcess@kernel32.dll stdcall';
 
-{ 泵消息：让安装向导在等待期间仍能响应拖拽/最小化 }
+{ 泵消息：让安装向导在等待期间仍能响应拖拽/最小化/取消 }
 procedure PumpMessages;
 var
   Msg: TMyMsg;
@@ -89,18 +93,23 @@ procedure RunCleanup(AppDir: string);
 var
   ResultCode: Integer;
 begin
-  Exec('cmd.exe', '/c del /q "' + AppDir + '\app.7z" "' + AppDir + '\7za.exe" "' + AppDir + '\.extract_done"',
+  Exec('cmd.exe', '/c del /q "' + AppDir + '\app.7z" "' + AppDir + '\7za.exe" "' + AppDir + '\.extract_done" "' + AppDir + '\.extract_cancelled"',
        AppDir, SW_HIDE, ewNoWait, ResultCode);
 end;
 
-{ 等待解压完成标记（带消息泵，让进度页面仍可拖动/最小化） }
+{ 等待解压完成标记（带消息泵，让进度页面仍可拖动/最小化/取消） }
 procedure WaitForExtract(AppDir: string);
 var
-  DoneFile: string;
+  DoneFile, CancelFile: string;
 begin
   DoneFile := AppDir + '\.extract_done';
-  while not FileExists(DoneFile) do
+  CancelFile := AppDir + '\.extract_cancelled';
+  { ssPostInstall 期间默认禁用取消按钮，这里强制启用 }
+  WizardForm.CancelButton.Enabled := True;
+  while (not FileExists(DoneFile)) and (not FileExists(CancelFile)) do
   begin
+    if CancelRequested then
+      Exit;
     PumpMessages;
     Sleep(100);
   end;
@@ -108,14 +117,25 @@ end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
 var
-  AppDir: string;
+  AppDir, CancelFile: string;
+  ResultCode: Integer;
 begin
   { 安装后阶段：等待后台 7z 解压完成再清理，避免完成页卡按钮 }
   if CurStep = ssPostInstall then
   begin
     AppDir := ExpandConstant('{app}');
     WaitForExtract(AppDir);
-    RunCleanup(AppDir);
+    CancelFile := AppDir + '\.extract_cancelled';
+    if FileExists(CancelFile) then
+    begin
+      RunCleanup(AppDir);
+      MsgBox('安装已取消。', mbInformation, MB_OK);
+      ExitProcess(1);
+    end
+    else
+    begin
+      RunCleanup(AppDir);
+    end;
   end;
 end;
 
@@ -130,4 +150,18 @@ begin
     if FileExists(AppDir + '\.extract_done') then
       RunCleanup(AppDir);
   end;
+end;
+
+{ 取消按钮：终止后台 7z，写取消标记，让安装退出 }
+procedure CancelButtonClick(CurPageID: Integer; var Cancel, Confirm: Boolean);
+var
+  AppDir: string;
+  ResultCode: Integer;
+begin
+  Cancel := True;
+  Confirm := False; { 不显示确认对话框，点击取消直接退出 }
+  AppDir := ExpandConstant('{app}');
+  Exec('taskkill.exe', '/f /im 7za.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Exec('cmd.exe', '/c echo CANCELLED > "' + AppDir + '\.extract_cancelled"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  CancelRequested := True;
 end;
