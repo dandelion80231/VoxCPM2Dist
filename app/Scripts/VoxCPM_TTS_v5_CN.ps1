@@ -45,24 +45,34 @@ function Resolve-Voice {
     return $trimmed
 }
 
-function Get-DisplayWidth {
-    # 计算字符串在等宽终端的显示宽度（CJK 等东亚宽字符占 2 格）
-    param([string]$s)
-    $w = 0
-    foreach ($c in $s.ToCharArray()) {
-        if ($c -ge 0x2E80) { $w += 2 } else { $w += 1 }
-    }
-    return $w
+function Get-CharEM {
+    # 计算字符在"全角友好"渲染下的宽度单位（全角=1，半角=0.5）。
+    # 目的：banner 用全角双线框(═/║/╔╗╚╝) + 全角空格(　)填充，
+    # 使框线在终端(2:1)与 GitHub 网页(约1.67:1)等任意 CJK 字体下
+    # 都严格对齐——所有组成字符彼此 1 个全角单元，比例无关。
+    param([char]$c)
+    $cp = [int]$c
+    if ($c -eq [char]0x3000) { return 1.0 }                    # 全角空格
+    if ($cp -ge 0x2500 -and $cp -le 0x257F) { return 1.0 }    # Box Drawing（CJK fallback 为全角）
+    if ($cp -ge 0x2E80) { return 1.0 }                        # CJK 东亚宽字符
+    return 0.5
 }
 
 function Format-BannerLine {
-    # 按显示宽度居中填充到 $width 格，两侧补 |，保证右 | 与边框对齐
-    param([string]$s, [int]$width = 58)
-    $w = Get-DisplayWidth $s
-    $pad = [Math]::Max(0, $width - $w)
+    # 按全角 EM 居中：内容区 $width(全角单元)，两侧 ║，全角空格填充，保证右 ║ 与边框对齐
+    param([string]$s, [int]$width = 28)
+    $cem = 0.0
+    foreach ($c in $s.ToCharArray()) { $cem += (Get-CharEM $c) }
+    $pad = [Math]::Max(0.0, ($width - $cem))
     $left = [Math]::Floor($pad / 2)
     $right = $pad - $left
-    return '|' + (' ' * $left) + $s + (' ' * $right) + '|'
+    $lp = ''
+    if ($left -ge 1) { $lp = [string]::new([char]0x3000, [int]$left) }
+    if (($left - [Math]::Floor($left)) -gt 0.01) { $lp += ' ' }
+    $rp = ''
+    if ($right -ge 1) { $rp = [string]::new([char]0x3000, [int]$right) }
+    if (($right - [Math]::Floor($right)) -gt 0.01) { $rp += ' ' }
+    return '║' + $lp + $s + $rp + '║'
 }
 
 function Show-Banner {
@@ -73,13 +83,13 @@ function Show-Banner {
     Write-Host "V   V    O   O      X      C        PPPP     M M M      2  "  -ForegroundColor Cyan
     Write-Host " V V     O   O     X X     C   C    P        M   M     2   "  -ForegroundColor Cyan
     Write-Host "  V       OOO     X   X     CCC     P        M   M    22222 " -ForegroundColor Cyan
-    Write-Host "+==========================================================+" -ForegroundColor Cyan
+    Write-Host ("╔" + ([string]::new([char]0x2550, 28)) + "╗") -ForegroundColor Cyan
     Write-Host (Format-BannerLine "") -ForegroundColor Cyan
     Write-Host (Format-BannerLine "VoxCPM2 语音合成工具 v5.2 音色统一版") -ForegroundColor Cyan
     Write-Host (Format-BannerLine "") -ForegroundColor Cyan
     Write-Host (Format-BannerLine "长文本配音 / 音色一致 / 交叉淡入淡出") -ForegroundColor Cyan
     Write-Host (Format-BannerLine "") -ForegroundColor Cyan
-    Write-Host "+==========================================================+" -ForegroundColor Cyan
+    Write-Host ("╚" + ([string]::new([char]0x2550, 28)) + "╝") -ForegroundColor Cyan
 }
 function Show-Menu {
     Show-Banner
