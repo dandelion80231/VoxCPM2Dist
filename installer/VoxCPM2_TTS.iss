@@ -58,9 +58,8 @@ Type: filesandordirs; Name: "{app}"
 [Code]
 var
   CancelRequested: Boolean;
-  ProgressForm: TForm;
-  ProgressBar: TNewProgressBar;
-  ProgressLabel: TLabel;
+  ExtractBar: TNewProgressBar;
+  ExtractLabel: TLabel;
 
 type
   TMyMsg = record
@@ -119,42 +118,47 @@ begin
   end;
 end;
 
-{ 创建并显示真实的解压进度表单（覆盖在内置进度条“完成”后的等待期） }
+{ 创建并显示真实的解压进度控件（嵌在安装向导内置进度条下方） }
 procedure ShowExtractProgress;
+var
+  gauge: TNewProgressBar;
+  labelTop, barTop: Integer;
 begin
-  ProgressForm := TForm.Create(nil);
-  ProgressForm.Caption := 'VoxCPM2 TTS 安装';
-  ProgressForm.Width := 460;
-  ProgressForm.Height := 150;
-  ProgressForm.BorderStyle := bsDialog;
-  ProgressForm.BorderIcons := [];
-  ProgressForm.Position := poScreenCenter;
-  ProgressLabel := TLabel.Create(ProgressForm);
-  ProgressLabel.Parent := ProgressForm;
-  ProgressLabel.Left := 24;
-  ProgressLabel.Top := 28;
-  ProgressLabel.Width := 412;
-  ProgressLabel.Caption := '正在解压资源文件，请稍候...';
-  ProgressBar := TNewProgressBar.Create(ProgressForm);
-  ProgressBar.Parent := ProgressForm;
-  ProgressBar.Left := 24;
-  ProgressBar.Top := 64;
-  ProgressBar.Width := 412;
-  ProgressBar.Height := 22;
-  ProgressBar.Min := 0;
-  ProgressBar.Max := 100;
-  ProgressBar.Position := 0;
-  ProgressForm.Show;
-  ProgressForm.BringToFront;
+  gauge := WizardForm.ProgressGauge;
+  labelTop := gauge.Top + gauge.Height + ScaleY(24);
+  barTop := labelTop + ScaleY(20);
+
+  ExtractLabel := TLabel.Create(WizardForm);
+  ExtractLabel.Parent := WizardForm;
+  ExtractLabel.Left := gauge.Left;
+  ExtractLabel.Top := labelTop;
+  ExtractLabel.Width := gauge.Width;
+  ExtractLabel.Caption := '正在解压资源文件，请稍候...';
+  ExtractLabel.Visible := True;
+
+  ExtractBar := TNewProgressBar.Create(WizardForm);
+  ExtractBar.Parent := WizardForm;
+  ExtractBar.Left := gauge.Left;
+  ExtractBar.Top := barTop;
+  ExtractBar.Width := gauge.Width;
+  ExtractBar.Height := gauge.Height;
+  ExtractBar.Min := 0;
+  ExtractBar.Max := 100;
+  ExtractBar.Position := 0;
+  ExtractBar.Visible := True;
 end;
 
 procedure HideExtractProgress;
 begin
-  if ProgressForm <> nil then
+  if ExtractLabel <> nil then
   begin
-    ProgressForm.Hide;
-    ProgressForm.Free;
-    ProgressForm := nil;
+    ExtractLabel.Free;
+    ExtractLabel := nil;
+  end;
+  if ExtractBar <> nil then
+  begin
+    ExtractBar.Free;
+    ExtractBar := nil;
   end;
 end;
 
@@ -192,16 +196,16 @@ begin
     pct := ReadLastPercent(LogFile);
     if pct >= 0 then
     begin
-      ProgressBar.Position := pct;
-      ProgressLabel.Caption := '正在解压资源文件，请稍候... ' + IntToStr(pct) + '%';
+      ExtractBar.Position := pct;
+      ExtractLabel.Caption := '正在解压资源文件，请稍候... ' + IntToStr(pct) + '%';
     end;
     PumpMessages;
     Sleep(150);
   end;
 
   { 收尾：置满进度并短暂停留，让“100%”可见 }
-  ProgressBar.Position := 100;
-  ProgressLabel.Caption := '解压完成，正在收尾...';
+  ExtractBar.Position := 100;
+  ExtractLabel.Caption := '解压完成，正在收尾...';
   PumpMessages;
   Sleep(400);
 
