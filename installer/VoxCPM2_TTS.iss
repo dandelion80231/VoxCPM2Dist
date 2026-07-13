@@ -142,7 +142,7 @@ begin
   labelTop := gauge.Top + gauge.Height + ScaleY(24);
   barTop := labelTop + ScaleY(20);
 
-  { 保持上面“正在安装”标题与描述文字始终可见 }
+  { 保持上面“正在安装”标题、描述文字、状态标签始终可见 }
   if WizardForm.PageNameLabel <> nil then
   begin
     WizardForm.PageNameLabel.Caption := '正在安装';
@@ -152,6 +152,11 @@ begin
   begin
     WizardForm.PageDescriptionLabel.Caption := '安装程序正在安装 VoxCPM2 TTS 中文版到您的计算机，请稍候。';
     WizardForm.PageDescriptionLabel.Visible := True;
+  end;
+  if WizardForm.StatusLabel <> nil then
+  begin
+    WizardForm.StatusLabel.Caption := '正在解压资源文件，请稍候...';
+    WizardForm.StatusLabel.Visible := True;
   end;
 
   ExtractLabel := TLabel.Create(WizardForm);
@@ -237,6 +242,20 @@ begin
     begin
       ExtractBar.Position := pct;
       ExtractLabel.Caption := '正在解压资源文件，请稍候... ' + IntToStr(pct) + '%';
+      if WizardForm.StatusLabel <> nil then
+      begin
+        WizardForm.StatusLabel.Caption := '正在解压资源文件，请稍候... ' + IntToStr(pct) + '%';
+        WizardForm.StatusLabel.Visible := True;
+      end;
+    end
+    else
+    begin
+      { 尚未读到百分比时，状态标签也保持初始提示，避免空白 }
+      if WizardForm.StatusLabel <> nil then
+      begin
+        WizardForm.StatusLabel.Caption := '正在解压资源文件，请稍候...';
+        WizardForm.StatusLabel.Visible := True;
+      end;
     end;
     PumpMessages;
     Sleep(150);
