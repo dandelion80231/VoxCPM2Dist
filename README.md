@@ -13,7 +13,7 @@
 
 本仓库**不含**安装包（4 个文件共约 5.1 GB，超过 GitHub 单文件/仓库限制）。获取开箱即用版有两条途径：
 
-1. **使用已构建好的安装包（推荐）**：本地构建会把 `output/` 下的 4 个文件打包为 **`VoxCPM2_TTS_v5.2_Setup.zip`**（位于仓库根目录，但已被 `.gitignore` 排除、**不随源码 clone**，约 5.24 GB 超过 GitHub 单文件限制）。请从下方网盘链接下载，或本地按「构建说明」自行生成，解压后双击 `VoxCPM2_TTS_v5.2_Setup.exe` 即可安装。
+1. **使用已构建好的安装包（推荐）**：本地构建会把 `output/` 下的 4 个文件（`.exe` + 3×`.bin`）打包为 **`output/VoxCPM2_TTS_v5.2_Setup.zip`**（位于 `output/` 目录，但已被 `.gitignore` 排除、**不随源码 clone**，约 5.24 GB 超过 GitHub 单文件限制）。请从下方网盘链接下载，或本地按「构建说明」自行生成，解压后双击 `VoxCPM2_TTS_v5.2_Setup.exe` 即可安装。
    - 网盘分发下载（阿里云盘）：[https://www.alipan.com/s/jraDcmeo1y6](https://www.alipan.com/s/jraDcmeo1y6)　提取码：`i9u7`
    - 也可由你自己或他人从源码重新构建，见下方「构建说明」。
 2. **自行从源码构建**：clone 本仓库 → 按「构建说明」补齐全运行时与权重 → 运行 `build_installer.ps1`，重新生成 `output/` 安装包。
