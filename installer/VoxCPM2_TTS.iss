@@ -129,7 +129,7 @@ begin
   barTop := labelTop + ScaleY(20);
 
   ExtractLabel := TLabel.Create(WizardForm);
-  ExtractLabel.Parent := WizardForm;
+  ExtractLabel.Parent := WizardForm.ProgressGauge.Parent;
   ExtractLabel.Left := gauge.Left;
   ExtractLabel.Top := labelTop;
   ExtractLabel.Width := gauge.Width;
@@ -137,7 +137,7 @@ begin
   ExtractLabel.Visible := True;
 
   ExtractBar := TNewProgressBar.Create(WizardForm);
-  ExtractBar.Parent := WizardForm;
+  ExtractBar.Parent := WizardForm.ProgressGauge.Parent;
   ExtractBar.Left := gauge.Left;
   ExtractBar.Top := barTop;
   ExtractBar.Width := gauge.Width;
