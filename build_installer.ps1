@@ -69,7 +69,16 @@ Write-Host "[1/4] 使用压缩器 ($($c.Type)): $sevenZip"
 # 说明：-mx=7 在压缩率与耗时间取平衡（9.4GB 约 15-30 分钟）；如追求极限压缩率可改 -mx=9（耗时更长）。
 $compressFlags = @('-t7z','-mmt=on','-mx=7')
 
-# ── 2. 准备 7za.exe（供安装包内解压；独立版，需真正的 7za.exe）──
+# ── 2. 准备 7za.exe（必须为 64 位！32 位 7za 解压 >4GB 模型文件会卡死）──
+function Get-PESignedBitness {
+    param([string]$Path)
+    try {
+        $b = [System.IO.File]::ReadAllBytes($Path)
+        $pe = [System.BitConverter]::ToInt32($b, [System.BitConverter]::ToInt32($b, 0x3C))
+        $m = [System.BitConverter]::ToInt16($b, $pe + 4)
+        if ($m -eq 0x8664) { return 'x64' } elseif ($m -eq 0x14C) { return 'x86' } else { return 'other' }
+    } catch { return 'unknown' }
+}
 $sevenZipDir = Split-Path $sevenZip
 $src7za = Join-Path $sevenZipDir '7za.exe'
 
@@ -89,7 +98,7 @@ if (-not (Test-Path $src7za)) {
     }
 }
 
-# 2b) 本机没有则下载 7-Zip Extra（官方独立版），并解包出 7za.exe
+# 2b) 本机没有则下载 7-Zip Extra（官方独立版），并解包出 64 位 7za
 if (-not (Test-Path $src7za)) {
     Write-Host '[2/4] 未找到 7za.exe，下载 7-Zip Extra 并解包...'
     # 注意：最新版 7-Zip 已迁移到 GitHub 发布；7-zip.org/a/ 仅保留 23.01 及更早版本。
@@ -108,7 +117,8 @@ if (-not (Test-Path $src7za)) {
             $extraDir = Join-Path $env:TEMP '7zextra'
             # 用当前的 7z 兼容压缩器解包（7z.exe 或 NanaZipC.exe 都能解 7z）
             & $sevenZip x $extra "-o$extraDir" -y | Out-Null
-            $cand = Join-Path $extraDir '7za.exe'
+            # 优先使用 x64 子目录里的 7za（含 7za.dll/7zxa.dll）
+            $cand = Join-Path $extraDir 'x64\7za.exe'
             if (Test-Path $cand) { $src7za = $cand; $ok = $true; break }
         } catch {
             Write-Host "  下载/解包失败: $u"
@@ -117,8 +127,22 @@ if (-not (Test-Path $src7za)) {
     if (-not $ok) { Write-Error '未能取得 7za.exe。'; exit 1 }
 }
 if (-not (Test-Path $src7za)) { Write-Error '未能取得 7za.exe。'; exit 1 }
+
+# 确保使用 64 位版本：若找到的是 32 位，且存在 x64 兄弟目录，则改用 x64
+if ((Get-PESignedBitness $src7za) -ne 'x64') {
+    $x64sib = Join-Path (Split-Path $src7za) 'x64\7za.exe'
+    if (Test-Path $x64sib) { $src7za = $x64sib }
+    else { Write-Warning '警告：取得的 7za.exe 不是 64 位，解压 >4GB 模型文件可能卡死。建议安装 64 位 7-Zip。' }
+}
+
+# 复制 7za.exe 及其依赖 7za.dll / 7zxa.dll（x64 版必须同目录）
+$srcDir = Split-Path $src7za
 Copy-Item $src7za (Join-Path $payload '7za.exe') -Force
-Write-Host '[2/4] 已准备 7za.exe'
+foreach ($dll in @('7za.dll', '7zxa.dll')) {
+    $dllSrc = Join-Path $srcDir $dll
+    if (Test-Path $dllSrc) { Copy-Item $dllSrc (Join-Path $payload $dll) -Force }
+}
+Write-Host '[2/4] 已准备 7za.exe（x64）'
 
 # ── 3. 预压缩 app -> app.7z（扁平结构）──
 $app7z = Join-Path $payload 'app.7z'
