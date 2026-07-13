@@ -155,7 +155,7 @@ begin
   end;
   if WizardForm.StatusLabel <> nil then
   begin
-    WizardForm.StatusLabel.Caption := '正在解压资源文件，请稍候...';
+    WizardForm.StatusLabel.Caption := '文件提取完成';
     WizardForm.StatusLabel.Visible := True;
   end;
 
@@ -242,18 +242,19 @@ begin
     begin
       ExtractBar.Position := pct;
       ExtractLabel.Caption := '正在解压资源文件，请稍候... ' + IntToStr(pct) + '%';
+      { 保持上方文件提取完成状态始终可见 }
       if WizardForm.StatusLabel <> nil then
       begin
-        WizardForm.StatusLabel.Caption := '正在解压资源文件，请稍候... ' + IntToStr(pct) + '%';
+        WizardForm.StatusLabel.Caption := '文件提取完成';
         WizardForm.StatusLabel.Visible := True;
       end;
     end
     else
     begin
-      { 尚未读到百分比时，状态标签也保持初始提示，避免空白 }
+      { 尚未读到百分比时，状态标签保持“文件提取完成”，不空白 }
       if WizardForm.StatusLabel <> nil then
       begin
-        WizardForm.StatusLabel.Caption := '正在解压资源文件，请稍候...';
+        WizardForm.StatusLabel.Caption := '文件提取完成';
         WizardForm.StatusLabel.Visible := True;
       end;
     end;
