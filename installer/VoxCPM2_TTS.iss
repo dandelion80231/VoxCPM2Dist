@@ -32,8 +32,12 @@ Name: "desktopicon"; Description: "创建桌面快捷方式(&D)"; GroupDescripti
 [Files]
 ; 预压缩的 app 归档（7z 多线程解压，比 InnoSetup 原生 LZMA 快 2-3x）
 Source: "{#MyPayload}\app.7z"; DestDir: "{app}"; Flags: nocompression
-; 7z 独立解压器（安装时解压 app.7z 后自动清理）
+; 7z 独立解压器（安装时解压 app.7z 后自动清理）—— 必须为 64 位版本！
+; 32 位 7za 在处理 >4GB 的模型文件（model.safetensors 约 4.6GB）时会卡死在收尾阶段，
+; 导致安装器无限等待（详见 2026-07-14 修复记录）。x64 7za 还需同目录的 7za.dll / 7zxa.dll。
 Source: "{#MyPayload}\7za.exe"; DestDir: "{app}"; Flags: nocompression
+Source: "{#MyPayload}\7za.dll"; DestDir: "{app}"; Flags: nocompression
+Source: "{#MyPayload}\7zxa.dll"; DestDir: "{app}"; Flags: nocompression
 ; 应用图标
 Source: "{#MyAssets}\VoxCPM_App.ico"; DestDir: "{app}"; Flags: nocompression
 
@@ -60,6 +64,10 @@ var
   CancelRequested: Boolean;
   ExtractBar: TNewProgressBar;
   ExtractLabel: TLabel;
+
+const
+  STALL_LIMIT = 2000;    { 2000 * 150ms ≈ 5 分钟无进度 → 判定卡死 }
+  OVERALL_LIMIT = 18000; { 18000 * 150ms = 45 分钟总上限（极慢磁盘兜底） }
 
 type
   TMyMsg = record
@@ -197,7 +205,7 @@ procedure RunCleanup(AppDir: string);
 var
   ResultCode: Integer;
 begin
-  Exec('cmd.exe', '/c del /q "' + AppDir + '\app.7z" "' + AppDir + '\7za.exe" "' + AppDir + '\.extract_done" "' + AppDir + '\.extract_cancelled" "' + AppDir + '\_extract_.bat"',
+  Exec('cmd.exe', '/c del /q "' + AppDir + '\app.7z" "' + AppDir + '\7za.exe" "' + AppDir + '\7za.dll" "' + AppDir + '\7zxa.dll" "' + AppDir + '\.extract_done" "' + AppDir + '\.extract_error" "' + AppDir + '\.extract_cancelled" "' + AppDir + '\_extract_.bat"',
        AppDir, SW_HIDE, ewNoWait, ResultCode);
 end;
 
@@ -213,21 +221,23 @@ begin
   CancelRequested := True;
 end;
 
-{ 等待后台 7z 解压完成，其间更新真实解压进度 }
+{ 等待后台 7z 解压完成，其间更新真实解压进度；带看门狗，绝不无限等待 }
 procedure WaitForExtract(AppDir: string);
 var
-  DoneFile, CancelFile, LogFile, BatchPath: string;
+  DoneFile, CancelFile, ErrorFile, LogFile, BatchPath: string;
   BatchLines: TArrayOfString;
-  ResultCode, pct, lastPct, ticks: Integer;
+  ResultCode, pct, lastPct, ticks, lastProgressTick: Integer;
 begin
   DoneFile := AppDir + '\.extract_done';
   CancelFile := AppDir + '\.extract_cancelled';
+  ErrorFile := AppDir + '\.extract_error';
   LogFile := ExpandConstant('{tmp}') + '\extract_progress.log';
   BatchPath := AppDir + '\_extract_.bat';
 
   { 清除可能残留的旧标记/日志，避免误判 }
   if FileExists(DoneFile) then DeleteFile(DoneFile);
   if FileExists(CancelFile) then DeleteFile(CancelFile);
+  if FileExists(ErrorFile) then DeleteFile(ErrorFile);
   if FileExists(LogFile) then DeleteFile(LogFile);
 
   ShowExtractProgress;
@@ -241,18 +251,43 @@ begin
   BatchLines[0] := '@echo off';
   BatchLines[1] := 'setlocal enabledelayedexpansion';
   BatchLines[2] := '"' + AppDir + '\7za.exe" x "' + AppDir + '\app.7z" -o"' + AppDir + '" -y -bsp1 -bso0 > "' + LogFile + '" 2>&1';
-  BatchLines[3] := 'if !errorlevel! neq 0 exit /b !errorlevel!';
+  { 失败时把错误码写入 .extract_error，供安装器检测并明确报错（而非无限等待） }
+  BatchLines[3] := 'if !errorlevel! neq 0 ( echo ERR!errorlevel! > "' + AppDir + '\.extract_error" & exit /b !errorlevel! )';
   BatchLines[4] := 'echo OK > "' + DoneFile + '"';
   SaveStringsToFile(BatchPath, BatchLines, False);
 
-  { 启动批处理进行异步解压 }
+  { 启动批处理进行异步解压（注意：7za 必须为 64 位，否则解压 >4GB 模型文件会卡死） }
   Exec('cmd.exe', '/c "' + BatchPath + '"', AppDir, SW_HIDE, ewNoWait, ResultCode);
 
   lastPct := -1;
+  lastProgressTick := 0;
   ticks := 0;
-  while (not FileExists(DoneFile)) and (not FileExists(CancelFile)) do
+  while (not FileExists(DoneFile)) and (not FileExists(CancelFile)) and (not FileExists(ErrorFile)) do
   begin
     if CancelRequested then Break;
+
+    { 看门狗①：超过总时限直接判定失败 }
+    if ticks > OVERALL_LIMIT then
+    begin
+      ExtractLabel.Caption := '解压超时（超过总时限）';
+      Exec('taskkill.exe', '/f /im 7za.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+      MsgBox('资源文件解压未能在预期时间内完成（已等待超过总时限）。' + #13#10 +
+             '常见原因：杀毒软件实时防护在写入较大的模型文件（model.safetensors 约 4.6GB）时将其拦截/挂起。' + #13#10 +
+             '建议：将安装目标目录加入杀毒软件排除项（或临时关闭实时防护）后，重新运行本安装程序。',
+             mbError, MB_OK);
+      ExitProcess(1);
+    end;
+
+    { 看门狗②：启动 30 秒宽限后，长时间无进度变化判定卡死 }
+    if (ticks > 200) and (ticks - lastProgressTick > STALL_LIMIT) then
+    begin
+      ExtractLabel.Caption := '解压疑似卡死';
+      Exec('taskkill.exe', '/f /im 7za.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+      MsgBox('资源文件解压长时间无进展，疑似被系统中断（如杀毒软件实时防护拦截了大型模型文件的写入）。' + #13#10 +
+             '建议：将安装目标目录加入杀毒软件排除项（或临时关闭实时防护）后，重新运行本安装程序。',
+             mbError, MB_OK);
+      ExitProcess(1);
+    end;
 
     pct := ReadLastPercent(LogFile);
     if pct >= 0 then
@@ -262,6 +297,7 @@ begin
         ExtractBar.Position := pct;
         ExtractLabel.Caption := '正在解压资源文件，请稍候... ' + IntToStr(pct) + '%';
         lastPct := pct;
+        lastProgressTick := ticks;
       end;
     end
     else
@@ -281,6 +317,18 @@ begin
     PumpMessages;
     Sleep(150);
     ticks := ticks + 1;
+  end;
+
+  { 7za 自身返回错误 }
+  if FileExists(ErrorFile) then
+  begin
+    ExtractBar.Position := 0;
+    ExtractLabel.Caption := '解压失败';
+    Exec('taskkill.exe', '/f /im 7za.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    MsgBox('资源文件解压过程中 7za 返回了错误，安装无法继续。' + #13#10 +
+           '请检查安装目标磁盘是否有足够空间，或临时关闭杀毒软件实时防护后重新运行本安装程序。',
+           mbError, MB_OK);
+    ExitProcess(1);
   end;
 
   { 收尾 }
