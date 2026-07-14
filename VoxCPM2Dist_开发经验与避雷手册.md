@@ -121,9 +121,13 @@ VoxCPM2Dist/
 - **治本（已验证可行）**：放弃读日志，改为**目录大小估算法**——
   - 构建时 `build_installer.ps1` 用 `7za l payload\app.7z` 抓汇总行（`未压缩大小 压缩大小 files folders`），取未压缩总字节数写入 `payload\app_7z_uncompressed_size.txt`（当前值 `10003650888` ≈ 9.32GB），随包进 `{app}`。
   - 安装时 `WaitForExtract` 在启动 7za 前记 `InitialSize = GetFolderSize({app})`；每 ~1.5s 重算 `CurrentSize`，`DoneBytes = CurrentSize - InitialSize`，`pct = DoneBytes*100/TotalBytes`（clamp ≤95，收尾置 100）。`GetFolderSize` 用 `TFindRec` 递归，`文件大小 = Int64(SizeLow) + Int64(SizeHigh)*4294967296`（避开 `shl`/`or` 的 Int64/DWORD 类型坑）。
-  - 无 size 文件时，按 `app.7z` 压缩大小估算 `约 16 秒/GB`（下限 60s）做时间线性推进兜底，保证条至少会动。
+  - **双层进度来源（确保进度条从 0 秒起就平滑前进，不再“卡 1% 后猛跳”）**：
+    - **时间基线兜底**：`pct` 同时按「已用时间 / 估算总时长」线性推进。有 size 文件时估算总时长固定 60s（仅兜底）；无 size 文件时按 `app.7z` 压缩大小 ~16 秒/GB（下限 60s）。原因：`7za` 解压前 ~15 秒尚未往外刷文件，`{app}` 目录大小不变，纯靠目录大小会让 `pct` 长时间算 0%、进度条停在 1%，等 7za 一刷就跳到 49%+，视觉即「没过程、直接跳」。时间基线保证从 0 秒起就动。
+    - **真实进度优先向上校正**：每 ~0.45s 用 `GetFolderSize` 算真实百分比，若比时间基线更快则取较大值（真实解压接管后立刻跟上）。
+    - **只增不减**：`pct = max(pct, lastPct)`，消除两种来源交替取值时的回退抖动（曾出现 49%↔26% 来回跳）。
+    - **强制重绘**：设 `ExtractBar.Position` 后显式 `ExtractBar.Update`，确保肉眼可见前进，不依赖消息泵时序。
   - 7za 命令写入临时 `_extract_.bat` 再 `Exec` 执行（避免 `cmd.exe` 长命令行转义），批处理只保留 `-bso0`（不刷屏，进度不再依赖日志）。
-- **验证**：`/VERYSILENT` 静默安装到测试目录，外部每 5s 采样 `{app}` 目录大小换算百分比，曲线为 `0% → 49% → 50% → 53% → 56% → 57% → 98% → 100%`，平滑无瞬跳；安装器 EXIT=0，最终提取目录 9.32GB 与 size 文件一致。下方进度条已呈现真实中间过程。
+- **验证（决定性实证，带内部追踪日志）**：用带追踪的临时构建实跑安装，`WaitForExtract` 记录实际写入 `ExtractBar.Position` 的 `pct` 序列——`t=1s pct=1%`、`t=15s pct=25%`（时间基线兜底生效，前段 7za 未刷文件时不再卡 1%）、`t=19s pct=49%`（真实目录大小接管）、…、`t=57s pct=95%`（收尾置 100）。全程**单调平滑、从 0 秒起即动、无回退抖动**，彻底消除「0%→100% 瞬跳」观感；安装器 EXIT=0，最终提取目录 9.32GB 与 size 文件一致。（追踪在静默模式取值，证明的是进度值曲线；屏幕重绘由 `ExtractBar.Update` 保证，建议手动装一次最终确认 UI 表现。）
 
 ---
 

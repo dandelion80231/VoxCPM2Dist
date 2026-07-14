@@ -240,7 +240,7 @@ procedure WaitForExtract(AppDir: string);
 var
   DoneFile, CancelFile, ErrorFile, BatchPath, SizeFile: string;
   BatchLines: TArrayOfString;
-  ResultCode, pct, lastPct, ticks, lastProgressTick: Integer;
+  ResultCode, pct, lastPct, ticks, lastProgressTick, timePct, sizePct: Integer;
   TotalBytes, InitialSize, CurrentSize, DoneBytes, App7zSize: Int64;
   HasTotalBytes: Boolean;
   startTick, elapsedSec, estTotalSec: Integer;
@@ -269,8 +269,10 @@ begin
   TotalBytes := ReadTotalBytes(SizeFile);
   HasTotalBytes := TotalBytes > 0;
 
-  { 没有 size 文件时，按 app.7z 压缩大小估算总时间（fallback，避免进度条完全不动） }
-  if not HasTotalBytes then
+  { 估算总时长，作为“时间基线”兜底：保证进度条从 0 秒起就平滑前进，不会长时间停在 1% }
+  if HasTotalBytes then
+    estTotalSec := 60   { 有真实目录大小时，时间基线仅作兜底；真实进度由目录大小向上校正 }
+  else
   begin
     App7zSize := GetFileSizeInt64(AppDir + '\app.7z');
     if App7zSize > 0 then
@@ -328,37 +330,38 @@ begin
       ExitProcess(1);
     end;
 
-    { 进度计算：优先按目录大小增量（真实解压进度）；否则按时间平滑推进 }
-    if HasTotalBytes then
+    { 进度计算：时间基线保证进度条从 0 秒起就平滑前进（不再长时间停在 1%）；
+      目录实际大小在可用时向上校正出真实进度。两种来源取较大值。 }
+    elapsedSec := (GetTickCount - startTick) div 1000;
+    if elapsedSec < 0 then elapsedSec := 0;
+    timePct := Trunc(elapsedSec * 100 / estTotalSec);
+    if timePct < 0 then timePct := 0;
+    if timePct > 95 then timePct := 95;
+
+    pct := timePct;
+    { 每 3 个 ticks（约 0.45 秒）用目录实际大小校正一次 }
+    if HasTotalBytes and ((ticks mod 3 = 0) or (ticks = 0)) then
     begin
-      { 每 10 个 ticks（约 1.5 秒）计算一次目录大小，避免频繁遍历大量文件 }
-      if (ticks mod 10 = 0) or (ticks = 0) then
-      begin
-        CurrentSize := GetFolderSize(AppDir);
-        DoneBytes := CurrentSize - InitialSize;
-        if DoneBytes < 0 then DoneBytes := 0;
-        if TotalBytes > 0 then
-          pct := Trunc(DoneBytes * 100 / TotalBytes)
-        else
-          pct := 0;
-        if pct < 0 then pct := 0;
-        if pct > 95 then pct := 95;
-      end;
-    end
-    else
-    begin
-      elapsedSec := (GetTickCount - startTick) div 1000;
-      if elapsedSec < 0 then elapsedSec := 0;
-      pct := Trunc(elapsedSec * 100 / estTotalSec);
-      if pct > 95 then pct := 95;
+      CurrentSize := GetFolderSize(AppDir);
+      DoneBytes := CurrentSize - InitialSize;
+      if DoneBytes < 0 then DoneBytes := 0;
+      if TotalBytes > 0 then
+        sizePct := Trunc(DoneBytes * 100 / TotalBytes)
+      else
+        sizePct := 0;
+      if sizePct < 0 then sizePct := 0;
+      if sizePct > 95 then sizePct := 95;
+      if sizePct > pct then pct := sizePct;  { 真实进度更快时向上取 }
     end;
 
     if pct < 0 then pct := 0;
     if pct > 100 then pct := 100;
+    if pct < lastPct then pct := lastPct;  { 进度只增不减，消除时间基线/目录大小交替时的回退抖动 }
 
     if pct <> lastPct then
     begin
       ExtractBar.Position := pct;
+      ExtractBar.Update;   { 强制立即重绘，确保进度条肉眼可见地前进（不依赖消息泵时序） }
       ExtractLabel.Caption := '正在解压资源文件，请稍候... ' + IntToStr(pct) + '%';
       lastPct := pct;
       lastProgressTick := ticks;
