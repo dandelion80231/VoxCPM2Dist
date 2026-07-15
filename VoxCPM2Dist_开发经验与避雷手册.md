@@ -237,11 +237,11 @@ Start-ScheduledTask -TaskName "VoxCPM2_Build"
 ---
 
 ## 8. 已知事项 / 待办
-- **v5.3（源码发布，安装包未重打包）**：修复网页端 self-seeding 多段合成报错——原缓存目录用系统临时目录 `AppData\Local\Temp\voxcpm_web_ui`，Windows 存储感知/磁盘清理会删掉该子目录，导致第 1 段写种子 `sf.write` 报 `Error opening '...seed_xxx.wav': System error`、整段失败。**已将缓存目录默认改到安装目录下 `cache/voxcpm_web_ui`**（`TEMP_DIR = Path(__file__).resolve().parent.parent / "cache" / "voxcpm_web_ui"`，按脚本位置解析，安装版/便携版均生效），并在写种子、上传参考音频前各加一次幂等 `mkdir` 双保险；`.iss` 版本号同步升至 `5.3`。已安装用户直接用本仓库 `app/Scripts/vox_web_ui.py` 覆盖安装目录下 `Scripts\vox_web_ui.py` 即时获得修复，无需重装、无需等重打包。本次仅推进源码与文档（b43a113 的 ima 文档校正不推），安装包分卷命名仍按约定待重打包时随 `.iss` 升至 `v5.3_Setup`。
+- **v5.3（源码发布，安装包未重打包）**：修复网页端 self-seeding 多段合成报错——原缓存目录用系统临时目录 `AppData\Local\Temp\voxcpm_web_ui`，Windows 存储感知/磁盘清理会删掉该子目录，导致第 1 段写种子 `sf.write` 报 `Error opening '...seed_xxx.wav': System error`、整段失败。**已将缓存目录默认改到安装目录下 `cache/voxcpm_web_ui`**（`TEMP_DIR = Path(__file__).resolve().parent.parent / "cache" / "voxcpm_web_ui"`，按脚本位置解析，安装版/便携版均生效），并在写种子、上传参考音频前各加一次幂等 `mkdir` 双保险；`.iss` 版本号同步升至 `5.3`。已安装用户直接用本仓库 `app/Scripts/vox_web_ui.py` 覆盖安装目录下 `Scripts\vox_web_ui.py` 即时获得修复，无需重装、无需等重打包。本次一并合并了 v5.2 文档校正（进度条双层估算准确描述、双版本发布收尾），并移除了 ima 知识库专属说明；安装包分卷命名仍按约定待重打包时随 `.iss` 升至 `v5.3_Setup`。
 - 安装包物理产物（zip/output/payload）按约定不进版本库，仍在本地，需用户上传网盘覆盖旧分发（链接不变）。
-- v5.2 已修复：① 安装器 64 位 7za 卡死（§3.6）；② 解压进度条无中间过程（改为目录大小估算真实进度，§3.7）。`output/VoxCPM2_TTS_v5.2_Setup.zip` 已是含修复的构建产物，需重新上传网盘覆盖旧分发（链接不变）。
+- v5.2 已修复：① 安装器 64 位 7za 卡死（§3.6）；② 解压进度条无中间过程（改为**双层进度估算**：目录大小 + 时间基线兜底 + 只增不减 + 强制重绘，§3.7）。`output/VoxCPM2_TTS_v5.2_Setup.zip` 已是含最终修复的构建产物，已重传网盘覆盖旧分发（链接不变）。
+- **v5.1 / v5.2 双版本发布已完成**：GitHub Releases 已补齐 v5.1/v5.2（Latest=v5.2），v5.2 最新安装包（含进度条最终修复）已重传网盘覆盖旧分发（链接不变）。
 - Python 3.13 兼容性未验证；如需追新版本，须重建 `python_cuda` + 重新打包 9.4GB，收益低。
-- ima 知识库 MCP 在本会话仅暴露读/搜索工具，无写入接口；本手册为 Markdown，可手动导入 ima 新建分组。
 - 旧版安装包从 `output/VoxCPM2_TTS_v5.2_Setup.zip` 解压即可找回（`output/` 会随重建自动生成）。
 
 ---
