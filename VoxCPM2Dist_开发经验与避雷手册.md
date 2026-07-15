@@ -1,8 +1,8 @@
 # VoxCPM2Dist 离线发行版 · 开发经验与避雷手册
 
-> 版本：v5.2（离线 TTS 分发版；安装包文件名 VoxCPM2_TTS_v5.2_Setup）
+> 版本：v5.3（离线 TTS 分发版；安装包文件名 VoxCPM2_TTS_v5.3_Setup）
 > 适用范围：基于 OpenBMB VoxCPM2 的中文 TTS 离线发行包（Windows x64 + NVIDIA CUDA，可 CPU 回退）
-> 整理日期：2026-07-12（更新：2026-07-13 补充 Banner 对齐坑、安装包选项、Releases 整理、计划任务重打包；2026-07-14 补 64 位 7za 致命坑 §3.6、进度条真实进度 §3.7）
+> 整理日期：2026-07-12（更新：2026-07-13 补充 Banner 对齐坑、安装包选项、Releases 整理、计划任务重打包；2026-07-14 补 64 位 7za 致命坑 §3.6、进度条真实进度 §3.7；2026-07-14 补 v5.3 缓存目录改安装目录修复）
 > 目的：把本次开发踩过的坑、验证过的治本方案、以及用户明确约定的工作流固化下来，便于日后复用。
 
 ---
@@ -19,7 +19,7 @@ VoxCPM2Dist/
 ├── installer/VoxCPM2_TTS.iss    # InnoSetup 安装包定义
 ├── build_installer.ps1          # 打包脚本：7z 压 app → payload/app.7z → ISCC 编译
 ├── payload/                     # 构建工作目录（app.7z + 7za.exe），保留以便原地重打
-├── output/                      # 构建产物：Setup.exe + 3×.bin 分卷 + VoxCPM2_TTS_v5.2_Setup.zip（分发物，网盘用，被 .gitignore 排除）
+├── output/                      # 构建产物：Setup.exe + 3×.bin 分卷 + VoxCPM2_TTS_v5.3_Setup.zip（分发物，网盘用，被 .gitignore 排除）
 └── README.md / requirements.txt / .gitignore
 ```
 
@@ -212,7 +212,7 @@ VoxCPM2Dist/
 Start-Process "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" -ArgumentList "<仓库根目录>\installer\VoxCPM2_TTS.iss"
 
 # 重打 output/ 分发 zip（纯打包，最快）
-& "C:\Program Files\7-Zip\7z.exe" a -tzip -mx=1 output\VoxCPM2_TTS_v5.2_Setup.zip output\VoxCPM2_TTS_v5.2_Setup.exe output\*.bin
+& "C:\Program Files\7-Zip\7z.exe" a -tzip -mx=1 output\VoxCPM2_TTS_v5.3_Setup.zip output\VoxCPM2_TTS_v5.3_Setup.exe output\*.bin
 
 # 验证归档完整
 & "C:\Program Files\7-Zip\7z.exe" t payload\app.7z
@@ -224,7 +224,7 @@ git push -u origin main --follow-tags
 # 注册 Windows 计划任务，由 Task Scheduler 托管，即使对话断开也继续跑
 # 注：rebuild_v52.ps1 已废弃删除，构建统一走 build_installer.ps1（已改为相对路径、可移植）。
 #     如需重新生成分发 zip，构建后执行单行命令（输出到 output/，不要生成到仓库根）：
-#     7z a -tzip "<仓库根目录>\output\VoxCPM2_TTS_v5.2_Setup.zip" "<仓库根目录>\output\VoxCPM2_TTS_v5.2_Setup.*"
+#     7z a -tzip "<仓库根目录>\output\VoxCPM2_TTS_v5.3_Setup.zip" "<仓库根目录>\output\VoxCPM2_TTS_v5.3_Setup.*"
 $action = New-ScheduledTaskAction -Execute "C:\Program Files\PowerShell\7\pwsh.exe" `
   -Argument "-NoProfile -ExecutionPolicy Bypass -File `"<仓库根目录>\build_installer.ps1`"" `
   -WorkingDirectory "<仓库根目录>"
@@ -237,6 +237,7 @@ Start-ScheduledTask -TaskName "VoxCPM2_Build"
 ---
 
 ## 8. 已知事项 / 待办
+- **v5.3（源码发布，安装包未重打包）**：修复网页端 self-seeding 多段合成报错——原缓存目录用系统临时目录 `AppData\Local\Temp\voxcpm_web_ui`，Windows 存储感知/磁盘清理会删掉该子目录，导致第 1 段写种子 `sf.write` 报 `Error opening '...seed_xxx.wav': System error`、整段失败。**已将缓存目录默认改到安装目录下 `cache/voxcpm_web_ui`**（`TEMP_DIR = Path(__file__).resolve().parent.parent / "cache" / "voxcpm_web_ui"`，按脚本位置解析，安装版/便携版均生效），并在写种子、上传参考音频前各加一次幂等 `mkdir` 双保险；`.iss` 版本号同步升至 `5.3`。已安装用户直接用本仓库 `app/Scripts/vox_web_ui.py` 覆盖安装目录下 `Scripts\vox_web_ui.py` 即时获得修复，无需重装、无需等重打包。本次仅推进源码与文档（b43a113 的 ima 文档校正不推），安装包分卷命名仍按约定待重打包时随 `.iss` 升至 `v5.3_Setup`。
 - 安装包物理产物（zip/output/payload）按约定不进版本库，仍在本地，需用户上传网盘覆盖旧分发（链接不变）。
 - v5.2 已修复：① 安装器 64 位 7za 卡死（§3.6）；② 解压进度条无中间过程（改为目录大小估算真实进度，§3.7）。`output/VoxCPM2_TTS_v5.2_Setup.zip` 已是含修复的构建产物，需重新上传网盘覆盖旧分发（链接不变）。
 - Python 3.13 兼容性未验证；如需追新版本，须重建 `python_cuda` + 重新打包 9.4GB，收益低。

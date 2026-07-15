@@ -1,5 +1,5 @@
 #define MyAppName "VoxCPM2 TTS 中文版"
-#define MyAppVersion "5.2"
+#define MyAppVersion "5.3"
 #define MyPayload "..\payload"
 #define MyAssets "assets"
 
@@ -11,7 +11,7 @@ AppPublisher=VoxCPM2
 DefaultDirName={autopf}\VoxCPM2 TTS
 DefaultGroupName={#MyAppName}
 OutputDir=..\output
-OutputBaseFilename=VoxCPM2_TTS_v5.2_Setup
+OutputBaseFilename=VoxCPM2_TTS_v5.3_Setup
 Compression=lzma2/fast
 SolidCompression=no
 ArchitecturesInstallIn64BitMode=x64compatible

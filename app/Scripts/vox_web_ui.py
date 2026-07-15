@@ -204,7 +204,11 @@ task_queue = queue.Queue()
 task_results: dict = {}
 task_lock = threading.Lock()
 
-TEMP_DIR = Path(tempfile.gettempdir()) / "voxcpm_web_ui"
+# 缓存目录默认放在安装目录下 cache/voxcpm_web_ui，而非系统临时目录。
+# 原因：Windows 存储感知/磁盘清理常删除 AppData\Local\Temp 下的子目录，
+# 导致 self-seeding 写种子或上传参考音频时报 "Error opening ...: System error"。
+# __file__ 在打包后为 <安装根>/Scripts/vox_web_ui.py，.parent.parent 即安装根目录。
+TEMP_DIR = Path(__file__).resolve().parent.parent / "cache" / "voxcpm_web_ui"
 TEMP_DIR.mkdir(parents=True, exist_ok=True)
 
 
@@ -610,6 +614,9 @@ def synthesize(args: dict) -> dict:
                 wav = model.generate(text=chunk_text, cfg_value=cfg, inference_timesteps=steps, normalize=normalize, denoise=denoise)
                 seed_prompt_text = chunk_text
                 seed_ref_path = os.path.join(TEMP_DIR, f"seed_{job_id}.wav")
+                # Windows 可能在运行期间清理 AppData\Local\Temp，导致 TEMP_DIR 消失；
+                # 写种子前确保目录存在，避免 sf.write 报 "Error opening ...: System error"
+                TEMP_DIR.mkdir(parents=True, exist_ok=True)
                 sf.write(seed_ref_path, wav, model.tts_model.sample_rate)
                 current_ref = seed_ref_path
             elif use_self_seeding and current_ref and seed_prompt_text:
@@ -2904,6 +2911,8 @@ if HAS_WEB:
         if reference_wav and mode == "fixed_clone":
             suffix = Path(reference_wav.filename).suffix or ".wav"
             ref_wav_path = str(TEMP_DIR / f"ref_{uuid.uuid4().hex[:8]}{suffix}")
+            # 同上：写上传参考音频前确保 TEMP_DIR 仍存在
+            TEMP_DIR.mkdir(parents=True, exist_ok=True)
             with open(ref_wav_path, "wb") as f:
                 shutil.copyfileobj(reference_wav.file, f)
 
