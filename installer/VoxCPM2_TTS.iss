@@ -29,8 +29,12 @@ PrivilegesRequired=lowest
 UninstallDisplayIcon={app}\VoxCPM_App.ico
 DirExistsWarning=no
 DisableDirPage=no
-DiskSpanning=yes
-DiskSliceSize=2000000000
+#ifdef VoxNoModel
+  ; 无模型版约 1.56GB < 2GB，打包为单个自包含 exe（不分卷、不生成外置 .bin）
+#else
+  DiskSpanning=yes
+  DiskSliceSize=2000000000
+#endif
 
 [Languages]
 Name: "chinesesimplified"; MessagesFile: "ChineseSimplified.isl"
