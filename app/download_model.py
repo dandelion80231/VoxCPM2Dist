@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
-"""下载 VoxCPM2 主模型权重到本安装目录的 model/openbmb/VoxCPM2。
+"""下载 VoxCPM2 主模型与可选离线降噪模型到本安装目录。
 
 仅依赖 Python 标准库（urllib / ssl），无需 pip 安装，可直接用随包 python_cuda 运行。
-支持断点续传（.part 临时文件）。HuggingFace 为主源，失败自动回退 ModelScope。
+流程：先扫描全部必需文件 -> 列出缺失/损坏项 -> 再针对性下载（支持断点续传）。
+主模型 ModelScope 为主源、失败回退 HuggingFace；降噪模型仅 ModelScope 源（可选项）。
 """
 import os
 import sys
@@ -27,6 +28,19 @@ APP_DIR = os.path.dirname(os.path.abspath(__file__))
 TARGET = os.path.join(APP_DIR, "model", "openbmb", "VoxCPM2")
 os.makedirs(TARGET, exist_ok=True)
 
+# 离线降噪模型（ZipEnhancer，约 18MB），独立于主模型，位于另一个 ModelScope repo
+ZIP_FILES = [
+    "configuration.json",
+    "onnx_model.onnx",
+    "pytorch_model.bin",
+]
+MS_ZIP_BASE = "https://modelscope.cn/models/iic/speech_zipenhancer_ans_multiloss_16k_base/resolve/master/"
+ZIP_TARGET = os.path.join(APP_DIR, "models", "zipenhancer")
+
+# 每个文件记录 (文件名, 主源 base, 回退源 base 或 None)
+MAIN_ITEMS = [(f, MS_BASE, HF_BASE) for f in FILES]
+ZIP_ITEMS = [(f, MS_ZIP_BASE, None) for f in ZIP_FILES]
+
 
 def make_ctx():
     """尝试默认 CA 信任链；嵌入版 Python 常缺 CA 包，退化到不校验（仅下载公开模型，可接受）。"""
@@ -48,6 +62,76 @@ CTX = make_ctx()
 
 def _human(n):
     return "%.1f MB" % (n / 1048576.0)
+
+
+def remote_size(base_url, fname):
+    """尝试获取远端文件总大小（用于完整性校验）。失败/超时返回 None（不判定）。"""
+    url = base_url + fname
+    req = urllib.request.Request(url)
+    req.add_header("Range", "bytes=0-0")
+    try:
+        resp = urllib.request.urlopen(req, context=CTX, timeout=15)
+        cr = resp.headers.get("Content-Range")
+        if cr and "/" in cr:
+            return int(cr.split("/")[-1])
+        cl = resp.headers.get("Content-Length")
+        if cl:
+            return int(cl)
+    except Exception:
+        return None
+    return None
+
+
+def scan_group(items, target):
+    """扫描一组文件，按状态分类。
+
+    返回 dict：
+      missing    目标不存在且无 .part -> 需下载
+      incomplete 存在 .part（上次中断）-> 需续传
+      suspicious 存在但大小为 0 或联网比对不符 -> 需重新下载
+      present    存在且校验通过 -> 跳过
+      todo       missing + incomplete + suspicious（真正要处理的）
+    """
+    missing, incomplete, suspicious, present = [], [], [], []
+    for fname, ms_base, _hf in items:
+        dest = os.path.join(target, fname)
+        part = dest + ".part"
+        if os.path.exists(dest) and not os.path.exists(part):
+            local = os.path.getsize(dest)
+            if local == 0:
+                suspicious.append(fname)
+            else:
+                expect = remote_size(ms_base, fname)
+                if expect is not None and local != expect:
+                    suspicious.append(fname)
+                else:
+                    present.append(fname)
+        elif os.path.exists(part):
+            incomplete.append(fname)
+        else:
+            missing.append(fname)
+    todo = missing + incomplete + suspicious
+    return {
+        "missing": missing,
+        "incomplete": incomplete,
+        "suspicious": suspicious,
+        "present": present,
+        "todo": todo,
+    }
+
+
+def print_report(title, rep):
+    print("  [检测] %s" % title)
+    if rep["present"]:
+        print("    完整(跳过): %d 个" % len(rep["present"]))
+    if rep["missing"]:
+        print("    缺失: %s" % ", ".join(rep["missing"]))
+    if rep["incomplete"]:
+        print("    未完成(续传): %s" % ", ".join(rep["incomplete"]))
+    if rep["suspicious"]:
+        print("    可疑/损坏(将重下): %s" % ", ".join(rep["suspicious"]))
+    if not rep["todo"]:
+        print("    全部就绪，无需下载。")
 
 
 def download_one(base_url, fname, dest):
@@ -95,45 +179,82 @@ def download_one(base_url, fname, dest):
     return True
 
 
-def main():
-    print("=" * 56)
-    print("VoxCPM2 主模型一键下载")
-    print("目标目录: " + TARGET)
-    print("主源: ModelScope   OpenBMB/VoxCPM2")
-    print("回退: HuggingFace  openbmb/VoxCPM2")
-    print("提示: 大文件可断点续传；如需停止按 Ctrl+C，重跑本脚本会续传。")
-    print("=" * 56)
-    print("")
-
-    ok_all = True
-    for fname in FILES:
-        dest = os.path.join(TARGET, fname)
-        if os.path.exists(dest) and not os.path.exists(dest + ".part"):
-            print("[跳过] 已存在: " + fname)
-            continue
+def _do_download(items, target, hf_fallback):
+    """按扫描结果下载指定文件。hf_fallback=True 时主源失败回退 HuggingFace。"""
+    ok = True
+    for fname, ms_base, hf_base in items:
+        dest = os.path.join(target, fname)
+        part = dest + ".part"
+        # 可疑项：先删本地坏文件，确保触发重新下载（否则 download_one 会当成已存在跳过）
+        if os.path.exists(dest) and not os.path.exists(part):
+            try:
+                os.remove(dest)
+            except Exception:
+                pass
         print("[下载] " + fname)
-        done = download_one(MS_BASE, fname, dest)
-        if not done:
+        done = download_one(ms_base, fname, dest)
+        if not done and hf_fallback and hf_base:
             print("  ModelScope 失败，尝试 HuggingFace 回退...")
-            done = download_one(HF_BASE, fname, dest)
+            done = download_one(hf_base, fname, dest)
         if not done:
-            print("[失败] " + fname + " 下载未完成。")
-            print("  可改用 README 中的网盘/夸克链接手动放置，或检查网络后重跑本脚本。")
-            ok_all = False
+            print("[失败] " + fname)
+            ok = False
         else:
             print("[完成] " + fname)
+    return ok
 
+
+def main():
+    print("=" * 56)
+    print("VoxCPM2 模型下载（先检测缺漏，再针对性下载）")
+    print("主模型目标: " + TARGET)
+    print("降噪目标:   " + ZIP_TARGET)
+    print("提示: 已完整下载的文件会自动跳过；中断可续传；重跑即补缺。")
+    print("=" * 56)
     print("")
-    if ok_all:
-        print("全部模型文件就绪。请回到程序主界面重新加载模型（或重启本程序）。")
+
+    print("== 第一阶段：检测缺失/损坏的模型文件 ==")
+    rep_main = scan_group(MAIN_ITEMS, TARGET)
+    print_report("主模型 VoxCPM2", rep_main)
+    os.makedirs(ZIP_TARGET, exist_ok=True)
+    rep_zip = scan_group(ZIP_ITEMS, ZIP_TARGET)
+    print_report("离线降噪 ZipEnhancer（可选项）", rep_zip)
+    print("")
+
+    if not rep_main["todo"] and not rep_zip["todo"]:
+        print("✅ 所有模型文件均已就绪，无需下载。直接启动程序即可。")
+        return
+
+    print("== 第二阶段：下载缺失/损坏的文件 ==")
+    print("")
+
+    print("--- 主模型 VoxCPM2 ---")
+    main_todo = [(f, MS_BASE, HF_BASE) for f in rep_main["todo"]]
+    ok_main = _do_download(main_todo, TARGET, hf_fallback=True)
+    print("")
+
+    print("--- 离线降噪 ZipEnhancer（可选项，失败不致命）---")
+    zip_todo = [(f, MS_ZIP_BASE, None) for f in rep_zip["todo"]]
+    ok_zip = _do_download(zip_todo, ZIP_TARGET, hf_fallback=False)
+    print("")
+
+    if ok_main:
+        print("✅ 主模型就绪。请回到程序主界面重新加载模型（或重启本程序）。")
     else:
-        print("部分文件未下载成功，请按上述提示处理后重跑「下载模型.bat」。")
+        print("⚠️ 部分主模型文件未下载成功，请检查网络后重跑「下载模型.bat」。")
         sys.exit(1)
+
+    if ok_zip:
+        print("✅ 降噪模型就绪。重启程序即可在「降噪」选项中启用离线降噪。")
+    else:
+        print("⚠️ 降噪模型部分文件未下载（可选项）。如需离线降噪，可手动从")
+        print("https://modelscope.cn/models/iic/speech_zipenhancer_ans_multiloss_16k_base 下载后放入")
+        print("models\\zipenhancer\\，或复制完整版安装目录下的 models\\zipenhancer\\ 文件夹。")
 
 
 if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        print("\n已中断。重新运行「下载模型.bat」可断点续传。")
+        print("\n已中断。重新运行「下载模型.bat」会先检测缺漏并断点续传。")
         sys.exit(130)

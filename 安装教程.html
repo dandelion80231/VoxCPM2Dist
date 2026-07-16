@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VoxCPM2 TTS 安装与使用图文教程</title>
+<style>
+  :root {
+    --bg: #f8fafc;
+    --surface: #ffffff;
+    --surface-2: #f1f5f9;
+    --text: #1e293b;
+    --text-2: #475569;
+    --text-3: #64748b;
+    --accent: #6366f1;
+    --accent-2: #4f46e5;
+    --border: #e2e8f0;
+    --shadow: 0 4px 6px -1px rgba(0,0,0,0.05), 0 2px 4px -2px rgba(0,0,0,0.05);
+    --shadow-lg: 0 20px 25px -5px rgba(0,0,0,0.08), 0 8px 10px -6px rgba(0,0,0,0.05);
+    --radius: 16px;
+    --radius-sm: 10px;
+  }
+
+  [data-theme="dark"] {
+    --bg: #0f172a;
+    --surface: #1e293b;
+    --surface-2: #334155;
+    --text: #f8fafc;
+    --text-2: #cbd5e1;
+    --text-3: #94a3b8;
+    --accent: #818cf8;
+    --accent-2: #6366f1;
+    --border: #334155;
+    --shadow: 0 4px 6px -1px rgba(0,0,0,0.3), 0 2px 4px -2px rgba(0,0,0,0.3);
+    --shadow-lg: 0 20px 25px -5px rgba(0,0,0,0.4), 0 8px 10px -6px rgba(0,0,0,0.3);
+  }
+
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    transition: background .3s ease, color .3s ease;
+  }
+
+  .container {
+    max-width: 880px;
+    margin: 0 auto;
+    padding: 48px 24px 80px;
+  }
+
+  header {
+    text-align: center;
+    margin-bottom: 56px;
+  }
+
+  header h1 {
+    font-size: 2.25rem;
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    margin-bottom: 12px;
+    background: linear-gradient(135deg, var(--accent), #a855f7);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  header .subtitle {
+    color: var(--text-3);
+    font-size: 0.95rem;
+  }
+
+  .theme-toggle {
+    position: fixed;
+    top: 20px;
+    right: 24px;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text-2);
+    cursor: pointer;
+    display: grid;
+    place-items: center;
+    box-shadow: var(--shadow);
+    transition: transform .2s ease, box-shadow .2s ease;
+    z-index: 100;
+  }
+
+  .theme-toggle:hover {
+    transform: scale(1.05);
+  }
+
+  section {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 32px;
+    margin-bottom: 28px;
+    box-shadow: var(--shadow);
+    transition: background .3s ease, border-color .3s ease;
+  }
+
+  section h2 {
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin-bottom: 20px;
+    padding-bottom: 12px;
+    border-bottom: 2px solid var(--border);
+  }
+
+  section h3 {
+    font-size: 1.15rem;
+    font-weight: 600;
+    margin: 28px 0 14px;
+    color: var(--accent-2);
+  }
+
+  p {
+    margin-bottom: 14px;
+    color: var(--text-2);
+  }
+
+  ol, ul {
+    margin: 0 0 18px 22px;
+    color: var(--text-2);
+  }
+
+  li {
+    margin-bottom: 8px;
+  }
+
+  strong {
+    color: var(--text);
+    font-weight: 600;
+  }
+
+  a {
+    color: var(--accent);
+    text-decoration: none;
+    word-break: break-all;
+  }
+
+  a:hover {
+    text-decoration: underline;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 20px 0 24px;
+    font-size: 0.95rem;
+    overflow: hidden;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+  }
+
+  th, td {
+    padding: 12px 14px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+  }
+
+  th {
+    background: var(--surface-2);
+    font-weight: 600;
+    color: var(--text);
+  }
+
+  tr:last-child td {
+    border-bottom: none;
+  }
+
+  tr:hover td {
+    background: rgba(99, 102, 241, 0.04);
+  }
+
+  code {
+    font-family: "SF Mono", Menlo, Consolas, "Courier New", monospace;
+    background: var(--surface-2);
+    padding: 2px 7px;
+    border-radius: 6px;
+    font-size: 0.88em;
+    color: var(--accent-2);
+  }
+
+  .callout {
+    padding: 16px 18px;
+    border-radius: var(--radius-sm);
+    margin: 16px 0;
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    font-size: 0.95rem;
+  }
+
+  .callout.warn {
+    background: rgba(234, 179, 8, 0.08);
+    border-left: 4px solid #eab308;
+  }
+
+  .callout.tip {
+    background: rgba(99, 102, 241, 0.08);
+    border-left: 4px solid var(--accent);
+  }
+
+  .callout-icon {
+    font-size: 1.2rem;
+    flex-shrink: 0;
+  }
+
+  .figure {
+    margin: 24px 0;
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow);
+  }
+
+  .figure img {
+    width: 100%;
+    display: block;
+  }
+
+  .figure figcaption {
+    padding: 12px 16px;
+    background: var(--surface-2);
+    color: var(--text-3);
+    font-size: 0.88rem;
+    text-align: center;
+  }
+
+  .kbd-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 14px;
+    margin: 18px 0;
+  }
+
+  .kbd-card {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 14px 16px;
+  }
+
+  .kbd-card code {
+    font-size: 1rem;
+    margin-right: 8px;
+  }
+
+  .kbd-card span {
+    color: var(--text-2);
+    font-size: 0.92rem;
+  }
+
+  .faq dt {
+    font-weight: 600;
+    color: var(--text);
+    margin-top: 20px;
+    margin-bottom: 6px;
+  }
+
+  .faq dd {
+    color: var(--text-2);
+    margin-left: 0;
+    padding-left: 0;
+  }
+
+  hr {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 36px 0;
+  }
+
+  footer {
+    text-align: center;
+    color: var(--text-3);
+    font-size: 0.88rem;
+    margin-top: 20px;
+  }
+
+  @media (max-width: 640px) {
+    .container {
+      padding: 32px 16px 60px;
+    }
+    header h1 {
+      font-size: 1.75rem;
+    }
+    section {
+      padding: 24px;
+    }
+    table {
+      font-size: 0.85rem;
+    }
+    th, td {
+      padding: 10px 8px;
+    }
+  }
+</style>
+</head>
+<body>
+  <button class="theme-toggle" onclick="toggleTheme()" title="切换主题">🌙</button>
+
+  <div class="container">
+    <header>
+      <h1>VoxCPM2 TTS 安装与使用图文教程</h1>
+      <div class="subtitle">适用版本：v5.3 / v5.3.1（无模型版）&nbsp;&nbsp;|&nbsp;&nbsp;Windows 10/11 64 位</div>
+    </header>
+
+    <section>
+      <h2>1. 下载安装包</h2>
+      <p>从下列地址下载对应安装包，按需选择：</p>
+      <table>
+        <thead>
+          <tr><th>类型</th><th>下载地址</th><th>文件</th><th>大小</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>完整版</strong></td>
+            <td><a href="https://www.alipan.com/s/jraDcmeo1y6">https://www.alipan.com/s/jraDcmeo1y6</a>（提取码 <code>i9u7</code>）</td>
+            <td><code>VoxCPM2_TTS_v5.3_Setup.exe</code> + 3 个 <code>.bin</code></td>
+            <td>约 5.24 GB</td>
+          </tr>
+          <tr>
+            <td><strong>无模型版</strong></td>
+            <td><a href="https://github.com/dandelion80231/VoxCPM2Dist/releases/tag/v5.3.1">https://github.com/dandelion80231/VoxCPM2Dist/releases/tag/v5.3.1</a></td>
+            <td><code>VoxCPM2_TTS_v5.3_nomodel_Setup.exe</code></td>
+            <td>约 1.56 GB</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="callout warn">
+        <span class="callout-icon">⚠️</span>
+        <div><strong>完整版 4 个文件必须放在同一文件夹</strong>，双击 <code>.exe</code> 即可，安装程序会自动读取 <code>.bin</code> 分卷。</div>
+      </div>
+      <div class="callout tip">
+        <span class="callout-icon">💡</span>
+        <div>无模型版是<strong>单个自包含 <code>.exe</code></strong>，无需额外文件，双击即安装。</div>
+      </div>
+    </section>
+
+    <section>
+      <h2>2. 安装</h2>
+      <ol>
+        <li>双击安装包（Windows 可能弹出「Windows 已保护你的电脑」——点击「更多信息」→「仍要运行」）。</li>
+        <li>在安装向导中选择安装目录（默认 <code>C:\Program Files\VoxCPM2 TTS</code>）。</li>
+        <li>勾选「创建桌面快捷方式」和「安装完成后立即运行」（可选）。</li>
+        <li>等待安装完成。完整版解压模型约需 1–2 分钟（SSD），无模型版更快。</li>
+      </ol>
+      <p>安装完成后，桌面会出现两个快捷方式：</p>
+      <ul>
+        <li><strong>VoxCPM2 TTS 中文版 - 交互菜单</strong>：命令行图形菜单</li>
+        <li><strong>VoxCPM2 TTS 中文版 - 网页界面</strong>：浏览器图形界面</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>3. 无模型版首次下载模型</h2>
+      <p>安装完成后首次启动，程序会提示「模型缺失」。请按以下任一方式获取模型：</p>
+      <div class="callout tip">
+        <span class="callout-icon">💡</span>
+        <div><strong>关于数字归一化</strong>：把「2025年」「5.6%」「GPT-5」转成中文读法是程序内置的<strong>正则规则</strong>（<code>text_norm_cn.py</code>，零依赖、无需下载），无模型版安装包已自带。本节「模型」仅指 <strong>VoxCPM2 主模型</strong>（必备）与可选的 <strong>ZipEnhancer 降噪模型</strong>。</div>
+      </div>
+
+      <h3>方式一：一键下载（推荐）</h3>
+      <ol>
+        <li>打开安装目录，双击 <strong><code>下载模型.bat</code></strong>。</li>
+        <li>脚本会优先从 <strong>ModelScope</strong> 下载（国内速度较快），失败自动回退 <strong>HuggingFace</strong>。</li>
+        <li>下载约 4.6 GB 的模型文件到 <code>安装目录\model\openbmb\VoxCPM2\</code>。</li>
+        <li>下载完成后重新启动程序即可。</li>
+      </ol>
+      <div class="callout tip">
+        <span class="callout-icon">💡</span>
+        <div>脚本会<strong>先检测缺漏再下载</strong>：启动后先扫描全部必需文件，已完整下载的自动跳过，只下载缺失或损坏的文件（支持断点续传），不会无脑重下。</div>
+      </div>
+
+      <h3>方式二：手动下载（可借多线程下载器加速）</h3>
+      <p>如果你有更快的多线程下载器（如 IDM、aria2、迅雷、Motrix 等），可手动从以下公开源拉取后放入指定目录，往往比脚本内置下载更快：</p>
+      <table>
+        <thead>
+          <tr><th>来源</th><th>地址</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>HuggingFace</td><td><a href="https://huggingface.co/openbmb/VoxCPM2">https://huggingface.co/openbmb/VoxCPM2</a></td></tr>
+          <tr><td>ModelScope</td><td><a href="https://modelscope.cn/models/OpenBMB/VoxCPM2">https://modelscope.cn/models/OpenBMB/VoxCPM2</a></td></tr>
+          <tr><td>夸克网盘（国内直连）</td><td><a href="https://pan.quark.cn/s/42994c0df601">https://pan.quark.cn/s/42994c0df601</a></td></tr>
+        </tbody>
+      </table>
+
+      <p><strong>放置位置</strong>：将下载到的文件放入</p>
+      <p><code>安装目录\model\openbmb\VoxCPM2\</code></p>
+      <p>必需文件包括：<code>model.safetensors</code>、<code>audiovae.pth</code>、<code>config.json</code>、<code>tokenizer*</code>、<code>tokenization_voxcpm2.py</code>。</p>
+
+      <div class="callout tip">
+        <span class="callout-icon">💡</span>
+        <div>手动放好后无需运行 <code>下载模型.bat</code>，直接重启程序即可识别模型。</div>
+      </div>
+
+      <h3>关于离线降噪模型（ZipEnhancer）</h3>
+      <p>无模型版<strong>安装包不含</strong>离线降噪模型（打包时整个 <code>app/models/</code> 目录被排除，主模型在 <code>app/model/</code>、降噪模型在 <code>app/models/zipenhancer/</code>，二者都在排除范围）。但<strong>无需手动处理</strong>：运行「下载模型.bat」会自动把主模型与降噪模型一并下载到位（降噪约 18MB，支持断点续传）。</p>
+      <ul>
+        <li>缺失时<strong>不影响基础合成</strong>：程序检测到 <code>models\zipenhancer\configuration.json</code> 不存在会自动降级，降噪变为空操作，语音照常生成。</li>
+        <li>若你用多线程下载器更快、或脚本下载失败，也可手动补回（任选其一）：
+          <div class="callout tip">
+            <span class="callout-icon">①</span>
+            <div><strong>方式一：从完整版拷贝（最简单）</strong> —— 把完整版安装目录里的 <code>models\zipenhancer\</code> 整个文件夹，复制到无模型版安装目录下同名位置 <code>安装目录\models\zipenhancer\</code>。</div>
+          </div>
+          <div class="callout tip">
+            <span class="callout-icon">②</span>
+            <div><strong>方式二：手动下载（可借多线程下载器加速）</strong> —— 从 ModelScope 下载 <code>iic/speech_zipenhancer_ans_multiloss_16k_base</code>（约 18MB）：
+              <table>
+                <thead><tr><th>来源</th><th>地址</th></tr></thead>
+                <tbody><tr><td>ModelScope</td><td><a href="https://modelscope.cn/models/iic/speech_zipenhancer_ans_multiloss_16k_base">https://modelscope.cn/models/iic/speech_zipenhancer_ans_multiloss_16k_base</a></td></tr></tbody>
+              </table>
+              命令行：<code>modelscope download --model iic/speech_zipenhancer_ans_multiloss_16k_base --local-dir 安装目录\models\zipenhancer</code>；或用 ModelScope 网页 / 多线程下载器把仓库文件取到本地后放入 <code>安装目录\models\zipenhancer\</code>。
+            </div>
+          </div>
+        </li>
+        <li>补回后<strong>重启程序</strong>即自动启用；网页界面会在路径面板显示「降噪模型：已内置（离线可用）」。</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>4. 使用交互菜单（CLI）</h2>
+      <p>双击桌面的<strong>交互菜单</strong>快捷方式，会打开 PowerShell 图形菜单：</p>
+      <figure class="figure">
+        <img src="assets/tutorial/cli-menu.png" alt="交互菜单">
+        <figcaption>交互菜单：快速命令 + 长文本配音 + 克隆功能</figcaption>
+      </figure>
+
+      <div class="kbd-grid">
+        <div class="kbd-card"><code>1</code><span>温柔女声直接合成</span></div>
+        <div class="kbd-card"><code>6</code><span>进入交互模式</span></div>
+        <div class="kbd-card"><code>9</code><span>长文本固定参考配音</span></div>
+        <div class="kbd-card"><code>10</code><span>长文本自播种配音</span></div>
+      </div>
+      <p>直接输入任意文本即可合成（>180 字自动走自播种长文本模式）。</p>
+    </section>
+
+    <section>
+      <h2>5. 使用网页界面</h2>
+      <p>双击桌面的<strong>网页界面</strong>快捷方式，浏览器会自动打开 <code>http://127.0.0.1:18978</code>（若端口被占用会自动顺延）。</p>
+      <p>网页界面提供三种音色工作模式：</p>
+
+      <h3>5.1 音色设计</h3>
+      <p>用文字描述你想要的音色，让模型直接「设计」声音。</p>
+      <figure class="figure">
+        <img src="assets/tutorial/web-ui-light-voice-design.png" alt="网页界面 - 音色设计">
+        <figcaption>网页界面浅色模式：音色设计</figcaption>
+      </figure>
+
+      <h3>5.2 固定参考克隆</h3>
+      <p>上传或录制一段参考音频，克隆该音色。</p>
+      <figure class="figure">
+        <img src="assets/tutorial/web-ui-light-reference-clone.png" alt="网页界面 - 固定参考克隆">
+        <figcaption>网页界面浅色模式：固定参考克隆</figcaption>
+      </figure>
+
+      <h3>5.3 自播种</h3>
+      <p>无需提供参考音频，自动生成参考音频完成音色统一。</p>
+      <figure class="figure">
+        <img src="assets/tutorial/web-ui-light-self-seeding.png" alt="网页界面 - 自播种">
+        <figcaption>网页界面浅色模式：自播种</figcaption>
+      </figure>
+
+      <h3>5.4 深色主题</h3>
+      <p>网页界面支持深色/浅色主题切换，照顾不同光线环境。</p>
+      <figure class="figure">
+        <img src="assets/tutorial/web-ui-dark-voice-design.png" alt="网页界面 - 深色主题">
+        <figcaption>网页界面深色模式：音色设计</figcaption>
+      </figure>
+    </section>
+
+    <section>
+      <h2>6. 常用参数说明</h2>
+      <table>
+        <thead>
+          <tr><th>参数</th><th>含义</th><th>建议</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>CFG 强度</code></td><td>音色与文本的贴合度</td><td>默认 2.0，越大越贴合文本</td></tr>
+          <tr><td><code>推理步数</code></td><td>扩散采样步数</td><td>默认 15，速度与质量平衡</td></tr>
+          <tr><td><code>淡入淡出</code></td><td>段间交叉淡入淡出时长</td><td>默认 80ms，减少拼接断裂</td></tr>
+          <tr><td><code>高级参数</code></td><td>分段长度（字）</td><td>默认 180，长文本自动分段</td></tr>
+          <tr><td><code>启用降噪</code></td><td>ZipEnhancer 离线降噪</td><td>完整版内置；无模型版缺失时为空操作</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>7. 输出与目录</h2>
+      <ul>
+        <li><strong>合成输出</strong>：默认保存到 <code>安装目录\output\</code></li>
+        <li><strong>网页端可自定义</strong>：顶部状态栏可点击修改模型目录、输出目录</li>
+        <li><strong>缓存目录</strong>：<code>安装目录\cache\voxcpm_web_ui\</code>（避免系统 Temp 被清理导致报错）</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>8. 常见问题</h2>
+      <dl class="faq">
+        <dt>Q：安装时进度条卡住很久？</dt>
+        <dd>完整版解压约 4.6GB 模型文件，首次安装需 1–2 分钟（SSD）。若超过 10 分钟不动，请检查 7za 是否被安全软件拦截。</dd>
+
+        <dt>Q：无模型版下载模型失败？</dt>
+        <dd>确认网络通畅，脚本会自动切换 ModelScope / HuggingFace。也可手动从 <a href="https://pan.quark.cn/s/42994c0df601">https://pan.quark.cn/s/42994c0df601</a> 下载模型文件放到 <code>model\openbmb\VoxCPM2\</code>。</dd>
+
+        <dt>Q：网页界面打不开？</dt>
+        <dd>检查端口 18978 是否被占用，程序会自动顺延端口；也可直接打开 <code>http://127.0.0.1:18978</code>。</dd>
+
+        <dt>Q：没有 NVIDIA 显卡能用吗？</dt>
+        <dd>可以。程序会自动 CPU 回退，速度较慢但可用。</dd>
+      </dl>
+    </section>
+
+    <hr>
+    <footer>
+      更多高级用法，请参考项目根目录 <code>README.md</code>
+    </footer>
+  </div>
+
+  <script>
+    function toggleTheme() {
+      const html = document.documentElement;
+      const btn = document.querySelector('.theme-toggle');
+      const isDark = html.getAttribute('data-theme') === 'dark';
+      if (isDark) {
+        html.removeAttribute('data-theme');
+        btn.textContent = '🌙';
+      } else {
+        html.setAttribute('data-theme', 'dark');
+        btn.textContent = '☀️';
+      }
+    }
+  </script>
+</body>
+</html>
