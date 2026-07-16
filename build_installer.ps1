@@ -1,4 +1,4 @@
-# VoxCPM2 TTS 安装包构建脚本（7z 预压缩 + InnoSetup）
+﻿# VoxCPM2 TTS 安装包构建脚本（7z 预压缩 + InnoSetup）
 # 用法：
 #   .\build_installer.ps1                      # 自动检测 7-Zip / NanaZip；缺失则自动下载静默安装 7-Zip
 #   .\build_installer.ps1 -CompressorPath "C:\...\NanaZipC.exe"   # 显式指定 nano zip / NanaZip 控制台程序
@@ -12,15 +12,22 @@
 [CmdletBinding()]
 param(
     # 可手动指定一个 7z 兼容的压缩程序（例如 nano zip / NanaZip 的控制台程序）。
-    [string]$CompressorPath
+    [string]$CompressorPath,
+    # 无模型版：打包时排除 app/model 与 app/models（约 4.7GB），产物写入 payload_nomodel，
+    # ISCC 传 /DVoxNoModel 产出 VoxCPM2_TTS_v{版本}_nomodel_Setup（文件名版本号取自 app/version.txt，约 0.6GB，可直接挂 GitHub Release）。
+    [switch]$NoModel
 )
 
 $ErrorActionPreference = 'Stop'
 $root    = Split-Path $MyInvocation.MyCommand.Path
 $app     = Join-Path $root 'app'
-$payload = Join-Path $root 'payload'
+$payload = if ($NoModel) { Join-Path $root 'payload_nomodel' } else { Join-Path $root 'payload' }
 $assets  = Join-Path $root 'installer\assets'
 New-Item -ItemType Directory -Force -Path $payload | Out-Null
+
+# 版本号单一数据源：从 app/version.txt 读取，传给 ISCC 覆盖 .iss 内的兜底值
+$ver = (Get-Content (Join-Path $app 'version.txt') -Encoding UTF8 -Raw).Trim() -replace '^\uFEFF',''
+if (-not $ver) { $ver = '5.3' }
 
 # ── 0. 定位 / 安装 7z 兼容压缩器 ──
 function Find-Compressor {
@@ -75,9 +82,36 @@ function Get-PESignedBitness {
     try {
         $b = [System.IO.File]::ReadAllBytes($Path)
         $pe = [System.BitConverter]::ToInt32($b, [System.BitConverter]::ToInt32($b, 0x3C))
-        $m = [System.BitConverter]::ToInt16($b, $pe + 4)
+        # 注意：Machine 字段必须用无符号读取；0x8664 作为有符号 short 会变成负数，
+        # 导致 x64 永远匹配不上（之前因此误判 7za 为 32 位并 shipping 32 位解压器）。
+        $m = [uint16][System.BitConverter]::ToUInt16($b, $pe + 4)
         if ($m -eq 0x8664) { return 'x64' } elseif ($m -eq 0x14C) { return 'x86' } else { return 'other' }
     } catch { return 'unknown' }
+}
+
+# 下载 7-Zip Extra 并取出其中的 64 位 7za.exe（x64\7za.exe，含 7za.dll/7zxa.dll）。
+# 用于「本机只有 32 位 7za.exe 且没有 x64 兄弟目录」时强制补齐 64 位解压器，
+# 避免安装器解压 >4GB 模型文件时卡死（致命坑）。
+function Fetch-X64SevenZip {
+    $extraUrls = @(
+        'https://7-zip.org/a/7z2602-extra.7z',
+        'https://7-zip.org/a/7z2301-extra.7z',
+        'https://github.com/ip7z/7zip/releases/download/26.02/7z2602-extra.7z'
+    )
+    $sevenLocal = @('C:\Program Files\7-Zip\7z.exe','C:\Program Files (x86)\7-Zip\7z.exe') |
+                  Where-Object { Test-Path $_ } | Select-Object -First 1
+    if (-not $sevenLocal) { return $null }
+    $extra = Join-Path $env:TEMP '7z-extra-auto.7z'
+    foreach ($u in $extraUrls) {
+        try {
+            if (-not (Test-Path $extra)) { Invoke-WebRequest -Uri $u -OutFile $extra -ErrorAction Stop }
+            $extraDir = Join-Path $env:TEMP ('7zextra_' + [guid]::NewGuid().ToString('N').Substring(0,8))
+            & $sevenLocal x $extra "-o$extraDir" -y | Out-Null
+            $cand = Join-Path $extraDir 'x64\7za.exe'
+            if (Test-Path $cand) { return $cand }
+        } catch { }
+    }
+    return $null
 }
 $sevenZipDir = Split-Path $sevenZip
 $src7za = Join-Path $sevenZipDir '7za.exe'
@@ -128,11 +162,22 @@ if (-not (Test-Path $src7za)) {
 }
 if (-not (Test-Path $src7za)) { Write-Error '未能取得 7za.exe。'; exit 1 }
 
-# 确保使用 64 位版本：若找到的是 32 位，且存在 x64 兄弟目录，则改用 x64
+# 确保使用 64 位版本：若找到的是 32 位 7za.exe，先找同目录 x64 兄弟，
+# 没有则下载 7-Zip Extra 取 x64 版（强制 64 位，绝不让 32 位 7za 进入 payload）。
 if ((Get-PESignedBitness $src7za) -ne 'x64') {
     $x64sib = Join-Path (Split-Path $src7za) 'x64\7za.exe'
-    if (Test-Path $x64sib) { $src7za = $x64sib }
-    else { Write-Warning '警告：取得的 7za.exe 不是 64 位，解压 >4GB 模型文件可能卡死。建议安装 64 位 7-Zip。' }
+    if (Test-Path $x64sib) {
+        $src7za = $x64sib
+        Write-Host '[2/4] 本机 7za 为 32 位，已改用同目录 x64 版本'
+    } else {
+        $dl = Fetch-X64SevenZip
+        if ($dl) {
+            $src7za = $dl
+            Write-Host '[2/4] 本机无 64 位 7za，已下载 7-Zip Extra 取 x64 版本'
+        } else {
+            Write-Warning '警告：未能取得 64 位 7za.exe，解压 >4GB 模型文件可能卡死。建议手动放置 64 位 7za.exe 到 payload。'
+        }
+    }
 }
 
 # 复制 7za.exe 及其依赖 7za.dll / 7zxa.dll（x64 版必须同目录）
@@ -147,17 +192,40 @@ Write-Host '[2/4] 已准备 7za.exe（x64）'
 # ── 3. 预压缩 app -> app.7z（扁平结构）──
 $app7z = Join-Path $payload 'app.7z'
 if (Test-Path $app7z) { Remove-Item $app7z -Force }
-Write-Host '[3/4] 正在压缩 app（LZMA2 多线程，7-Zip 26.02 已修复压 torch 大 DLL 的崩溃 bug，约 15-30 分钟）...'
+$logFile = if ($NoModel) { Join-Path $root 'build_7z_nomodel.log' } else { Join-Path $root 'build_7z.log' }
+# 无模型版：构建前把 app/model 与 app/models 临时移出（同盘 rename 瞬时完成，且只排除顶层这两个目录，
+# 绝不误伤 python_cuda 内嵌套的 model/models 子目录），构建完再移回，保证 app/ 完整无损。
+$moved = @()
+if ($NoModel) {
+    Write-Host '[3/4] 无模型版：临时移出 app/model、app/models（移到 app 目录之外，构建后移回）...'
+    $excludeDir = Join-Path $root '__nomodel_exclude'
+    New-Item -ItemType Directory -Force -Path $excludeDir | Out-Null
+    foreach ($m in @('model', 'models')) {
+        $src = Join-Path $app $m
+        if (Test-Path $src) {
+            $dst = Join-Path $excludeDir $m
+            Move-Item $src $dst -Force
+            $moved += @{ src = $src; dst = $dst }
+        }
+    }
+}
+$desc = if ($NoModel) { 'app（无模型版，已排除 model/models，约 0.6GB）' } else { 'app（LZMA2 多线程，7-Zip 26.02 已修复压 torch 大 DLL 的崩溃 bug，约 15-30 分钟）' }
+Write-Host "[3/4] 正在压缩 $desc..."
 # 先进入 app 目录再归档 *，避免把 app\ 前缀打进归档导致解压出现双层目录
-# 注：7z 输出（含报错）重定向到 build_7z.log，避免 | Out-Null 吞掉真实错误导致盲猜
+# 注：7z 输出（含报错）重定向到日志，避免 | Out-Null 吞掉真实错误导致盲猜
 Push-Location $app
 try {
-    & $sevenZip a $compressFlags $app7z '*' *> (Join-Path $root 'build_7z.log')
+    & $sevenZip a $compressFlags $app7z '*' *> $logFile
 } finally {
     Pop-Location
+    foreach ($mv in $moved) { Move-Item $mv.dst $mv.src -Force }
+    if ($NoModel) {
+        $ed = Join-Path $root '__nomodel_exclude'
+        if (Test-Path $ed) { Remove-Item $ed -Recurse -Force -ErrorAction SilentlyContinue }
+    }
 }
-if (-not (Test-Path $app7z)) { Write-Error "7z 压缩未产出 app.7z，详见 build_7z.log"; exit 1 }
-$logTail = Get-Content (Join-Path $root 'build_7z.log') -Tail 15 -ErrorAction SilentlyContinue
+if (-not (Test-Path $app7z)) { Write-Error "7z 压缩未产出 app.7z，详见 $logFile"; exit 1 }
+$logTail = Get-Content $logFile -Tail 15 -ErrorAction SilentlyContinue
 if ($logTail) { Write-Host "--- 7z 日志尾部 ---`n$($logTail -join "`n")" }
 $sizeGB = [math]::Round((Get-Item $app7z).Length / 1GB, 2)
 Write-Host "[3/4] app.7z 完成: $sizeGB GB"
@@ -176,9 +244,12 @@ $iscc = 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe'
 if (-not (Test-Path $iscc)) { $iscc = 'C:\Program Files\Inno Setup 6\ISCC.exe' }
 if (-not (Test-Path $iscc)) { Write-Error '未找到 ISCC.exe，请安装 InnoSetup 6。'; exit 1 }
 Write-Host '[4/4] 编译安装包（InnoSetup，仅打包 app.7z/7za/ico，很快）...'
+$issArgs = @((Join-Path $root 'installer\VoxCPM2_TTS.iss'))
+if ($NoModel) { $issArgs = @('/DVoxNoModel') + $issArgs }
+$issArgs = @("/DVersion=$ver") + $issArgs
 Push-Location $root
 try {
-    & $iscc (Join-Path $root 'installer\VoxCPM2_TTS.iss') | Out-Host
+    & $iscc @issArgs | Out-Host
 } finally {
     Pop-Location
 }

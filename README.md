@@ -17,12 +17,29 @@
    - 网盘分发下载（阿里云盘）：[https://www.alipan.com/s/jraDcmeo1y6](https://www.alipan.com/s/jraDcmeo1y6)　提取码：`i9u7`
    - 也可由你自己或他人从源码重新构建，见下方「构建说明」。
 2. **自行从源码构建**：clone 本仓库 → 按「构建说明」补齐全运行时与权重 → 运行 `build_installer.ps1`，重新生成 `output/` 安装包。
+3. **无模型版安装包（轻量，推荐带宽有限/国内用户）**：安装包不含模型权重（约 0.6 GB，可直接作为 GitHub Release 附件下载），安装后需自行获取模型。详见下方「无模型版说明」。
 
 > ⚠️ 安装包 4 个文件（`.exe` + 3×`.bin`）**必须放在一起**，分卷按文件名关联，少一个就装不了。
 
+### 无模型版说明（VoxCPM2_TTS_v5.3_nomodel_Setup）
+
+安装包**不含模型权重**（约 0.6 GB，远小于完整版 5.24 GB），适合带宽有限、或希望模型走更快国内源的用户。安装方式与普通版完全一致，区别仅在**安装后需自行放入模型**：
+
+1. 安装完成后首次启动会提示「模型缺失」——这是正常的，不是故障（网页端状态栏显示「模型缺失（请运行下载模型.bat）」，控制台也有明确指引）。
+2. 获取模型（任选其一）：
+   - **一键下载（推荐）**：双击安装目录下的 **`下载模型.bat`**（用随包 `python_cuda` 联网拉取，支持断点续传；HuggingFace 主源，失败自动回退 ModelScope）。
+   - **模型专用包**：从网盘下载模型专用 7z，解压到安装目录的 `model\openbmb\VoxCPM2`（与 `models\` 同级）。
+   - **手动下载**：从以下公开源下载后放入 `安装目录\model\openbmb\VoxCPM2\`：
+     - HuggingFace：[openbmb/VoxCPM2](https://huggingface.co/openbmb/VoxCPM2)
+     - ModelScope：[OpenBMB/VoxCPM2](https://modelscope.cn/models/OpenBMB/VoxCPM2)
+     - 夸克网盘（国内直连）：[pan.quark.cn/s/42994c0df601](https://pan.quark.cn/s/42994c0df601)
+3. 模型就位后重新启动程序即可使用。必需文件：`model.safetensors`、`audiovae.pth`、`config.json`、`tokenizer*`、`tokenization_voxcpm2.py`。
+
+> 可选降噪模型 ZipEnhancer（约 18MB）不随无模型版提供；如需离线降噪，把完整版 `models\zipenhancer\` 目录复制到安装目录即可（缺失时自动降级为空操作）。
+
 ## 版本历史
 
-- **v5.3（当前）**：**修复网页端 self-seeding 多段合成报错**——原缓存目录用系统临时目录 `AppData\Local\Temp\voxcpm_web_ui`，Windows 存储感知/磁盘清理会删掉该子目录，导致多段合成第 1 段写种子时 `sf.write` 报 `Error opening '...seed_xxx.wav': System error`、整段失败；已将缓存目录默认改到**安装目录下 `cache/voxcpm_web_ui`**（`TEMP_DIR = <安装根>/cache/voxcpm_web_ui`，按脚本位置解析，安装版与便携版均生效），并在写种子、上传参考音频前各加一次幂等 `mkdir` 双保险；`.iss` 版本号同步升至 `5.3`（重打包后安装包为 `VoxCPM2_TTS_v5.3_Setup`）。**已安装 v5.2 的用户无需重新下载安装包**：直接用本仓库 `app/Scripts/vox_web_ui.py` 覆盖安装目录下 `Scripts\vox_web_ui.py` 并**重启网页服务**即获得修复（对外分发的安装包已上传网盘、无法替换单文件，确认 v5.3 后需重打包再上传）。继承 v5.2 全部功能。
+- **v5.3（当前）**：**修复网页端 self-seeding 多段合成报错**——原缓存目录用系统临时目录 `AppData\Local\Temp\voxcpm_web_ui`，Windows 存储感知/磁盘清理会删掉该子目录，导致多段合成第 1 段写种子时 `sf.write` 报 `Error opening '...seed_xxx.wav': System error`、整段失败；已将缓存目录默认改到**安装目录下 `cache/voxcpm_web_ui`**（`TEMP_DIR = <安装根>/cache/voxcpm_web_ui`，按脚本位置解析，安装版与便携版均生效），并在写种子、上传参考音频前各加一次幂等 `mkdir` 双保险；`.iss` 版本号同步升至 `5.3`（重打包后安装包为 `VoxCPM2_TTS_v5.3_Setup`）。**已安装 v5.2 的用户无需重新下载安装包**：直接用本仓库 `app/Scripts/vox_web_ui.py` 覆盖安装目录下 `Scripts\vox_web_ui.py` 并**重启网页服务**即获得修复（对外分发的安装包已上传网盘、无法替换单文件，确认 v5.3 后需重打包再上传）。继承 v5.2 全部功能；并新增**无模型版安装包**（`VoxCPM2_TTS_v5.3_nomodel_Setup`，约 0.6GB，可直接挂 GitHub Release）与一键下载脚本 `下载模型.bat`/`download_model.py`——安装后自行获取模型即可（详见「无模型版说明」）。
 - **v5.2**：Apple 风格 Web UI 重做；安装向导新增「创建桌面快捷方式」与「立即运行」复选框；启动器 Banner 修复 CJK 中文双宽对齐；**修复安装器解压卡死（致命）**——原安装器自带的 7za 为 32 位，处理 >4GB 的模型权重 `model.safetensors`（约 4.6GB）时在文件写完后收尾阶段永久挂起，导致安装进度条几乎不动、数小时不结束（此前多次"卡死"均因此）；已替换为 **64 位 7za + 7za.dll/7zxa.dll**，并加装解压看门狗（45 分钟总上限 / 5 分钟无进度判卡死）与失败可读提示，`build_installer.ps1` 改为强制 x64 防止回归；此外修复**进度条无中间过程**：原进度读 7za 进度日志，但 7za 在输出重定向下不实时刷新（仅 0% 与 96% 两行），导致条 0%→100% 瞬跳，改为**双层进度估算**——构建时写入未压缩总大小、安装时按「解压目录实际大小」+「时间基线兜底（已用时间/估算总时长）」双源取大值，并做「只增不减 + 强制重绘」，彻底消除卡 1% 后猛跳与回退抖动，内部追踪日志实测 pct 曲线 t=1s→1%、t=15s→25%、t=19s→49%…t=57s→95% 单调平滑。继承 v5.0.2 全部功能。
 - **v5.1**：改动前界面兼容版（保留原 Web UI 风格，供需要旧界面的用户使用）。
 - **v5.0.2**：① 长文本分段合成**音色 / 音量统一**（段间 RMS 归一化 + 最终峰值限制，消除前后响度不一致）；② 历史记录播放按钮支持**暂停 / 继续**切换；③ 合成记录显示**默认文件名**并增加**清除 / 恢复**列表按钮；④ 直接输入 >180 字自动走**自播种长文本模式**（第 1 段当种子，比固定参考更快，且与网页端行为一致，整段音色统一）。

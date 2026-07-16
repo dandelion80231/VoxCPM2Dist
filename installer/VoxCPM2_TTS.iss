@@ -1,17 +1,26 @@
-#define MyAppName "VoxCPM2 TTS 中文版"
-#define MyAppVersion "5.3"
-#define MyPayload "..\payload"
+﻿#define MyAppName "VoxCPM2 TTS 中文版"
+; 版本号单一数据源：优先用构建脚本传来的 /DVersion，否则回退此处字面量
+#ifndef Version
+  #define Version "5.3"
+#endif
+#ifdef VoxNoModel
+  #define MyPayload "..\payload_nomodel"
+  #define MyOutputBase "VoxCPM2_TTS_v" + Version + "_nomodel_Setup"
+#else
+  #define MyPayload "..\payload"
+  #define MyOutputBase "VoxCPM2_TTS_v" + Version + "_Setup"
+#endif
 #define MyAssets "assets"
 
 [Setup]
 AppId={{VoxCPM2-TTS-ZH-5.0}
 AppName={#MyAppName}
-AppVersion={#MyAppVersion}
+AppVersion={#Version}
 AppPublisher=VoxCPM2
 DefaultDirName={autopf}\VoxCPM2 TTS
 DefaultGroupName={#MyAppName}
 OutputDir=..\output
-OutputBaseFilename=VoxCPM2_TTS_v5.3_Setup
+OutputBaseFilename={#MyOutputBase}
 Compression=lzma2/fast
 SolidCompression=no
 ArchitecturesInstallIn64BitMode=x64compatible

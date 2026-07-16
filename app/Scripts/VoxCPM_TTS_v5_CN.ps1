@@ -1,4 +1,4 @@
-﻿# VoxCPM2 TTS 启动器 v5.2 中文版
+﻿# VoxCPM2 TTS 启动器 中文版（版本号见 app/version.txt）
 #
 # [v5.2 改进]
 #   - 方式1/2：预生成多语调参考音频（cfg 3.0 / steps 20）
@@ -7,12 +7,41 @@
 
 $SCRIPT_DIR = Split-Path -Parent $PSCommandPath
 $APP_DIR   = Split-Path -Parent $SCRIPT_DIR
+# 版本号统一从 app/version.txt 读取（单一数据源，避免散落硬编码漏改）
+$VERSION = (Get-Content (Join-Path $APP_DIR 'version.txt') -Encoding UTF8 -Raw).Trim() -replace '^\uFEFF',''
+if (-not $VERSION) { $VERSION = '5.3' }
 $PYTHON    = Join-Path $APP_DIR "python_cuda\python.exe"
 $SCRIPT    = Join-Path $SCRIPT_DIR "voxcpm_tts_v5_longtext.py"
 
 # ---------- 模型/输出路径（离线优先使用随包模型） ----------
 $env:VOXCPM_MODEL_DIR = Join-Path $APP_DIR "model\openbmb\VoxCPM2"
 if (-not $env:HF_ENDPOINT) { $env:HF_ENDPOINT = "https://hf-mirror.com" }
+
+# ---------- 无模型版：缺失主模型时给出明确指引，并可选一键下载 ----------
+$modelSafetensors = Join-Path $APP_DIR "model\openbmb\VoxCPM2\model.safetensors"
+if (-not (Test-Path $modelSafetensors)) {
+    Write-Host ""
+    Write-Host "【提示】未检测到 VoxCPM2 主模型权重 (model.safetensors)。" -ForegroundColor Yellow
+    Write-Host "请通过以下任一方式获取后重启本程序：" -ForegroundColor Yellow
+    Write-Host "  1) 双击安装目录下的「下载模型.bat」一键下载（需联网）" -ForegroundColor Cyan
+    Write-Host "  2) 从网盘下载模型专用包，解压到 model\openbmb\VoxCPM2 目录" -ForegroundColor Cyan
+    Write-Host "  3) 从 HuggingFace(openbmb/VoxCPM2) 或 ModelScope 手动下载放入" -ForegroundColor Cyan
+    Write-Host ""
+    $ans = Read-Host "是否现在运行「下载模型.bat」下载模型？(Y/N)"
+    if ($ans -match '^[Yy]') {
+        & (Join-Path $APP_DIR "下载模型.bat")
+        if (-not (Test-Path $modelSafetensors)) {
+            Write-Host "【提示】下载未完成或失败，请按上述方式手动获取后重启。" -ForegroundColor Yellow
+            pause
+            exit
+        }
+        Write-Host "【完成】模型已就绪，继续启动..." -ForegroundColor Green
+    } else {
+        Write-Host "请先获取模型再使用本工具。" -ForegroundColor Yellow
+        pause
+        exit
+    }
+}
 $env:VOXCPM_OUTPUT_DIR = [System.Environment]::GetFolderPath('Desktop')
 
 # ---------- 桌面路径获取（兼容中文/英文系统） ----------
@@ -75,7 +104,7 @@ function Show-Banner {
     Write-Host "  V       OOO     X   X     CCC     P        M   M    22222 " -ForegroundColor Cyan
     Write-Host "+==========================================================+" -ForegroundColor Cyan
     Write-Host (Format-BannerLine "") -ForegroundColor Cyan
-    Write-Host (Format-BannerLine "VoxCPM2 语音合成工具 v5.2 音色统一版") -ForegroundColor Cyan
+    Write-Host (Format-BannerLine "VoxCPM2 语音合成工具 v$VERSION 音色统一版") -ForegroundColor Cyan
     Write-Host (Format-BannerLine "") -ForegroundColor Cyan
     Write-Host (Format-BannerLine "长文本配音 / 音色一致 / 交叉淡入淡出") -ForegroundColor Cyan
     Write-Host (Format-BannerLine "") -ForegroundColor Cyan

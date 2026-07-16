@@ -1,5 +1,5 @@
 ﻿"""
-VoxCPM2 Web UI — v5.2 一体化界面
+VoxCPM2 Web UI — 一体化界面（版本号见 app/version.txt）
 ================================
 本地 Web 服务器 + 浏览器 UI，无需安装任何依赖（除了 voxcpm 自带的）。
 启动后自动打开浏览器，访问 http://localhost:18978（端口被占用时自动顺延）
@@ -276,6 +276,29 @@ def resolve_model_dir(local_path: str = "") -> str:
     return MODEL_ID
 
 
+def model_present() -> bool:
+    """判断必需的 VoxCPM2 主模型权重是否存在（无模型版安装包需用户自行下载）。"""
+    mp = resolve_model_dir()
+    if not os.path.isdir(mp):
+        return False
+    return (os.path.isfile(os.path.join(mp, "model.safetensors"))
+            and os.path.isfile(os.path.join(mp, "config.json")))
+
+
+def _model_missing_detail() -> str:
+    """生成「模型缺失」的友好指引文本（控制台 / 异常信息通用）。"""
+    mp = resolve_model_dir()
+    return (
+        "未找到 VoxCPM2 主模型权重（model.safetensors）。\n"
+        "期望模型目录: " + mp + "\n"
+        "获取方式（任选其一）:\n"
+        "  1) 双击运行安装目录下的「下载模型.bat」一键下载（需联网，支持断点续传）；\n"
+        "  2) 从网盘下载模型专用包，解压到上述 model\\openbmb\\VoxCPM2 目录；\n"
+        "  3) 手动从 HuggingFace(openbmb/VoxCPM2) 或 ModelScope(OpenBMB/VoxCPM2) 下载后放入该目录。\n"
+        "放置完成后重新启动本程序即可。"
+    )
+
+
 def load_model(force_reload: bool = False):
     global _cached_model, _model_loading, _model_loaded, _model_error, _denoiser_available
     with state_lock:
@@ -287,6 +310,14 @@ def load_model(force_reload: bool = False):
         _model_error = None
 
     model_path = resolve_model_dir()
+
+    if not model_present():
+        msg = _model_missing_detail()
+        _model_error = msg
+        with state_lock:
+            _model_loading = False
+        print("[VoxCPM2] " + msg)
+        raise RuntimeError(msg)
 
     try:
         from voxcpm import VoxCPM
@@ -772,6 +803,23 @@ worker_thread.start()
 # ══════════════════════════════════════════════════════════
 #  Web UI（嵌入 HTML）
 # ══════════════════════════════════════════════════════════
+
+def get_app_version(fallback="5.3"):
+    """读取 app/version.txt 作为统一版本号数据源（单一可信来源）；
+    缺失或损坏时回退 fallback，保证程序仍可启动。"""
+    try:
+        p = Path(__file__).resolve().parent.parent / "version.txt"
+        if p.exists():
+            v = p.read_text(encoding="utf-8-sig").strip()
+            if v:
+                return v
+    except Exception:
+        pass
+    return fallback
+
+
+VERSION = get_app_version()
+
 HTML_CONTENT = r"""
 <!DOCTYPE html>
 <html lang="zh-CN">
@@ -1642,7 +1690,7 @@ HTML_CONTENT = r"""
   <button class="console-toggle" id="consoleToggle" onclick="toggleConsole()" title="显示/隐藏命令行窗口">🖥️</button>
   <div class="header-left">
     <div class="logo">Vox<span>CPM2</span></div>
-    <div style="font-size:13px;color:var(--text2);">语音合成工具 5.2</div>
+    <div style="font-size:13px;color:var(--text2);">语音合成工具 {VERSION}</div>
   </div>
   <div class="header-sample-rate">
     <span class="k">采样率</span>
@@ -2189,6 +2237,11 @@ async function pollStatus() {
     const dot = document.getElementById('modelDot');
     const txt = document.getElementById('modelStatus');
     const state = d.state || 'loading';
+    if (d.model_present === false) {
+      dot.className = 'status-dot error';
+      txt.textContent = '模型缺失（请运行下载模型.bat）';
+      return;
+    }
     dot.className = 'status-dot ' + state;
     const labels = { ready: '模型就绪', loading: '加载中...', error: '加载失败', idle: '未加载' };
     txt.textContent = labels[state] || state;
@@ -2675,7 +2728,7 @@ if HAS_WEB:
 
     @app.get("/")
     async def index():
-        return HTMLResponse(content=HTML_CONTENT, media_type="text/html")
+        return HTMLResponse(content=HTML_CONTENT.replace("{VERSION}", VERSION), media_type="text/html")
 
     @app.get("/VoxCPM_App.ico")
     async def serve_icon():
@@ -2722,7 +2775,7 @@ if HAS_WEB:
         with state_lock:
             state = "loading" if _model_loading else ("ready" if _model_loaded else "idle")
             err = _model_error
-        return JSONResponse({"state": state, "error": err})
+        return JSONResponse({"state": state, "error": err, "model_present": model_present()})
 
     @app.post("/api/load_model")
     async def load_model_endpoint():
@@ -2955,6 +3008,13 @@ def run_server(port: int = 18978, host: str = "127.0.0.1", hide_console: bool = 
         print("[错误] 缺少依赖: uvicorn, fastapi, starlette")
         print("请运行: pip install uvicorn fastapi")
         return
+
+    # 无模型版安装包：模型需用户自行下载。给出明确指引并保持命令行窗口可见，避免静默失败。
+    if not model_present():
+        print("\n" + "=" * 50)
+        print("[重要] " + _model_missing_detail())
+        print("=" * 50 + "\n")
+        hide_console = False
 
     import socket as _socket
 
