@@ -2,7 +2,7 @@
 
 > 版本：v5.3（离线 TTS 分发版；安装包文件名 VoxCPM2_TTS_v5.3_Setup）
 > 适用范围：基于 OpenBMB VoxCPM2 的中文 TTS 离线发行包（Windows x64 + NVIDIA CUDA，可 CPU 回退）
-> 整理日期：2026-07-12（更新：2026-07-13 补充 Banner 对齐坑、安装包选项、Releases 整理、计划任务重打包；2026-07-14 补 64 位 7za 致命坑 §3.6、进度条真实进度 §3.7；2026-07-14 补 v5.3 缓存目录改安装目录修复）
+> 整理日期：2026-07-12（更新：2026-07-13 补充 Banner 对齐坑、安装包选项、Releases 整理、计划任务重打包；2026-07-14 补 64 位 7za 致命坑 §3.6、进度条真实进度 §3.7；2026-07-14 补 v5.3 缓存目录改安装目录修复；2026-07-16 补 GitHub Release 大文件上传长任务三连击坑 §5.4、无模型版降噪被打包排除误伤、download_model.py 查缺检测+降噪自动下载、图文安装教程）
 > 目的：把本次开发踩过的坑、验证过的治本方案、以及用户明确约定的工作流固化下来，便于日后复用。
 
 ---
@@ -173,6 +173,27 @@ VoxCPM2Dist/
 - 本次整理：v5.1/v5.2 原只有 tag 无 Release → 补齐；Latest 从误标的 v5.0.2 改为 v5.2；4 个版本标题统一；功能按 git 实际归属（长文本/播放/记录/>180 自播种归 v5.0.2，v5.2 注明继承 + Apple UI 重做）。
 - ⚠️ annotated tag 的 message 笔误（v5.0.2 注解开头误写 `v5.2:`）改不了——需 `git tag -f` + 强推 tag，违反约定；靠 Release 标题正确覆盖即可。
 
+### 5.4 GitHub Release 大文件上传长任务坑（2026-07-16，本次三连击）
+
+> 把 1.56GB 安装包 `gh release upload` 到 GitHub Release 时，第一次用 PowerShell `run_in_background`、第二次用计划任务，都翻车。逐条记录根因与治本。
+
+- **坑 1：后台任务被看门狗回收（第一次失败）**
+  - PowerShell `run_in_background` 与 Agent 后台任务一样，**约 2 分钟被回收** → 子进程 `gh` 被 kill，上传中断。
+  - **后果**：Release 资产变空——旧附件已 `delete-asset`、新附件没传完，且 `gh` 已退出无重投。**这跟「长耗时 7z 打包」用计划任务绕过是同一类坑**：任何长网络/长计算任务都不能依赖 Agent/PowerShell 的后台，必须走 **Windows 计划任务**（Task Scheduler 托管，跨会话存活，已验证 14 分钟 7z 打包与本次上传都跑完）。
+- **坑 2：计划任务默认工作目录不是仓库（第二次失败）**
+  - 计划任务（SYSTEM / 指定账户）默认 cwd = `C:\Windows\System32`，`gh` 在那里执行 `release upload` 报 `fatal: not a git repository`（`gh` 依赖 git 定位仓库/凭据）→ delete/upload 全失败。
+  - **治本**：上传脚本里 `Set-Location` 到仓库根（或 `gh` 加 `--repo dandelion80231/VoxCPM2Dist`）。本次用 `Set-Location` 修复后重传正常。
+- **坑 3：计划任务会话不继承用户代理（隐性坑）**
+  - 计划任务账户不继承用户环境代理；若脚本依赖 `git config --get http.proxy` 读代理会读不到 → `gh` 连不上 GitHub（报 `502 ECONNREFUSED 127.0.0.1:26561` 或超时）。
+  - **治本**：脚本里**硬编码** Watt Toolkit 代理 `http://127.0.0.1:26561`（设 `$env:HTTP_PROXY`/`HTTPS_PROXY` 与 `$env:http_proxy`/`https_proxy`），不要依赖读取 git config。
+- **长网络上传铁律（三件套，缺一不可）**：**Windows 计划任务** + 脚本内 **`Set-Location` 到仓库根** + **硬编码代理**。
+- **上传脚本要点**：
+  - `gh release delete-asset <tag> <name>` 可能因已删而报 `not found`——忽略该错误继续；
+  - `gh release upload <tag> <file> --clobber` 覆盖同名附件；
+  - 日志用 `Add-Content` 写（**别用 `Start-Transcript`**，计划任务下可能无输出或被重定向吃掉）；日志 GBK 中文乱码不影响 `gh` 命令执行；
+  - 完成后清理脚本/日志并 `Unregister-ScheduledTask` 注销任务。
+- **断点判断**：上传完成看两点——`gh` 进程退出 + `gh release view <tag> --json assets` 资产大小等于新包（本次新包 `1678630580` ≠ 旧包 `1678643563`，据此区分替换成功）。
+
 ### README 图片（面向国内用户）
 - 公开仓库图片用 **jsDelivr CDN**：`https://cdn.jsdelivr.net/gh/<user>/<repo>@<branch>/<path>`，避免 `raw.githubusercontent.com` 在国内被墙只显示 alt 文字。
 
@@ -243,6 +264,17 @@ Start-ScheduledTask -TaskName "VoxCPM2_Build"
 - **v5.1 / v5.2 双版本发布已完成**：GitHub Releases 已补齐 v5.1/v5.2（Latest=v5.2），v5.2 最新安装包（含进度条最终修复）已重传网盘覆盖旧分发（链接不变）。
 - Python 3.13 兼容性未验证；如需追新版本，须重建 `python_cuda` + 重新打包 9.4GB，收益低。
 - 旧版安装包从 `output/VoxCPM2_TTS_v5.2_Setup.zip` 解压即可找回（`output/` 会随重建自动生成）。
+
+### 8.1 v5.3.1 交付记录（2026-07-16，仅标签、安装包版本号仍 v5.3）
+- **纯文档/脚本新增，不打新安装包版本**（APP 版本仍 `5.3`，只打 tag `v5.3.1` 防止与含模型版混淆）：无模型版用户下载完模型即与含模型版一致，故实际版本号继续 `5.3`。
+- **图文安装教程新增**：`安装教程.md` / `安装教程.html`（含明暗主题切换、响应式、下载地址全明文、手动下载源+放置路径、查缺检测说明）+ `assets/tutorial/` 5 张运行期 UI 截图；`README.md` 顶部加教程链接。
+- **`app/download_model.py` 重写增强**：
+  - 主模型 + 降噪两段下载；新增 `scan_group()` **先检测缺漏**（分类 缺失/未完成/可疑/完整，开头打印缺漏汇总），`remote_size()` 用 `Range: bytes=0-0` 取 `Content-Range` 总大小做**完整性校验**（断网返回 None 不误删好文件）；下载阶段只处理缺漏/可疑项。
+  - 降噪模型 ZipEnhancer 从 ModelScope 直链 `iic/speech_zipenhancer_ans_multiloss_16k_base` 获取（失败仅警告不致命）。
+  - 验证：`py_compile` 通过 + 离线单元测试（0 字节→suspicious / 不存在→missing / 非空→present，todo 列表正确）。
+- **无模型版单 exe 已含新脚本**：`output/VoxCPM2_TTS_v5.3_nomodel_Setup.exe`（1.56GB）重建（payload_nomodel/app.7z 7z 打包 ~14min + ISCC 重编）并替换 Release v5.3.1 附件；从包内提取 `download_model.py` 验证增强版已打包。
+- ⚠️ **无模型版降噪被打包误伤（项目事实）**：`build_installer.ps1` 排除整个 `app/model` 与 `app/models` 顶层目录，降噪 ZipEnhancer（仅 `app/models/zipenhancer/`，约 18MB）被一并排除 → 无模型版**不含**降噪。后端 `_resolve_zipenhancer_dir()` 在 `安装目录\models\zipenhancer` 与 `安装目录\Scripts\models\zipenhancer` 找 `configuration.json`，缺失则 `use_denoiser=False`（空操作降级，基础合成照常）。无模型版用户现可一键脚本补回降噪，或手动把完整版 `models\zipenhancer\` 拷到安装目录（放好重启自动启用）。**含模型版本（`app/models/zipenhancer/` 完整）本来就有降噪，无需补。**
+- 若要彻底内置降噪、免用户补：改 `build_installer.ps1` 排除逻辑只排除主模型 `app/model`、保留 `app/models/zipenhancer`，再重建 `payload_nomodel/app.7z`（~14min）+ ISCC 重编 + 重发 Release——改动较大，按用户意见本期未做。
 
 ---
 
