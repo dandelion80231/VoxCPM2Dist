@@ -4,12 +4,23 @@
 仅依赖 Python 标准库（urllib / ssl），无需 pip 安装，可直接用随包 python_cuda 运行。
 流程：先扫描全部必需文件 -> 列出缺失/损坏项 -> 再针对性下载（支持断点续传）。
 主模型 ModelScope 为主源、失败回退 HuggingFace；降噪模型仅 ModelScope 源（可选项）。
+
+本模块同时支持两种调用方式：
+  1) CLI：直接运行（python_cuda\\python.exe download_model.py），由 main() 打印进度；
+  2) 可编程：download_models(progress_cb=..., should_stop=...) 由网页后台线程调用，
+     通过 progress_cb 回报进度、should_stop 支持取消，无额外打印。
 """
 import os
 import sys
 import ssl
 import urllib.request
 import urllib.error
+
+
+class _DownloadCancelled(Exception):
+    """下载被 should_stop 中止时抛出（调用方据此标记 cancelled）。"""
+    pass
+
 
 FILES = [
     "model.safetensors",
@@ -134,8 +145,11 @@ def print_report(title, rep):
         print("    全部就绪，无需下载。")
 
 
-def download_one(base_url, fname, dest):
-    """下载单个文件（支持断点续传）。返回 True 成功 / False 失败。"""
+def download_one(base_url, fname, dest, progress_cb=None, file_index=0, file_count=0, should_stop=None):
+    """下载单个文件（支持断点续传）。返回 True 成功 / False 失败。
+
+    progress_cb(dict): 每个数据块回报当前文件进度；should_stop(): 返回 True 时中止。
+    """
     part = dest + ".part"
     start = os.path.getsize(part) if os.path.exists(part) else 0
     url = base_url + fname
@@ -160,6 +174,8 @@ def download_one(base_url, fname, dest):
     mode = "ab" if start > 0 else "wb"
     with open(part, mode) as f:
         while True:
+            if should_stop and should_stop():
+                raise _DownloadCancelled()
             buf = resp.read(1024 * 1024)
             if not buf:
                 break
@@ -171,6 +187,18 @@ def download_one(base_url, fname, dest):
             else:
                 sys.stdout.write("\r    %-22s %s" % (fname, _human(got)))
             sys.stdout.flush()
+            if progress_cb:
+                frac = (file_index - 1)
+                if total:
+                    frac += pct / 100.0
+                else:
+                    frac += 0.5
+                op = int(frac / file_count * 100) if file_count else (pct if total else 0)
+                progress_cb({
+                    "phase": "download", "file": fname, "downloaded": got, "total": total,
+                    "percent": pct if total else None, "file_index": file_index,
+                    "file_count": file_count, "overall_percent": op, "status": "downloading",
+                })
     sys.stdout.write("\n")
     if total and got < total:
         print("    [警告] %s 下载大小不足（%s / %s），可能中断" % (fname, _human(got), _human(total)))
@@ -179,10 +207,13 @@ def download_one(base_url, fname, dest):
     return True
 
 
-def _do_download(items, target, hf_fallback):
+def _do_download(items, target, hf_fallback, progress_cb=None, should_stop=None, label=""):
     """按扫描结果下载指定文件。hf_fallback=True 时主源失败回退 HuggingFace。"""
     ok = True
-    for fname, ms_base, hf_base in items:
+    n = len(items)
+    for i, (fname, ms_base, hf_base) in enumerate(items, start=1):
+        if should_stop and should_stop():
+            raise _DownloadCancelled()
         dest = os.path.join(target, fname)
         part = dest + ".part"
         # 可疑项：先删本地坏文件，确保触发重新下载（否则 download_one 会当成已存在跳过）
@@ -191,17 +222,71 @@ def _do_download(items, target, hf_fallback):
                 os.remove(dest)
             except Exception:
                 pass
+        if progress_cb:
+            progress_cb({
+                "phase": "download", "file": fname, "file_index": i, "file_count": n,
+                "status": "downloading", "message": "正在下载 %s（%s）" % (fname, label),
+            })
         print("[下载] " + fname)
-        done = download_one(ms_base, fname, dest)
+        done = download_one(ms_base, fname, dest, progress_cb=progress_cb,
+                            file_index=i, file_count=n, should_stop=should_stop)
         if not done and hf_fallback and hf_base:
             print("  ModelScope 失败，尝试 HuggingFace 回退...")
-            done = download_one(hf_base, fname, dest)
+            done = download_one(hf_base, fname, dest, progress_cb=progress_cb,
+                                file_index=i, file_count=n, should_stop=should_stop)
+        if progress_cb:
+            progress_cb({
+                "phase": "download", "file": fname, "file_index": i, "file_count": n,
+                "status": "done", "percent": 100,
+                "overall_percent": int(i / n * 100) if n else 100,
+                "message": "%s 下载完成" % fname,
+            })
         if not done:
             print("[失败] " + fname)
             ok = False
         else:
             print("[完成] " + fname)
     return ok
+
+
+def download_models(progress_cb=None, should_stop=None):
+    """可编程下载入口（供网页后台线程调用）。
+
+    progress_cb(dict): 阶段/进度回调，字段含
+        phase(scan|download|done) / status(scanning|downloading|done|error)
+        / file / file_index / file_count / downloaded / total / percent
+        / overall_percent / message
+    should_stop(): 返回 True 时中止当前下载（已下载部分保留为 .part，可续传）。
+    返回 (ok_main, ok_zip)。
+    """
+    if progress_cb:
+        progress_cb({"phase": "scan", "status": "scanning", "message": "正在检测模型文件…"})
+
+    rep_main = scan_group(MAIN_ITEMS, TARGET)
+    os.makedirs(ZIP_TARGET, exist_ok=True)
+    rep_zip = scan_group(ZIP_ITEMS, ZIP_TARGET)
+
+    if not rep_main["todo"] and not rep_zip["todo"]:
+        if progress_cb:
+            progress_cb({"phase": "done", "status": "done", "message": "模型文件均已就绪，无需下载。"})
+        return True, True
+
+    main_todo = [(f, MS_BASE, HF_BASE) for f in rep_main["todo"]]
+    zip_todo = [(f, MS_ZIP_BASE, None) for f in rep_zip["todo"]]
+
+    ok_main = _do_download(main_todo, TARGET, hf_fallback=True,
+                           progress_cb=progress_cb, should_stop=should_stop, label="主模型 VoxCPM2")
+    ok_zip = _do_download(zip_todo, ZIP_TARGET, hf_fallback=False,
+                          progress_cb=progress_cb, should_stop=should_stop, label="离线降噪 ZipEnhancer")
+
+    if progress_cb:
+        if ok_main:
+            progress_cb({"phase": "done", "status": "done",
+                         "message": "模型下载完成。请返回主界面加载模型（或重启程序）。"})
+        else:
+            progress_cb({"phase": "done", "status": "error",
+                         "message": "部分主模型文件未下载成功，请检查网络后重试。"})
+    return ok_main, ok_zip
 
 
 def main():
@@ -228,15 +313,8 @@ def main():
     print("== 第二阶段：下载缺失/损坏的文件 ==")
     print("")
 
-    print("--- 主模型 VoxCPM2 ---")
-    main_todo = [(f, MS_BASE, HF_BASE) for f in rep_main["todo"]]
-    ok_main = _do_download(main_todo, TARGET, hf_fallback=True)
-    print("")
-
-    print("--- 离线降噪 ZipEnhancer（可选项，失败不致命）---")
-    zip_todo = [(f, MS_ZIP_BASE, None) for f in rep_zip["todo"]]
-    ok_zip = _do_download(zip_todo, ZIP_TARGET, hf_fallback=False)
-    print("")
+    # 复用 download_models 下载逻辑（不传 progress_cb，仍由内部 print 输出进度）
+    ok_main, ok_zip = download_models(progress_cb=lambda p: None)
 
     if ok_main:
         print("✅ 主模型就绪。请回到程序主界面重新加载模型（或重启本程序）。")
@@ -257,4 +335,7 @@ if __name__ == "__main__":
         main()
     except KeyboardInterrupt:
         print("\n已中断。重新运行「下载模型.bat」会先检测缺漏并断点续传。")
+        sys.exit(130)
+    except _DownloadCancelled:
+        print("\n已取消下载。重新运行「下载模型.bat」会先检测缺漏并断点续传。")
         sys.exit(130)

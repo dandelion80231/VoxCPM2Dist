@@ -25,6 +25,17 @@ import tempfile
 # 手动加入以便导入同级模块（text_norm_cn 等），否则双击 .bat 会因
 # ModuleNotFoundError 静默崩溃
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+# 允许从 app/ 根导入 download_model（与 Scripts/ 同级的下载脚本）
+_APP_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _APP_ROOT not in sys.path:
+    sys.path.insert(0, _APP_ROOT)
+try:
+    import download_model as _dlmod
+    HAS_DL = True
+except Exception as _e_dl:  # 极端情况（如缺 urllib），仍保证 UI 可启动
+    _dlmod = None
+    HAS_DL = False
+    print("[VoxCPM2] 模型下载模块不可用: %s" % _e_dl)
 import threading
 import time
 import uuid
@@ -283,6 +294,69 @@ def model_present() -> bool:
         return False
     return (os.path.isfile(os.path.join(mp, "model.safetensors"))
             and os.path.isfile(os.path.join(mp, "config.json")))
+
+
+# ── 网页内模型下载（后台线程 + 进度）─────────────
+_dl_lock = threading.Lock()
+_dl_state = {
+    "status": "idle",        # idle | scanning | downloading | done | error | cancelled
+    "phase": None,
+    "file": None,
+    "file_index": 0,
+    "file_count": 0,
+    "downloaded": 0,
+    "total": None,
+    "percent": None,
+    "overall_percent": None,
+    "message": "",
+    "started_at": None,
+    "finished_at": None,
+}
+_dl_thread = [None]  # 用列表存线程引用，便于在函数内修改
+
+
+def _dl_progress(p: dict):
+    with _dl_lock:
+        for k, v in p.items():
+            if v is not None:
+                _dl_state[k] = v
+
+
+def _dl_run():
+    try:
+        if HAS_DL and _dlmod is not None:
+            ok_main, ok_zip = _dlmod.download_models(
+                progress_cb=_dl_progress,
+                should_stop=lambda: _dl_state.get("status") == "cancelled")
+        else:
+            ok_main, ok_zip = (False, False)
+        with _dl_lock:
+            if _dl_state.get("status") == "cancelled":
+                pass  # 已在 cancel 接口标记
+            elif not ok_main:
+                _dl_state["status"] = "error"
+                _dl_state["message"] = "主模型下载未完成，请检查网络后重试，或双击「下载模型.bat」手动下载。"
+                _dl_state["finished_at"] = time.time()
+            else:
+                _dl_state["status"] = "done"
+                _dl_state["phase"] = "done"
+                _dl_state["percent"] = 100
+                _dl_state["overall_percent"] = 100
+                _dl_state["message"] = "模型下载完成。可前往右上角「模型状态 → 加载模型」开始使用。"
+                _dl_state["finished_at"] = time.time()
+    except Exception as _e_cancel:
+        if _dlmod is not None and isinstance(_e_cancel, _dlmod._DownloadCancelled):
+            with _dl_lock:
+                _dl_state["status"] = "cancelled"
+                _dl_state["message"] = "已取消下载。可重新点击下载，已下载部分将自动续传。"
+                _dl_state["finished_at"] = time.time()
+        else:
+            with _dl_lock:
+                _dl_state["status"] = "error"
+                _dl_state["message"] = "下载失败: %s" % _e_cancel
+                _dl_state["finished_at"] = time.time()
+    finally:
+        _dl_thread[0] = None
 
 
 def _model_missing_detail() -> str:
@@ -1407,6 +1481,29 @@ HTML_CONTENT = r"""
     transition: width 0.3s;
   }
 
+  /* ── 模型下载卡片 ── */
+  .dl-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: var(--radius-lg);
+    padding: 14px 18px;
+    margin-bottom: 16px;
+    box-shadow: var(--shadow-sm);
+  }
+  .dl-card.done { border-left-color: var(--green); }
+  .dl-card.error { border-left-color: var(--red); }
+  .dl-card-head { display: flex; align-items: center; gap: 12px; }
+  .dl-icon { font-size: 22px; line-height: 1; }
+  .dl-head-text { flex: 0 1 auto; min-width: 0; }
+  .dl-title { font-size: 14px; font-weight: 600; }
+  .dl-sub { font-size: 12px; color: var(--text2); margin-top: 2px; line-height: 1.4; }
+  .dl-spacer { flex: 1 1 auto; }
+  .dl-progress { margin-top: 12px; }
+  .dl-progress-meta { display: flex; justify-content: space-between; align-items: center; margin-top: 6px; gap: 10px; }
+  .dl-fallback { font-size: 11px; color: var(--text2); margin-top: 10px; opacity: 0.85; line-height: 1.4; }
+  .dl-card .btn-primary:disabled { opacity: 0.6; cursor: default; }
+
   /* ── 历史记录 ── */
   .history-card {
     background: var(--surface);
@@ -1750,6 +1847,30 @@ HTML_CONTENT = r"""
   <!-- 主内容 -->
   <div class="content">
 
+    <!-- 模型下载卡片（无模型版首次使用 / 通用更新校验） -->
+    <div class="dl-card" id="dlCard" style="display:none">
+      <div class="dl-card-head">
+        <div class="dl-icon">📦</div>
+        <div class="dl-head-text">
+          <div class="dl-title" id="dlTitle">未检测到模型</div>
+          <div class="dl-sub" id="dlSub">需要下载 VoxCPM2 主模型（约 5GB，支持断点续传）后才能合成。</div>
+        </div>
+        <div class="dl-spacer"></div>
+        <button class="btn-primary" id="dlBtn" onclick="startModelDownload()">下载模型</button>
+        <button class="btn-secondary" id="dlCancelBtn" style="display:none" onclick="cancelModelDownload()">取消</button>
+      </div>
+      <div class="dl-progress" id="dlProgress" style="display:none">
+        <div class="progress-bar-wrap"><div class="progress-bar-fill" id="dlBar"></div></div>
+        <div class="dl-progress-meta">
+          <span class="progress-msg" id="dlMsg">准备中…</span>
+          <span class="progress-pct" id="dlPct"></span>
+        </div>
+      </div>
+      <div class="dl-fallback" id="dlFallback">
+        也可双击安装目录下的「下载模型.bat」手动下载，或用网盘模型包解压到模型目录。
+      </div>
+    </div>
+
     <!-- 参数调节 -->
     <div class="params-row">
       <div class="param-card">
@@ -1924,6 +2045,10 @@ HTML_CONTENT = r"""
       <button class="btn-secondary" onclick="selectFolder('modelDirInput','选择模型权重目录')">浏览...</button>
     </div>
     <div class="param-desc">模型下载/读取位置；修改后下次合成将重新加载模型。</div>
+    <div class="path-row" style="margin-top:10px">
+      <button class="btn-secondary" onclick="closeSettings(); startModelDownload()">下载 / 校验模型</button>
+      <span class="param-desc" style="margin:0">主模型缺失或需更新时可用；约 5GB，支持断点续传。</span>
+    </div>
     <div class="param-label" style="margin-top:14px">音频输出目录（VOXCPM_OUTPUT_DIR）</div>
     <div class="path-row">
       <input id="outputDirInput" class="path-input" placeholder="如 D:\VoxCPM_Outputs">
@@ -1948,6 +2073,117 @@ let currentJobId = null;
 let history = [];
 let currentPlayingWav = null;    // 当前播放器加载的音频文件名
 let currentPlayBtnId = null;     // 当前显示为暂停的按钮 id
+
+// ── 模型下载卡片状态 ─────────────────────────────
+let _dlState = { status: 'idle' };
+let _dlModelPresent = true;
+let _dlAvailable = true;
+let _dlPolling = false;
+
+function renderDl() {
+  const card = document.getElementById('dlCard');
+  if (!card) return;
+  if (!_dlAvailable) { card.style.display = 'none'; return; }
+  const st = _dlState.status || 'idle';
+  const active = (st === 'scanning' || st === 'downloading');
+  // 展示条件：模型缺失时始终显示；模型已存在时仅下载进行中显示
+  const show = (_dlModelPresent === false) || active;
+  card.style.display = show ? 'block' : 'none';
+  if (!show) return;
+
+  const title = document.getElementById('dlTitle');
+  const sub = document.getElementById('dlSub');
+  const btn = document.getElementById('dlBtn');
+  const cancelBtn = document.getElementById('dlCancelBtn');
+  const progress = document.getElementById('dlProgress');
+  const bar = document.getElementById('dlBar');
+  const msg = document.getElementById('dlMsg');
+  const pct = document.getElementById('dlPct');
+  const fallback = document.getElementById('dlFallback');
+
+  card.className = 'dl-card' + (st === 'done' ? ' done' : st === 'error' ? ' error' : '');
+
+  if (st === 'idle') {
+    title.textContent = '未检测到模型';
+    sub.textContent = '需要下载 VoxCPM2 主模型（约 5GB，支持断点续传）后才能合成。';
+    btn.style.display = 'inline-block'; btn.disabled = false; btn.textContent = '下载模型';
+    cancelBtn.style.display = 'none';
+    progress.style.display = 'none';
+    fallback.style.display = 'block';
+  } else if (active) {
+    title.textContent = st === 'scanning' ? '正在检测模型文件…' : '正在下载模型…';
+    sub.textContent = '下载在后台进行，可随时关闭本页；完成后回到「模型状态」加载即可。';
+    btn.style.display = 'none';
+    cancelBtn.style.display = 'inline-block';
+    progress.style.display = 'block';
+    fallback.style.display = 'none';
+    const p = (_dlState.overall_percent != null) ? _dlState.overall_percent
+            : (_dlState.percent != null ? _dlState.percent : 0);
+    bar.style.width = p + '%';
+    msg.textContent = _dlState.message || (_dlState.file ? ('当前: ' + _dlState.file) : '');
+    pct.textContent = (_dlState.percent != null ? _dlState.percent + '%' : '');
+    if (!_dlPolling) startDlPolling();
+  } else if (st === 'done') {
+    title.textContent = '模型下载完成';
+    sub.textContent = '可前往右上角「模型状态 → 加载模型」开始使用。';
+    btn.style.display = 'inline-block'; btn.disabled = true; btn.textContent = '已完成';
+    cancelBtn.style.display = 'none';
+    progress.style.display = 'block';
+    bar.style.width = '100%';
+    msg.textContent = _dlState.message || '';
+    pct.textContent = '100%';
+    fallback.style.display = 'none';
+  } else { // error / cancelled
+    title.textContent = st === 'error' ? '下载失败' : '已取消下载';
+    sub.textContent = st === 'error'
+      ? '请检查网络后重试，或双击「下载模型.bat」手动下载。'
+      : '可重新点击下载，已下载部分将自动续传。';
+    btn.style.display = 'inline-block'; btn.disabled = false; btn.textContent = '重新下载';
+    cancelBtn.style.display = 'none';
+    progress.style.display = 'none';
+    fallback.style.display = 'block';
+  }
+}
+
+function startDlPolling() {
+  if (_dlPolling) return;
+  _dlPolling = true;
+  const iv = setInterval(async () => {
+    try {
+      const r = await fetch('/api/download-model/status');
+      const d = await r.json();
+      _dlState = d;
+      renderDl();
+      if (d.status !== 'scanning' && d.status !== 'downloading') {
+        clearInterval(iv);
+        _dlPolling = false;
+        pollStatus();  // 刷新模型状态（下载完成后模型已就位）
+      }
+    } catch (e) {
+      clearInterval(iv);
+      _dlPolling = false;
+    }
+  }, 1000);
+}
+
+async function startModelDownload() {
+  try {
+    const r = await fetch('/api/download-model', { method: 'POST' });
+    const d = await r.json();
+    if (!d.ok) { showToast(d.message || '无法启动下载', 'error'); return; }
+    _dlState = { status: 'scanning', message: '正在检测模型文件…' };
+    renderDl();
+    startDlPolling();
+  } catch (e) {
+    showToast('启动下载失败: ' + e.message, 'error');
+  }
+}
+
+async function cancelModelDownload() {
+  try {
+    await fetch('/api/download-model/cancel', { method: 'POST' });
+  } catch (e) {}
+}
 
 // ── 初始化 ─────────────────────────────────────
 const VOICE_LIST = {
@@ -2237,9 +2473,14 @@ async function pollStatus() {
     const dot = document.getElementById('modelDot');
     const txt = document.getElementById('modelStatus');
     const state = d.state || 'loading';
+    // 同步下载卡片状态
+    _dlAvailable = !!d.download_available;
+    _dlModelPresent = d.model_present;
+    if (d.download) _dlState = d.download;
+    renderDl();
     if (d.model_present === false) {
       dot.className = 'status-dot error';
-      txt.textContent = '模型缺失（请运行下载模型.bat）';
+      txt.textContent = '模型缺失（可点页面内下载）';
       return;
     }
     dot.className = 'status-dot ' + state;
@@ -2775,7 +3016,47 @@ if HAS_WEB:
         with state_lock:
             state = "loading" if _model_loading else ("ready" if _model_loaded else "idle")
             err = _model_error
-        return JSONResponse({"state": state, "error": err, "model_present": model_present()})
+        with _dl_lock:
+            dl = dict(_dl_state)
+        return JSONResponse({"state": state, "error": err, "model_present": model_present(),
+                             "download_available": HAS_DL, "download": dl})
+
+    @app.post("/api/download-model")
+    async def api_download_model_start():
+        global _dl_thread
+        with _dl_lock:
+            st = _dl_state.get("status")
+            if st in ("scanning", "downloading"):
+                return JSONResponse({"ok": False, "message": "正在下载中，请稍候。"})
+            if model_present():
+                return JSONResponse({"ok": False, "message": "模型已存在，无需下载。"})
+            _dl_state.update({
+                "status": "scanning", "phase": "scan", "file": None,
+                "file_index": 0, "file_count": 0, "downloaded": 0, "total": None,
+                "percent": None, "overall_percent": 0,
+                "message": "正在检测模型文件…", "started_at": time.time(), "finished_at": None,
+            })
+        t = threading.Thread(target=_dl_run, daemon=True)
+        t.start()
+        with _dl_lock:
+            _dl_thread[0] = t
+        return JSONResponse({"ok": True, "message": "已开始下载。"})
+
+    @app.get("/api/download-model/status")
+    async def api_download_model_status():
+        with _dl_lock:
+            return JSONResponse(dict(_dl_state))
+
+    @app.post("/api/download-model/cancel")
+    async def api_download_model_cancel():
+        with _dl_lock:
+            st = _dl_state.get("status")
+            if st not in ("scanning", "downloading"):
+                return JSONResponse({"ok": False, "message": "当前没有进行中的下载。"})
+            _dl_state["status"] = "cancelled"
+            _dl_state["message"] = "已取消下载。可重新点击下载，已下载部分将自动续传。"
+            _dl_state["finished_at"] = time.time()
+        return JSONResponse({"ok": True, "message": "已请求取消；下载线程会在当前文件后停止。"})
 
     @app.post("/api/load_model")
     async def load_model_endpoint():
