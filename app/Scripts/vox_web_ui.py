@@ -208,6 +208,90 @@ def _toggle_console() -> bool:
     # 以真实窗口状态为准，避免内部状态与实际窗口不同步
     return _set_console_visible(not _is_console_visible())
 
+# ── 全局日志落盘 + 异常兜底 ──────────────────────────────
+# 让进程无论以何种方式启动（bat / 快捷方式 / 直接运行）、无论控制台是否隐藏，
+# 都保留最后的输出与崩溃堆栈，便于排查「点击下载后直接退出」这类无痕迹问题。
+def _install_diagnostics():
+    import traceback as _tb
+    try:
+        _log_dir = Path(__file__).resolve().parent.parent / "cache"
+        _log_dir.mkdir(parents=True, exist_ok=True)
+        _logf = open(_log_dir / "web_ui.log", "a", encoding="utf-8", buffering=1)
+
+        class _Tee:
+            def __init__(self, *streams):
+                self._streams = streams
+            def write(self, s):
+                for o in self._streams:
+                    try:
+                        o.write(s)
+                    except Exception:
+                        pass
+            def flush(self):
+                for o in self._streams:
+                    try:
+                        o.flush()
+                    except Exception:
+                        pass
+            def isatty(self):
+                for o in self._streams:
+                    try:
+                        if o.isatty():
+                            return True
+                    except Exception:
+                        pass
+                return False
+            def fileno(self):
+                for o in self._streams:
+                    try:
+                        return o.fileno()
+                    except Exception:
+                        pass
+                raise OSError("no fileno")
+
+        if sys.stdout is not None:
+            sys.stdout = _Tee(sys.stdout, _logf)
+        if sys.stderr is not None:
+            sys.stderr = _Tee(sys.stderr, _logf)
+    except Exception:
+        _logf = None
+
+    def _write_crash(tag, et, ev, tb):
+        try:
+            with open(Path(__file__).resolve().parent.parent / "cache" / "web_ui_crash.log",
+                      "a", encoding="utf-8") as f:
+                f.write("\n=== %s @ %s ===\n" % (tag, time.strftime("%Y-%m-%d %H:%M:%S")))
+                _tb.print_exception(et, ev, tb, file=f)
+        except Exception:
+            pass
+
+    def _main_hook(et, ev, tb):
+        _write_crash("未捕获异常(主线程)", et, ev, tb)
+        _tb.print_exception(et, ev, tb)
+
+    try:
+        sys.excepthook = _main_hook
+    except Exception:
+        pass
+
+    def _thread_hook(args):
+        _write_crash("线程未捕获异常", args.exc_type, args.exc_value, args.exc_traceback)
+        # 若崩溃发生在下载线程，把前端状态标记为错误，避免一直转圈
+        try:
+            with _dl_lock:
+                if _dl_state.get("status") in ("scanning", "downloading"):
+                    _dl_state["status"] = "error"
+                    _dl_state["message"] = "下载线程异常: %s" % args.exc_value
+        except Exception:
+            pass
+
+    try:
+        threading.excepthook = _thread_hook
+    except Exception:
+        pass
+
+_install_diagnostics()
+
 _load_config()
 
 # ── 任务队列 ──────────────────────────────────────────────
@@ -294,6 +378,36 @@ def model_present() -> bool:
         return False
     return (os.path.isfile(os.path.join(mp, "model.safetensors"))
             and os.path.isfile(os.path.join(mp, "config.json")))
+
+
+# 关键模型文件的「合理最小体积」下限（字节），用于检出下载不完整/损坏。
+_MODEL_MIN_SIZE = {
+    "model.safetensors": 1_000_000_000,   # 真实约 4.6GB
+    "audiovae.pth": 100_000_000,          # 真实约 0.6GB
+    "tokenizer.json": 1_000_000,          # 真实数 MB~数十 MB
+}
+
+
+def verify_model_files():
+    """逐项校验必需模型文件：是否存在、体积是否合理（可检出缺失/下载不全/损坏）。"""
+    mp = resolve_model_dir()
+    fnames = (_dlmod.FILES if (HAS_DL and _dlmod is not None) else
+              ["model.safetensors", "audiovae.pth", "config.json",
+               "special_tokens_map.json", "tokenizer.json",
+               "tokenizer_config.json", "tokenization_voxcpm2.py"])
+    files, missing = [], []
+    for f in fnames:
+        p = os.path.join(mp, f)
+        if os.path.isfile(p):
+            sz = os.path.getsize(p)
+            ok = sz > 0 and sz >= _MODEL_MIN_SIZE.get(f, 1)
+            issue = "" if ok else ("文件为空" if sz == 0 else "体积异常偏小，可能下载不完整")
+            files.append({"name": f, "ok": bool(ok), "size": int(sz), "issue": issue})
+        else:
+            missing.append(f)
+            files.append({"name": f, "ok": False, "size": 0, "issue": "文件缺失"})
+    all_ok = (not missing) and all(x["ok"] for x in files)
+    return files, missing, all_ok
 
 
 # ── 网页内模型下载（后台线程 + 进度）─────────────
@@ -1595,6 +1709,18 @@ HTML_CONTENT = r"""
   .toast.visible { opacity: 1; transform: none; }
   .toast.error { border-color: var(--red); color: var(--red); }
   .toast.success { border-color: var(--green); color: var(--green); }
+
+  /* ── 模型校验结果（设置弹窗内常驻显示）── */
+  .dl-verify { margin-top: 12px; border-top: 1px solid var(--border); padding-top: 10px; }
+  .dl-verify h4 { margin: 0 0 8px; font-size: 13px; font-weight: 600; }
+  .dl-verify .vf { display: flex; justify-content: space-between; align-items: center;
+                   gap: 10px; font-size: 12px; padding: 5px 0; border-bottom: 1px dashed var(--border); }
+  .dl-verify .vf .nm { font-family: var(--mono, monospace); flex: 1 1 auto; word-break: break-all; }
+  .dl-verify .vf .sz { opacity: .65; flex: 0 0 auto; margin: 0 8px; }
+  .dl-verify .vf .st { flex: 0 0 auto; font-weight: 600; }
+  .dl-verify .vf.ok .st { color: var(--green); }
+  .dl-verify .vf.bad .st { color: var(--red); }
+  .dl-verify .vf.bad .nm { color: var(--red); }
   /* ── 参考音频试听 / 终极克隆 / 高级 ── */
   .ref-preview { margin-top: 10px; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 10px; }
   .ref-preview-head { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: var(--text2); margin-bottom: 6px; }
@@ -2046,9 +2172,10 @@ HTML_CONTENT = r"""
     </div>
     <div class="param-desc">模型下载/读取位置；修改后下次合成将重新加载模型。</div>
     <div class="path-row" style="margin-top:10px">
-      <button class="btn-secondary" onclick="closeSettings(); startModelDownload()">下载 / 校验模型</button>
+      <button class="btn-secondary" onclick="startModelDownload()">下载 / 校验模型</button>
       <span class="param-desc" style="margin:0">主模型缺失或需更新时可用；约 5GB，支持断点续传。</span>
     </div>
+    <div id="verifyResult"></div>
     <div class="param-label" style="margin-top:14px">音频输出目录（VOXCPM_OUTPUT_DIR）</div>
     <div class="path-row">
       <input id="outputDirInput" class="path-input" placeholder="如 D:\VoxCPM_Outputs">
@@ -2170,13 +2297,34 @@ async function startModelDownload() {
   try {
     const r = await fetch('/api/download-model', { method: 'POST' });
     const d = await r.json();
+    if (d.verified) {            // 模型已存在：展示真实校验结果
+      renderVerify(d);
+      showToast(d.message, d.all_ok ? 'success' : 'error');
+      return;
+    }
     if (!d.ok) { showToast(d.message || '无法启动下载', 'error'); return; }
     _dlState = { status: 'scanning', message: '正在检测模型文件…' };
     renderDl();
     startDlPolling();
   } catch (e) {
-    showToast('启动下载失败: ' + e.message, 'error');
+    showToast('启动失败: ' + e.message, 'error');
   }
+}
+
+function renderVerify(d) {
+  const box = document.getElementById('verifyResult');
+  if (!box) return;
+  const files = d.files || [];
+  let html = '<div class="dl-verify"><h4>模型文件校验结果</h4>';
+  for (const f of files) {
+    const cls = f.ok ? 'ok' : 'bad';
+    const st = f.ok ? '✓ 正常' : ('✗ ' + (f.issue || '异常'));
+    const sz = f.size ? (f.size / 1048576).toFixed(1) + ' MB' : '-';
+    html += '<div class="vf ' + cls + '"><span class="nm">' + f.name +
+            '</span><span class="sz">' + sz + '</span><span class="st">' + st + '</span></div>';
+  }
+  html += '</div>';
+  box.innerHTML = html;
 }
 
 async function cancelModelDownload() {
@@ -3029,6 +3177,14 @@ if HAS_WEB:
             if st in ("scanning", "downloading"):
                 return JSONResponse({"ok": False, "message": "正在下载中，请稍候。"})
             if model_present():
+                # 模型已存在：执行真实校验，返回每个文件的状态，而不是一句空话
+                if HAS_DL and _dlmod is not None:
+                    files, missing, all_ok = verify_model_files()
+                    problems = len(missing) + sum(1 for x in files if not x["ok"])
+                    msg = ("模型文件完整 ✓（共 %d 个，校验通过）" % len(files)) if all_ok \
+                          else ("校验发现 %d 处异常，建议重新下载模型" % problems)
+                    return JSONResponse({"ok": True, "verified": True, "all_ok": all_ok,
+                                         "message": msg, "files": files, "missing": missing})
                 return JSONResponse({"ok": False, "message": "模型已存在，无需下载。"})
             _dl_state.update({
                 "status": "scanning", "phase": "scan", "file": None,
