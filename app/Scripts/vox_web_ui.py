@@ -108,10 +108,14 @@ _avg_lock = threading.Lock()
 _global_avg_seconds_per_char: float = 0.0
 _output_dir = Path(os.environ.get("VOXCPM_OUTPUT_DIR", str(Path.home() / "Desktop")))
 
+# 多音字 LoRA 权重路径（训练产物的 step_XXXXXXX 目录，或 lora_weights.safetensors/.ckpt 文件）。
+# 留空 = 不挂载 LoRA，使用原版模型；设置后下次合成将重载模型并挂载 LoRA。
+_lora_weights_path: str = ""
+
 
 # 启动时从配置文件恢复路径
 def _load_config():
-    global _output_dir
+    global _output_dir, _lora_weights_path
     try:
         if CONFIG_PATH.exists():
             with open(CONFIG_PATH, "r", encoding="utf-8") as f:
@@ -120,6 +124,8 @@ def _load_config():
                 _output_dir = Path(cfg["output_dir"])
             if cfg.get("model_dir"):
                 os.environ["VOXCPM_MODEL_DIR"] = cfg["model_dir"]
+            if cfg.get("lora_weights_path"):
+                _lora_weights_path = cfg["lora_weights_path"]
     except Exception:
         pass
 
@@ -131,6 +137,7 @@ def _save_config():
             json.dump({
                 "output_dir": str(_output_dir),
                 "model_dir": model_dir,
+                "lora_weights_path": _lora_weights_path,
             }, f, ensure_ascii=False, indent=2)
     except Exception as e:
         print(f"[VoxCPM2] 配置保存失败: {e}")
@@ -487,6 +494,25 @@ def _model_missing_detail() -> str:
     )
 
 
+def _build_lora_kwargs() -> dict:
+    """根据全局 _lora_weights_path 构建传给 VoxCPM.from_pretrained 的 LoRA 参数字典。
+
+    使用 lora_helper.resolve_lora 从训练产物的 lora_config.json 重建与训练一致的
+    LoRAConfig（关键是 r / alpha），规避「只给权重路径→自动建默认 r=8→与训练 r=32 形状
+    不匹配→加载失败」的隐藏坑。未启用 LoRA 时返回空字典。
+    """
+    if not _lora_weights_path:
+        return {}
+    try:
+        from lora_helper import resolve_lora
+    except Exception as e:
+        print(f"[LoRA] lora_helper 导入失败，忽略 LoRA：{e}")
+        return {}
+    kwargs: dict = {}
+    resolve_lora(kwargs, _lora_weights_path)
+    return kwargs
+
+
 def load_model(force_reload: bool = False):
     global _cached_model, _model_loading, _model_loaded, _model_error, _denoiser_available
     with state_lock:
@@ -531,7 +557,8 @@ def load_model(force_reload: bool = False):
             load_denoiser=use_denoiser,
             zipenhancer_model_id=zpath if use_denoiser else None,
             optimize=False,
-            device=device
+            device=device,
+            **_build_lora_kwargs()
         )
         _cached_model = model
         with state_lock:
@@ -1937,6 +1964,7 @@ HTML_CONTENT = r"""
       </select>
     </div>
     <div class="env-item env-path"><span class="k">模型目录</span><span class="v" id="envModelDir">-</span></div>
+    <div class="env-item env-path"><span class="k">多音字 LoRA</span><span class="v" id="envLora">未挂载</span></div>
     <div class="env-item env-path"><span class="k">输出目录</span><span class="v" id="envOutDir">-</span></div>
     <div class="env-item env-path"><span class="k">音频保存于</span><span class="v" id="envOutSub">-</span></div>
   </div>
@@ -2176,6 +2204,12 @@ HTML_CONTENT = r"""
       <span class="param-desc" style="margin:0">主模型缺失或需更新时可用；约 5GB，支持断点续传。</span>
     </div>
     <div id="verifyResult"></div>
+    <div class="param-label" style="margin-top:14px">多音字修正 LoRA 权重（可选）</div>
+    <div class="path-row">
+      <input id="loraInput" class="path-input" placeholder="如 C:\...\lora_output\step_0005000">
+      <button class="btn-secondary" onclick="selectFolder('loraInput','选择 LoRA 权重目录')">浏览...</button>
+    </div>
+    <div class="param-desc">训练产出的 step_XXXXXXX 目录（须含 lora_weights.safetensors 与 lora_config.json）。留空=使用原版模型；设置后下次合成将重载并挂载 LoRA 修正多音字读音。</div>
     <div class="param-label" style="margin-top:14px">音频输出目录（VOXCPM_OUTPUT_DIR）</div>
     <div class="path-row">
       <input id="outputDirInput" class="path-input" placeholder="如 D:\VoxCPM_Outputs">
@@ -2670,6 +2704,7 @@ async function openSettings() {
     const d = await r.json();
     document.getElementById('modelDirInput').value = (d.model_dir && d.model_dir.indexOf('未设置') < 0) ? d.model_dir : '';
     document.getElementById('outputDirInput').value = d.output_dir || '';
+    document.getElementById('loraInput').value = d.lora_weights_path || '';
   } catch {}
   document.getElementById('settingsModal').style.display = 'flex';
 }
@@ -2677,17 +2712,22 @@ function closeSettings() { document.getElementById('settingsModal').style.displa
 async function savePaths() {
   const model_dir = document.getElementById('modelDirInput').value.trim();
   const output_dir = document.getElementById('outputDirInput').value.trim();
+  const lora_weights_path = document.getElementById('loraInput').value.trim();
   try {
     const r = await fetch('/api/set_config', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model_dir, output_dir })
+      body: JSON.stringify({ model_dir, output_dir, lora_weights_path })
     });
     const d = await r.json();
     if (d.ok) {
-      showToast('路径已保存' + (model_dir ? '，下次合成将重载模型' : ''), 'success');
+      let msg = '路径已保存';
+      if (model_dir) msg += '，下次合成将重载模型';
+      if (lora_weights_path) msg += '（已挂载多音字 LoRA）';
+      showToast(msg, 'success');
       closeSettings();
       loadPaths();
+      refreshStatus();
     } else {
       showToast(d.error || '保存失败', 'error');
     }
@@ -2769,6 +2809,7 @@ function renderEnvBar(d) {
     el.title = v || '-';
   };
   setTxt('envModelDir', (d.model_dir && d.model_dir.indexOf('未设置') < 0) ? d.model_dir : '-');
+  setTxt('envLora', d.lora_weights_path ? ('已挂载: ' + d.lora_weights_path) : '未挂载');
   setTxt('envOutDir', d.output_dir);
   setTxt('envOutSub', d.output_subdir);
   // 采样率下拉：应用本地保存的输出采样率选择
@@ -3150,6 +3191,7 @@ if HAS_WEB:
             "model_dir": model_dir,
             "output_dir": str(_output_dir),
             "output_subdir": str(out_sub),
+            "lora_weights_path": _lora_weights_path,
             "python_version": ".".join(map(str, sys.version_info[:3])),
             "cuda_available": torch.cuda.is_available(),
             "device": _device_pref if _device_pref else ("cuda" if torch.cuda.is_available() else "cpu"),
@@ -3267,13 +3309,14 @@ if HAS_WEB:
 
     @app.post("/api/set_config")
     async def set_config(req: Request):
-        global _output_dir
+        global _output_dir, _lora_weights_path
         try:
             data = await req.json()
         except Exception:
             data = {}
         model_dir = (data.get("model_dir") or "").strip()
         output_dir = (data.get("output_dir") or "").strip()
+        lora_weights_path = (data.get("lora_weights_path") or "").strip()
         if output_dir:
             try:
                 p = Path(output_dir)
@@ -3290,11 +3333,19 @@ if HAS_WEB:
                 _model_loaded = False
                 _cached_model = None
                 _model_loading = False
+        if lora_weights_path != _lora_weights_path:
+            _lora_weights_path = lora_weights_path
+            # LoRA 权重变化必然需要重载模型（挂载/卸载 LoRA 都改模型结构）
+            with state_lock:
+                _model_loaded = False
+                _cached_model = None
+                _model_loading = False
         _save_config()
         return JSONResponse({
             "ok": True,
             "model_dir": os.environ.get("VOXCPM_MODEL_DIR", ""),
             "output_dir": str(_output_dir),
+            "lora_weights_path": _lora_weights_path,
         })
 
     @app.post("/api/set_device")

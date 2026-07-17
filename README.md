@@ -43,6 +43,7 @@
 ## 版本历史
 
 - **v5.3.3（发布 tag，APP 版本仍为 5.3）**：网页端新增「下载/校验模型」按钮——模型缺失时页面顶部自动出现「📦 下载模型」卡片，点击即在后台线程拉取模型（约 5GB，断点续传 + 实时进度条），无需切出浏览器；「⚙ 设置 → 下载/校验模型」也提供常驻入口用于更新/校验已装模型。后端新增 `POST /api/download-model`、`GET /api/download-model/status`、`POST /api/download-model/cancel` 三接口；`download_model.py` 重构为可编程 + 进度回调（`progress_cb`/`should_stop`），CLI 双击 `下载模型.bat` 行为不变。Web UI 保持单一源码，按钮按 `model_present()` 运行时显示，带模型版（模型已随包）自动隐藏，两个版本安装包无需分叉。**分发**：本次先将无模型版（单文件 exe，约 1.56GB）发布到 GitHub Release；带模型版（含完整模型，约 5GB）沿用云盘分发，后续随云盘重新上传即含本功能（代码同源，无需分别维护）。**2026-07-17 补丁**：该 tag 已重新指向修复 commit——模型已存在时点「下载/校验模型」按钮改为给出文件级反馈（设置弹窗常驻列出 7 个模型文件状态：✓完整 / ✗异常 + 体积 + 问题说明），启动脚本还原为简洁形态（双击快捷方式窗口一闪、服务后台静默运行）；安装包文件名仍为 `VoxCPM2_TTS_v5.3_nomodel_Setup.exe`（`.iss` 的 Version 固定 5.3，不含补丁号，与惯例一致）。
+- **v5.3.4（发布 tag，APP 版本仍为 5.3）**：新增「多音字修正 LoRA」微调通道——VoxCPM2 是 tokenizer-free 字符级 TTS，多音字读音靠上下文消歧，多数能读对、少数生僻字会读错；本版内置 LoRA 训练 + 挂载管线，可用少量录音微调出「多音字修正权重」，挂载后让模型在该类字上读得更准（根治方案，需自备 GPU + 朗读数据；VoxCPM2 **不支持** `{pinyin}`/`{ni3}` 音素注入，机械式拼音标注无效）。**训练侧**：`app/Scripts/training/`（核心 `train_voxcpm_finetune.py` 修复了 `datasets` 5.0.0 强制 `torchcodec`（离线包无 ffmpeg）崩溃——monkeypatch `Audio.decode_example` 改用 soundfile 恢复旧 dict 接口；`voxcpm_finetune_lora.yaml` 默认 `r=32, alpha=32` 仅挂 LM；`train_polyphone_lora.ps1` 一键启动）、数据准备 `prepare_polyphone_lora_data.py`/`bootstrap_lora_audio.py`、验证对比 `verify_lora.py`、`lora_helper.py`（从训练产出的 `lora_config.json` 重建 LoRAConfig，规避「只给权重路径→自动建默认 r=8→与训练 r=32 形状不匹配→加载失败」的隐藏坑）。**挂载侧**：网页 UI 设置新增「多音字 LoRA 权重」输入 + 状态栏显示「已挂载 / 未挂载」；CLI `--lora <目录>` 或环境变量 `VOXCPM_LORA`；留空 = 原版模型。LoRA 权重仅数 MB~数十 MB，可随包/网盘分发，用户填路径即启用，无需重训。训练数据 `lora_audio/` 与产出 `lora_output/` 已 gitignore，不入库（详见 README「多音字修正（LoRA）」一节）。
 - **v5.3.2（发布 tag，APP 版本仍为 5.3）**：数字/文本归一化（`text_norm_cn.py`）增强——① 普通整数上限 8→12 位（支持亿/兆级，`2亿`→`两亿元`），并新增「编号关键词守卫」（订单号/编号/账号/卡号/密码/手机/QQ/微信号/快递单号…后数字强制逐位读，复刻 WeTextProcessing whitelist 思路）；② 全角→半角归一化（中文逗号/句号保留以保 TTS 停顿）；③ 英文缩写拆字母（CPU→C P U），并新增「按单词读」白名单 `_ACRONYM_AS_WORD`（NASA/Intel/Google…约 80 条机构与品牌名按单词读，FBI/IBM/UN 等逐字母读缩写刻意排除）；④ 修复 `±5%` 漏读符号。详见《开发经验与避雷手册》§2.5。APP 版本号保持 5.3，仅以 tag v5.3.2 标记本次发布；已安装用户直接用本仓库 `app/Scripts/text_norm_cn.py` 覆盖安装目录下 `Scripts\text_norm_cn.py` 并重启网页服务/重跑 CLI 即生效。**分发采用双资产**：无模型版挂 GitHub Release（单文件 exe，约 1.56GB）；带模型版（含完整模型，约 5GB）随本次更新上传网盘（阿里云盘 / 夸克，链接见上方「下载方式」），覆盖旧分发、链接不变。
 - **v5.3.1（发布 tag，APP 版本仍为 5.3）**：安装器与下载脚本修复——① 无模型版排除逻辑修复（`build_installer.ps1` 将 `model/models` 真正移出 `app/` 外，安装包从约 4.88GB 降至约 1.56GB）；② `download_model.py` 主源对调为 ModelScope（本机 HuggingFace 不可达），失败回退 HuggingFace；③ `下载模型.bat` 改为 UTF-8 无 BOM + CRLF，修复中文乱码「不是内部或外部命令」；④ 版本号函数化，`app/version.txt` 为单一数据源。无模型版用户下完模型即与有模型版一致，故 APP 版本号保持 5.3，仅以 tag v5.3.1 标记本次发布。
 - **v5.3（当前）**：**修复网页端 self-seeding 多段合成报错**——原缓存目录用系统临时目录 `AppData\Local\Temp\voxcpm_web_ui`，Windows 存储感知/磁盘清理会删掉该子目录，导致多段合成第 1 段写种子时 `sf.write` 报 `Error opening '...seed_xxx.wav': System error`、整段失败；已将缓存目录默认改到**安装目录下 `cache/voxcpm_web_ui`**（`TEMP_DIR = <安装根>/cache/voxcpm_web_ui`，按脚本位置解析，安装版与便携版均生效），并在写种子、上传参考音频前各加一次幂等 `mkdir` 双保险；`.iss` 版本号同步升至 `5.3`（重打包后安装包为 `VoxCPM2_TTS_v5.3_Setup`）。**已安装 v5.2 的用户无需重新下载安装包**：直接用本仓库 `app/Scripts/vox_web_ui.py` 覆盖安装目录下 `Scripts\vox_web_ui.py` 并**重启网页服务**即获得修复（对外分发的安装包已上传网盘、无法替换单文件，确认 v5.3 后需重打包再上传）。继承 v5.2 全部功能；并新增**无模型版安装包**（`VoxCPM2_TTS_v5.3_nomodel_Setup`，约 1.56GB，可直接挂 GitHub Release）与一键下载脚本 `下载模型.bat`/`download_model.py`——安装后自行获取模型即可（详见「无模型版说明」）。
@@ -522,6 +523,40 @@ yarl==1.24.2
 ```
 
 > 说明：`site-packages` 中另有 `pip` 安装器本身（不计入上述依赖）。离线降噪与 Web UI 所需依赖已统一合并进上表，无需额外安装。
+
+## 多音字修正（LoRA）
+
+VoxCPM2 是 tokenizer-free、字符级 TTS，多音字读音主要靠上下文消歧，多数能读对，少数生僻字可能读错。本分发包内置 **LoRA 微调通道**，可用少量录音微调出一份「多音字修正权重」，挂载后让模型在该类字上读得更准（根治方案，需自备 GPU + 朗读数据）。
+
+> 说明：VoxCPM2 **不支持** `{pinyin}`/`{ni3}` 这类音素注入（那是 CosyVoice 的特性），机械式拼音标注对其无效。多音字纠正的可用路径为：同音字替换（改显示文本）、pypinyin 读音预览（非破坏式）、或 LoRA 微调（本节）。
+
+### 训练（在 GPU 机上）
+
+1. **准备数据**：录制含多音字的朗读音频，按句序命名 `001.wav`、`002.wav`…（与 `app/Scripts/polyphone_sentences.txt` 提供的 ~200 句句式对应），然后生成清单：
+   ```powershell
+   cd app\Scripts
+   ..\..\python_cuda\python.exe prepare_polyphone_lora_data.py `
+       --sentences polyphone_sentences.txt --audio-dir <录音目录> `
+       --out lora_data\train.jsonl
+   ```
+   （也支持 `--audio-glob "*.wav"` 或 `--manifest <csv>`，csv 含 `text,audio` 两列；`--val-split 0.1` 可划验证集。）
+2. **启动训练**：
+   ```powershell
+   powershell -ExecutionPolicy Bypass -File train_polyphone_lora.ps1
+   ```
+   默认配置 `voxcpm_finetune_lora.yaml`：`r=32, alpha=32`，对 LM 与 DiT 模块挂 LoRA。训练产出在 `app/Scripts/lora_output/step_XXXXXXX/`（含 `lora_weights.safetensors` 与 `lora_config.json`）。
+3. **验证**：用 `verify_lora.py` 分别合成「基线（无 LoRA）」与「挂载 LoRA」的 20 句难读多音字句，听同名 wav 对比：
+   ```powershell
+   ..\..\python_cuda\python.exe verify_lora.py --model-dir <模型目录> --out-dir verify_baseline
+   ..\..\python_cuda\python.exe verify_lora.py --model-dir <模型目录> --lora-dir lora_output\step_XXXXXXX --out-dir verify_lora
+   ```
+
+### 使用（挂载 LoRA 权重）
+
+- **网页 UI**：设置 →「多音字修正 LoRA 权重」填入训练产出的 `step_XXXXXXX` 目录 → 保存（下次合成自动重载并挂载；留空=原版模型）。状态栏会显示「多音字 LoRA：已挂载 / 未挂载」。
+- **命令行**：`--lora <step_XXXXXXX 目录>`，或设环境变量 `VOXCPM_LORA=<目录>`；`--show-config` 可查看当前挂载状态。
+
+> 提示：LoRA 权重体积小（仅 adapter，数 MB~数十 MB），可随包分发或放网盘，用户填入路径即可启用，无需重训。
 
 ## 原始资源
 

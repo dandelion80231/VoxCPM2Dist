@@ -30,3 +30,8 @@ ehthumbs.db
 Desktop.ini
 .DS_Store
 nul
+
+# ===== 多音字 LoRA 训练运行时数据（用户自备录音 / 训练产出权重，不入版本库）=====
+app/Scripts/lora_audio/
+app/Scripts/lora_output/
+.tmp_train/

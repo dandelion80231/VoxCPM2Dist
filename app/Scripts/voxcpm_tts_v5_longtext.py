@@ -34,6 +34,9 @@ MODEL_ID = "openbmb/VoxCPM2"
 LOCAL_MODEL_PATH = os.environ.get("VOXCPM_MODEL_DIR", "")
 DEVICE = "cuda" if os.environ.get("VOXCPM_DEVICE", "") else "auto"
 DEFAULT_OUTPUT_DIR = Path(os.environ.get("VOXCPM_OUTPUT_DIR", str(Path.home() / "Desktop")))
+# 多音字修正 LoRA 权重路径（训练产出的 step_XXXXXXX 目录，或 lora_weights.safetensors/.ckpt 文件）。
+# 可通过环境变量 VOXCPM_LORA 或命令行 --lora 指定。空 = 不挂载 LoRA，使用原版模型。
+LORA_WEIGHTS_PATH = os.environ.get("VOXCPM_LORA", "")
 MAX_CHUNK_SIZE = 240
 
 
@@ -67,10 +70,19 @@ def load_model(no_cache: bool = False, force_reload: bool = False):
                 print(f"[降噪] 离线降噪模型已启用: {zpath}")
             except Exception as e:
                 print(f"[降噪] 模型加载失败，降噪不可用: {e}")
+        # 多音字 LoRA 挂载：从训练产出的 lora_config.json 重建 LoRAConfig（关键 r/alpha），
+        # 规避「只给权重路径→自动建默认 r=8→与训练 r=32 形状不匹配→加载失败」的隐藏坑。
+        lora_kwargs: dict = {}
+        if LORA_WEIGHTS_PATH:
+            try:
+                from lora_helper import resolve_lora
+                resolve_lora(lora_kwargs, LORA_WEIGHTS_PATH)
+            except Exception as e:
+                print(f"[LoRA] 加载辅助失败，将不使用 LoRA: {e}")
         if LOCAL_MODEL_PATH and os.path.isdir(LOCAL_MODEL_PATH):
-            model = VoxCPM.from_pretrained(LOCAL_MODEL_PATH, load_denoiser=use_denoiser, zipenhancer_model_id=zpath if use_denoiser else None, optimize=False, device=DEVICE)
+            model = VoxCPM.from_pretrained(LOCAL_MODEL_PATH, load_denoiser=use_denoiser, zipenhancer_model_id=zpath if use_denoiser else None, optimize=False, device=DEVICE, **lora_kwargs)
         else:
-            model = VoxCPM.from_pretrained(MODEL_ID, load_denoiser=use_denoiser, zipenhancer_model_id=zpath if use_denoiser else None, optimize=False, device=DEVICE)
+            model = VoxCPM.from_pretrained(MODEL_ID, load_denoiser=use_denoiser, zipenhancer_model_id=zpath if use_denoiser else None, optimize=False, device=DEVICE, **lora_kwargs)
     except Exception as e:
         print(f"[错误] 模型加载失败: {e}")
         raise
@@ -472,6 +484,8 @@ def main():
     parser.add_argument("-t", "--text", type=str, help="要合成的文本")
     parser.add_argument("-f", "--file", type=str, help="输入文本文件路径")
     parser.add_argument("-o", "--output", type=str, default=None, help="输出 WAV 文件路径")
+    parser.add_argument("--lora", type=str, default=None,
+                        help="多音字修正 LoRA 权重目录/文件路径（step_XXXXXXX 目录，或 lora_weights.safetensors/.ckpt）。指定后挂载 LoRA 修正读音；也可用环境变量 VOXCPM_LORA")
     parser.add_argument("--dir", type=str, default=None, help="输出目录（默认桌面）")
     parser.add_argument("--no-baseline", action="store_true", help="不生成基线参考音频")
 
@@ -513,6 +527,11 @@ def main():
 
     args = parser.parse_args()
 
+    # 命令行 --lora 优先于环境变量 VOXCPM_LORA
+    if args.lora:
+        global LORA_WEIGHTS_PATH
+        LORA_WEIGHTS_PATH = args.lora.strip()
+
     if args.version:
         print("VoxCPM TTS v5.2 CN — 音色统一版")
         sys.exit(0)
@@ -534,6 +553,7 @@ def main():
         print(f"  NORMALIZE:       {args.normalize}")
         print(f"  CROSSFADE_MS:    {args.crossfade}")
         print(f"  UPDATE_REF:      {args.update_ref}")
+        print(f"  LORA:            {LORA_WEIGHTS_PATH or '(未挂载，使用原版模型)'}")
         sys.exit(0)
 
     import torch

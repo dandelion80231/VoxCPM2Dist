@@ -1,0 +1,55 @@
+# VoxCPM2 多音字纠正 LoRA 微调配置模板
+# 路径相对于本文件所在目录（app/Scripts/training/）：
+#   ../../model/openbmb/VoxCPM2   -> app/model/openbmb/VoxCPM2
+#   ../lora_audio/train.jsonl     -> app/Scripts/lora_audio/train.jsonl（自举合成脚本产出）
+#   ../lora_output                -> app/Scripts/lora_output
+# 在你的 GPU 机上训练前，请确认 pretrained_path / train_manifest 指向真实路径。
+# 数据获取二选一：
+#   A. 免录制（推荐）：python bootstrap_lora_audio.py --ref 参考音.wav  -> 产出 lora_audio/train.jsonl
+#   B. 手动录制：按 polyphone_sentences.txt 句序录 001.wav…  -> python prepare_polyphone_lora_data.py
+#                   --sentences ../polyphone_sentences.txt --audio-dir 录音目录 --out ../lora_data/train.jsonl
+
+pretrained_path: ../../model/openbmb/VoxCPM2
+train_manifest: ../lora_audio/train.jsonl
+val_manifest: ""
+sample_rate: 16000        # 必须与 AudioVAE 编码器输入采样率一致（VoxCPM2 = 16000）
+out_sample_rate: 48000    # 仅用于 TensorBoard 音频日志回放
+batch_size: 2
+grad_accum_steps: 8       # 有效批次 = batch_size × grad_accum_steps = 16
+num_workers: 2   # Windows(spawn)下每个 worker 是完整 torch 进程；RAM 紧张时降到 1 进一步减负（数据加载非瓶颈，不必贪多）
+num_iters: 1000
+log_interval: 10
+valid_interval: 500
+save_interval: 500
+learning_rate: 0.0001
+weight_decay: 0.01
+warmup_steps: 100
+max_steps: 1000
+max_batch_tokens: 8192
+max_grad_norm: 1.0         # 梯度裁剪；0 = 关闭
+save_path: ../lora_output
+tensorboard: ../lora_output/logs
+lambdas:
+  loss/diff: 1.0
+  loss/stop: 1.0
+
+# LoRA 配置（推理端必须用训练保存的 lora_config.json 重建，保证 r/alpha 一致）
+# ⚠️ 多音字修复场景：只要改读音、不动音色！
+#   - enable_lm=true  : 改 base_lm + residual_lm（文本→语义/读音映射，多音字在这里）
+#   - enable_dit=false : 不动 feat_decoder（声学/音色）。音色在推理时由
+#                        reference_wav_path 的 ref_audio tokens 克隆，与 LoRA 通道隔离。
+#                        若打开 dit，LoRA 会扰动声学渲染器 → 改变音色，违背"音色让模型自己解决"的初衷。
+#   - enable_proj=false: 投影层同理不动，保持跨音色兼容。
+lora:
+  enable_lm: true
+  enable_dit: false
+  enable_proj: false
+  r: 32
+  alpha: 32
+  dropout: 0.0
+
+# 分发选项（可选）
+# - distribute=false（默认）：把 pretrained_path 记为 base_model
+# - distribute=true：把 hf_model_id 记为 base_model（需填 hf_model_id）
+# hf_model_id: "openbmb/VoxCPM2"
+# distribute: true

@@ -2,7 +2,7 @@
 
 > 版本：v5.3（离线 TTS 分发版；安装包文件名 VoxCPM2_TTS_v5.3_Setup）
 > 适用范围：基于 OpenBMB VoxCPM2 的中文 TTS 离线发行包（Windows x64 + NVIDIA CUDA，可 CPU 回退）
-> 整理日期：2026-07-12（更新：2026-07-13 补充 Banner 对齐坑、安装包选项、Releases 整理、计划任务重打包；2026-07-14 补 64 位 7za 致命坑 §3.6、进度条真实进度 §3.7；2026-07-14 补 v5.3 缓存目录改安装目录修复；2026-07-16 补 GitHub Release 大文件上传长任务三连击坑 §5.4、无模型版降噪被打包排除误伤、download_model.py 查缺检测+降噪自动下载、图文安装教程）
+> 整理日期：2026-07-12（更新：2026-07-13 补充 Banner 对齐坑、安装包选项、Releases 整理、计划任务重打包；2026-07-14 补 64 位 7za 致命坑 §3.6、进度条真实进度 §3.7；2026-07-14 补 v5.3 缓存目录改安装目录修复；2026-07-16 补 GitHub Release 大文件上传长任务三连击坑 §5.4、无模型版降噪被打包排除误伤、download_model.py 查缺检测+降噪自动下载、图文安装教程；2026-07-17/18 补 §4.4 训练期 torchcodec 强制依赖坑 + 训练慢 compute-bound 诊断）
 > 目的：把本次开发踩过的坑、验证过的治本方案、以及用户明确约定的工作流固化下来，便于日后复用。
 
 ---
@@ -172,6 +172,12 @@ VoxCPM2Dist/
 ### 4.3 Python 版本要求（已写入 README + requirements.txt）
 - 随包固定 **3.12.10**；从源码构建请用 **3.12.x**；**Python 3.13 未验证**（torch CUDA 轮子/依赖可能不兼容）。
 - 版本是**有意 pin 死**的兼容性锁，不要随意升（曾踩坑：pip 自动拉 `torch 2.13.0+cpu` 导致 CUDA 失效）。
+
+### 4.4 训练模式 `datasets` 5.0.0 强制 `torchcodec`（离线包无 ffmpeg）崩溃（2026-07-17 定位 + monkeypatch 修复）
+- **根因**：`datasets` 5.0.0 的 `features/audio.py` 在 `decode=True` 时硬性要求 `torchcodec`（其又依赖 ffmpeg），离线发行包不含 ffmpeg → `ImportError: To support decoding audio data, please install 'torchcodec'.`；且新接口返回 `AudioDecoder` 对象，与 voxcpm 2.0.3 旧 dict 接口（`audio["array"]`/`audio["sampling_rate"]`）冲突。
+- **修复（方案 A，最低风险）**：在 `train_voxcpm_finetune.py` 的 voxcpm import 之后、`train()` 之前 monkeypatch `datasets.features.Audio.decode_example`，改用 `soundfile` 解码并 return 旧 dict 接口（`{"array":..., "sampling_rate":...}`）。已验证：复现崩溃点 `ds[0]["audio"]` 返回正确 dict、1183 条路径 0 缺失。
+- **为何不升级 voxcpm / 降级 datasets**：升级 voxcpm 仍依赖 torchcodec+ffmpeg（AudioDecoder 仍需 ffmpeg），且 2.0.3 已是 PyPI 最新，升级引入全链路回归；降级 datasets 收益同 A 但风险更大。保持 monkeypatch 最稳。
+- **性能观察（重要，别误判卡死/内存）**：训练日志被 `log_interval`（yaml 默认 10）节流，仅 step 0/10/20… 打印一行；GPU 利用率 100% = 计算打满（本机 8GB 卡约 ~145s/step，1000 步≈40h），**不是卡死也不是内存换页**（内存仅 71% 占用即证）。诊断训练慢先 `nvidia-smi` 看 GPU 利用率 vs `Get-CimInstance Win32_OperatingSystem` 看内存，区分 compute-bound（硬件天花板，只能减 `num_iters`）与 swap-bound（降 `num_workers`/关程序）。
 
 ---
 
