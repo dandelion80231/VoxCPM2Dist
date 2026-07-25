@@ -35,3 +35,6 @@ nul
 app/Scripts/lora_audio/
 app/Scripts/lora_output/
 .tmp_train/
+
+# ===== 本地运行时配置（含机器专属绝对路径，不入库）=====
+app/Scripts/voxcpm_web_config.json

@@ -111,6 +111,9 @@ _output_dir = Path(os.environ.get("VOXCPM_OUTPUT_DIR", str(Path.home() / "Deskto
 # 多音字 LoRA 权重路径（训练产物的 step_XXXXXXX 目录，或 lora_weights.safetensors/.ckpt 文件）。
 # 留空 = 不挂载 LoRA，使用原版模型；设置后下次合成将重载模型并挂载 LoRA。
 _lora_weights_path: str = ""
+# LoRA 实际加载结果（模型加载后填充），供状态面板如实显示，避免「假成功」。
+_lora_load_info: tuple = None   # (loaded_count, skipped_count) 或 None（尚未加载/未配置）
+_lora_resolve_error: str = ""   # resolve_lora 失败原因（路径错/配置坏等），空=未失败
 
 
 # 启动时从配置文件恢复路径
@@ -494,23 +497,30 @@ def _model_missing_detail() -> str:
     )
 
 
-def _build_lora_kwargs() -> dict:
-    """根据全局 _lora_weights_path 构建传给 VoxCPM.from_pretrained 的 LoRA 参数字典。
+def _build_lora_kwargs():
+    """构建传给 VoxCPM.from_pretrained 的 LoRA 参数字典，并返回解析状态。
+
+    返回 (kwargs, info)：
+    - kwargs：含 lora_config / lora_weights_path（失败时为 {}）。
+    - info：resolve_lora 的结构化状态（ok / reason / r / alpha …），供状态面板如实显示，
+      杜绝「路径填错却谎称已挂载」的静默失败。
 
     使用 lora_helper.resolve_lora 从训练产物的 lora_config.json 重建与训练一致的
-    LoRAConfig（关键是 r / alpha），规避「只给权重路径→自动建默认 r=8→与训练 r=32 形状
-    不匹配→加载失败」的隐藏坑。未启用 LoRA 时返回空字典。
+    LoRAConfig（关键是 r / alpha），规避「只给权重路径→自动建默认 r=8→与训练 r 形状
+    不匹配→加载失败」的隐藏坑。
     """
+    global _lora_resolve_error
     if not _lora_weights_path:
-        return {}
+        return {}, {"ok": False, "reason": "未配置 LoRA 权重路径"}
     try:
         from lora_helper import resolve_lora
     except Exception as e:
         print(f"[LoRA] lora_helper 导入失败，忽略 LoRA：{e}")
-        return {}
+        return {}, {"ok": False, "reason": f"lora_helper 导入失败：{e}"}
     kwargs: dict = {}
-    resolve_lora(kwargs, _lora_weights_path)
-    return kwargs
+    kwargs, info = resolve_lora(kwargs, _lora_weights_path)
+    _lora_resolve_error = "" if info.get("ok") else info.get("reason", "未知原因")
+    return kwargs, info
 
 
 def load_model(force_reload: bool = False):
@@ -552,14 +562,28 @@ def load_model(force_reload: bool = False):
         import torch
         device = _device_pref if _device_pref else ("cuda" if torch.cuda.is_available() else "cpu")
         print(f"[VoxCPM2] 正在加载模型: {model_path} (device={device})")
+        # 清掉上一次加载遗留的 LoRA 状态，避免陈旧信息误导状态面板
+        global _lora_load_info
+        _lora_load_info = None
+        lora_kwargs, _lora_info = _build_lora_kwargs()
         model = VoxCPM.from_pretrained(
             model_path,
             load_denoiser=use_denoiser,
             zipenhancer_model_id=zpath if use_denoiser else None,
             optimize=False,
             device=device,
-            **_build_lora_kwargs()
+            **lora_kwargs
         )
+        # 捕获 LoRA 实际加载结果，供状态面板如实显示（不再谎称「已挂载」）
+        if getattr(model, "_lora_attempted", False):
+            lk = getattr(model, "_lora_loaded_keys", None)
+            sk = getattr(model, "_lora_skipped_keys", None)
+            _lora_load_info = (
+                len(lk) if lk is not None else None,
+                len(sk) if sk is not None else None,
+            )
+        else:
+            _lora_load_info = None
         _cached_model = model
         with state_lock:
             _model_loaded = True
@@ -2671,6 +2695,8 @@ async function pollStatus() {
 
     // 同步顶部环境栏里的「模型状态」下拉
     renderModelState(state, state === 'ready');
+    // 同步多音字 LoRA 挂载状态（每 3s 自动刷新，避免模型加载完后仍显示「待加载」）
+    renderLoraStatus(d.lora);
   } catch {}
 }
 
@@ -2723,7 +2749,7 @@ async function savePaths() {
     if (d.ok) {
       let msg = '路径已保存';
       if (model_dir) msg += '，下次合成将重载模型';
-      if (lora_weights_path) msg += '（已挂载多音字 LoRA）';
+      if (lora_weights_path) msg += '，多音字 LoRA 已配置（下次合成或点「加载模型」时挂载）';
       showToast(msg, 'success');
       closeSettings();
       loadPaths();
@@ -2796,6 +2822,24 @@ async function handleModelAction(action) {
   setTimeout(loadPaths, 200);
 }
 
+function renderLoraStatus(lora) {
+  const loraEl = document.getElementById('envLora');
+  lora = lora || {};
+  let loraText = '未挂载', loraCls = '';
+  if (lora.status === 'pending') {
+    loraText = '已配置，待加载';
+  } else if (lora.status === 'ok') {
+    loraText = '已挂载 ' + lora.loaded + ' 参数' + (lora.skipped ? ('（跳过 ' + lora.skipped + '）') : '');
+    loraCls = ' good';
+  } else if (lora.status === 'failed') {
+    loraText = '挂载失败：' + (lora.resolve_error || '未知原因');
+    loraCls = ' bad';
+  }
+  loraEl.textContent = loraText;
+  loraEl.title = lora.path || loraText;
+  loraEl.className = 'v' + loraCls;
+}
+
 function renderEnvBar(d) {
   document.getElementById('envPy').textContent = d.python_version || '-';
   const dev = (d.device || 'cpu').toLowerCase();
@@ -2809,7 +2853,8 @@ function renderEnvBar(d) {
     el.title = v || '-';
   };
   setTxt('envModelDir', (d.model_dir && d.model_dir.indexOf('未设置') < 0) ? d.model_dir : '-');
-  setTxt('envLora', d.lora_weights_path ? ('已挂载: ' + d.lora_weights_path) : '未挂载');
+  // 多音字 LoRA 真实挂载状态（不再谎称「已挂载」）
+  renderLoraStatus(d.lora);
   setTxt('envOutDir', d.output_dir);
   setTxt('envOutSub', d.output_subdir);
   // 采样率下拉：应用本地保存的输出采样率选择
@@ -3177,6 +3222,33 @@ if HAS_WEB:
     async def list_voices():
         return JSONResponse({"voices": VOICE_PRESETS})
 
+    def _build_lora_status() -> dict:
+        """汇总 LoRA 的真实挂载状态，供前端状态面板如实展示（不再谎称「已挂载」）。
+
+        状态机：
+          not_configured  未填写 LoRA 路径
+          pending         已配置，但模型尚未（重新）加载 → 下次合成/点「加载模型」时挂载
+          ok              已加载且 Loaded N>0 个参数 → 真正生效
+          failed          resolve 失败（路径错/配置坏）或 Loaded 0（rank/形状不匹配）
+        """
+        global _lora_load_info, _lora_resolve_error
+        if not _lora_weights_path:
+            return {"configured": False, "status": "not_configured",
+                    "path": "", "loaded": None, "skipped": None, "resolve_error": ""}
+        if _lora_resolve_error:
+            return {"configured": True, "status": "failed", "path": _lora_weights_path,
+                    "loaded": None, "skipped": None, "resolve_error": _lora_resolve_error}
+        if _lora_load_info is None:
+            return {"configured": True, "status": "pending", "path": _lora_weights_path,
+                    "loaded": None, "skipped": None, "resolve_error": ""}
+        loaded, skipped = _lora_load_info
+        if loaded and loaded > 0:
+            return {"configured": True, "status": "ok", "path": _lora_weights_path,
+                    "loaded": loaded, "skipped": skipped, "resolve_error": ""}
+        return {"configured": True, "status": "failed", "path": _lora_weights_path,
+                "loaded": loaded, "skipped": skipped,
+                "resolve_error": "LoRA 权重已解析但加载了 0 个参数（rank/形状不匹配？）"}
+
     @app.get("/api/paths")
     async def get_paths():
         import torch
@@ -3192,6 +3264,7 @@ if HAS_WEB:
             "output_dir": str(_output_dir),
             "output_subdir": str(out_sub),
             "lora_weights_path": _lora_weights_path,
+            "lora": _build_lora_status(),
             "python_version": ".".join(map(str, sys.version_info[:3])),
             "cuda_available": torch.cuda.is_available(),
             "device": _device_pref if _device_pref else ("cuda" if torch.cuda.is_available() else "cpu"),
@@ -3209,7 +3282,8 @@ if HAS_WEB:
         with _dl_lock:
             dl = dict(_dl_state)
         return JSONResponse({"state": state, "error": err, "model_present": model_present(),
-                             "download_available": HAS_DL, "download": dl})
+                             "download_available": HAS_DL, "download": dl,
+                             "lora": _build_lora_status()})
 
     @app.post("/api/download-model")
     async def api_download_model_start():

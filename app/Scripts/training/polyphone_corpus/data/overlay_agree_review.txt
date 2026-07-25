@@ -1,0 +1,47 @@
+# OVERLAY "与 pypinyin 默认一致" 的 11 条 —— 逐条实证判定 (2026-07-21 08:45)
+# 判定法: 把每条单独删掉, 重算 1501 句, 看发音有无变化。
+#   变 = 陷阱(孤立看一致, 真句里 pypinyin 会读错) -> 必须留
+#   不变 = 真冗余(当前语料零影响) -> 可删(但建议留作防御性标注)
+
+## 陷阱(必须留): 9 条  -- 删了会读错
+  分行·行->hang2  (影响 1 句)
+      idx558: 各大分行发行低息扶持小微企业债券
+            去规则后-> ge4da4fen1xing2fa1xing2di1xi1fu2chi2xiao3wei1qi3ye4zhai4quan4
+  会计·会->kuai4  (影响 1 句)
+      idx1278: 他正在处理与会计有关的事情
+            去规则后-> ta1zheng4zai4chu3li3yu4hui4ji4you3guan1de5shi4qing2
+  脚踏实地·踏->ta4  (影响 4 句)
+      idx309: 唾手可得的机遇也要脚踏实地把握
+            去规则后-> tuo4shou3ke3de2de5ji1yu4ye3yao4jiao3ta1shi2di4ba3wo4
+      idx364: 唾手可得的机遇也需要脚踏实地牢牢把握
+            去规则后-> tuo4shou3ke3de2de5ji1yu4ye3xu1yao4jiao3ta1shi2di4lao2lao2ba3wo4
+  地处·处->chu3  (影响 1 句)
+      idx826: 硇洲岛火山地貌独特地处湛江外海
+            去规则后-> nao2zhou1dao3huo3shan1di4mao4du2te4di4chu4zhan4jiang1wai4hai3
+  卷起·卷->juan3  (影响 1 句)
+      idx177: 卷轴古画卷起收纳妥善保管
+            去规则后-> juan4zhou2gu3hua4juan4qi3shou1na4tuo3shan4bao3guan3
+  场院·场->chang2  (影响 1 句)
+      idx179: 场馆演出场院晾晒谷物
+            去规则后-> chang3guan3yan3chu1chang3yuan4liang4shai4gu3wu4
+  调解·调->tiao2  (影响 2 句)
+      idx343: 口角冲突及时调解墙角堆放闲置设备
+            去规则后-> kou3jiao3chong1tu1ji2shi2diao4jie3qiang2jiao3dui1fang4xian2zhi4she4bei4
+      idx478: 口角矛盾及时调解墙角堆放闲置生产器械
+            去规则后-> kou3jiao3mao2dun4ji2shi2diao4jie3qiang2jiao3dui1fang4xian2zhi4sheng1chan3qi4xie4
+  重担·担->dan4  (影响 2 句)
+      idx145: 担子沉重担起全家生活重担
+            去规则后-> dan4zi5chen2zhong4dan1qi3quan2jia1sheng1huo2zhong4dan4
+      idx191: 重修老屋身负重担前行
+            去规则后-> chong2xiu1lao3wu1shen1fu4zhong4dan1qian2xing2
+  炮制·炮->pao2  (影响 1 句)
+      idx199: 炮弹轰鸣炮制滋补汤药
+            去规则后-> pao4dan4hong1ming2pao4zhi4zi1bu3tang1yao4
+
+## 真冗余(可删): 2 条  -- 当前语料零影响
+  牟子·牟->mou2  (影响 0 句)
+  舍弃·舍->she3  (影响 0 句)
+
+## 结论
+  11 条一致 = 9 陷阱(必须留) + 2 真冗余(可删)
+  推荐: 9 陷阱必留; 2 冗余可删但建议留作防御性标注(尤其 舍弃·舍, 曾为修 宿舍 碰撞 bug 而加)。

@@ -73,7 +73,7 @@ def load_lora_config(lora_dir: str) -> Tuple[object, str]:
     return lora_cfg, str(weights_path)
 
 
-def resolve_lora(model_init_kwargs: dict, lora_weights_path: Optional[str]) -> dict:
+def resolve_lora(model_init_kwargs: dict, lora_weights_path: Optional[str]):
     """根据配置里的 lora_weights_path 解析并回填 model 初始化参数。
 
     Args:
@@ -82,21 +82,50 @@ def resolve_lora(model_init_kwargs: dict, lora_weights_path: Optional[str]) -> d
         lora_weights_path: 训练产出目录或权重文件路径；空/None/不存在则不动 kwargs。
 
     Returns:
-        回填后的 model_init_kwargs；若未启用 LoRA，保持原样。
+        (model_init_kwargs, info) 二元组：
+        - model_init_kwargs：回填后的参数字典（失败时保持不变）。
+        - info：结构化状态字典，含 ok(bool)/reason(str 失败原因)/r/alpha/
+          enable_lm/enable_dit/enable_proj/weights_path，供上层如实向用户反馈
+          （避免「路径错了也谎称已挂载」的静默失败）。
     """
+    info = {
+        "ok": False,
+        "reason": "",
+        "r": None,
+        "alpha": None,
+        "enable_lm": None,
+        "enable_dit": None,
+        "enable_proj": None,
+        "weights_path": None,
+    }
     if not lora_weights_path:
-        return model_init_kwargs
+        info["reason"] = "未配置 LoRA 权重路径"
+        return model_init_kwargs, info
     p = Path(lora_weights_path.strip())
     if not p.exists():
-        print(f"[LoRA] 路径不存在，跳过 LoRA 加载：{lora_weights_path}")
-        return model_init_kwargs
+        reason = f"路径不存在：{lora_weights_path}"
+        print(f"[LoRA] {reason}，跳过加载")
+        info["reason"] = reason
+        return model_init_kwargs, info
     try:
         lora_cfg, weights_path = load_lora_config(str(p))
     except Exception as e:
-        print(f"[LoRA] 加载失败，将不使用 LoRA：{e}")
-        return model_init_kwargs
+        reason = f"加载失败：{e}"
+        print(f"[LoRA] {reason}，将不使用 LoRA")
+        info["reason"] = reason
+        return model_init_kwargs, info
     model_init_kwargs["lora_config"] = lora_cfg
     model_init_kwargs["lora_weights_path"] = weights_path
-    print(f"[LoRA] 已挂载：{weights_path} (r={lora_cfg.r}, alpha={lora_cfg.alpha}, "
+    info.update(
+        ok=True,
+        reason="",
+        r=lora_cfg.r,
+        alpha=lora_cfg.alpha,
+        enable_lm=lora_cfg.enable_lm,
+        enable_dit=lora_cfg.enable_dit,
+        enable_proj=lora_cfg.enable_proj,
+        weights_path=weights_path,
+    )
+    print(f"[LoRA] 已解析：{weights_path} (r={lora_cfg.r}, alpha={lora_cfg.alpha}, "
           f"lm={lora_cfg.enable_lm}, dit={lora_cfg.enable_dit}, proj={lora_cfg.enable_proj})")
-    return model_init_kwargs
+    return model_init_kwargs, info

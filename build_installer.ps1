@@ -76,6 +76,11 @@ Write-Host "[1/4] 使用压缩器 ($($c.Type)): $sevenZip"
 # 说明：-mx=7 在压缩率与耗时间取平衡（9.4GB 约 15-30 分钟）；如追求极限压缩率可改 -mx=9（耗时更长）。
 $compressFlags = @('-t7z','-mmt=on','-mx=7')
 
+# 排除训练期的个人产物，避免把 GB 级训练数据/权重打进发给所有人的安装包，
+# 也避免 7z 去读训练进程正在实时写入的 lora_output 文件（读锁失败 / 半截文件）。
+# 注意：只排除「用户数据/产物」，LoRA 训练功能代码（app/Scripts/training/、prepare_*.py 等）仍正常打包。
+$excludeFlags = @('-x!Scripts\lora_output', '-x!Scripts\lora_audio', '-x!__pycache__')
+
 # ── 2. 准备 7za.exe（必须为 64 位！32 位 7za 解压 >4GB 模型文件会卡死）──
 function Get-PESignedBitness {
     param([string]$Path)
@@ -215,7 +220,7 @@ Write-Host "[3/4] 正在压缩 $desc..."
 # 注：7z 输出（含报错）重定向到日志，避免 | Out-Null 吞掉真实错误导致盲猜
 Push-Location $app
 try {
-    & $sevenZip a $compressFlags $app7z '*' *> $logFile
+    & $sevenZip a $compressFlags $excludeFlags $app7z '*' *> $logFile
 } finally {
     Pop-Location
     foreach ($mv in $moved) { Move-Item $mv.dst $mv.src -Force }

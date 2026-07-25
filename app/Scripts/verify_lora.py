@@ -82,6 +82,10 @@ def main():
     ap.add_argument("--out-dir", default="verify_out")
     ap.add_argument("--device", default="")
     ap.add_argument("--max-len", type=int, default=600)
+    ap.add_argument("--ref", default=None,
+                    help="参考音 wav（可选）。不填则 VoxCPM2.generate 用默认音色生成，"
+                         "仍可正常出声（与 GLM-TTS 不同，本模型 reference_wav_path 默认 None）。"
+                         "填了则两者共用同一音色，便于纯对比多音字读音差异。")
     args = ap.parse_args()
 
     from voxcpm import VoxCPM
@@ -109,7 +113,10 @@ def main():
     out.mkdir(parents=True, exist_ok=True)
     for key, sent in TEST_SENTENCES:
         try:
-            wav = model.generate(text=sent, max_len=args.max_len)
+            gen_kwargs = dict(text=sent, max_len=args.max_len)
+            if args.ref:
+                gen_kwargs["reference_wav_path"] = args.ref
+            wav = model.generate(**gen_kwargs)
             save_wav(out / f"{key}.wav", wav, sr=48000)
             print(f"[ok] {key}: {sent[:24]}...")
         except Exception as e:

@@ -76,7 +76,9 @@ def load_model(no_cache: bool = False, force_reload: bool = False):
         if LORA_WEIGHTS_PATH:
             try:
                 from lora_helper import resolve_lora
-                resolve_lora(lora_kwargs, LORA_WEIGHTS_PATH)
+                lora_kwargs, _lora_info = resolve_lora(lora_kwargs, LORA_WEIGHTS_PATH)
+                if not _lora_info.get("ok"):
+                    print(f"[LoRA] 未挂载：{_lora_info.get('reason', '未知原因')}")
             except Exception as e:
                 print(f"[LoRA] 加载辅助失败，将不使用 LoRA: {e}")
         if LOCAL_MODEL_PATH and os.path.isdir(LOCAL_MODEL_PATH):
@@ -691,17 +693,19 @@ def main():
         # 短文本模式
         if args.prompt_audio and args.prompt_text:
             print(f"\n[模式] Ultimate Clone 模式")
-            sr, wav = model.generate(
+            wav = model.generate(
                 text=final_text, prompt_wav_path=args.prompt_audio,
                 prompt_text=args.prompt_text, reference_wav_path=args.reference,
                 cfg_value=args.cfg, inference_timesteps=args.steps
             )
+            sr = model.tts_model.sample_rate
         elif args.reference:
             print(f"\n[模式] Controllable Clone 模式")
-            sr, wav = model.generate(
+            wav = model.generate(
                 text=final_text, reference_wav_path=args.reference,
                 cfg_value=args.cfg, inference_timesteps=args.steps
             )
+            sr = model.tts_model.sample_rate
         else:
             print(f"\n[模式] Voice Design 模式")
             sr, wav = generate(model, final_text, cfg=args.cfg, steps=args.steps, normalize=do_normalize)

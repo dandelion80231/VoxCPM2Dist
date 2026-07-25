@@ -1,0 +1,973 @@
+# 网页拼音标注 vs 参考读法 分歧句复核清单（中立比对，供人工复核）
+# 源文件: D:/电脑桌面/新建 文本文档.txt
+# 句子总数: 1138  分歧句: 241  多音字分歧点: 310
+# 标注: [字: 网=网页读法 / 参=参考读法]  —— 中立比对, 非判定网页必错
+# 注意: 参考读法(phrases_dict+overlay)也可能在上下文消歧上出错(如'削减' xuē 网页对、参考错),
+#       本清单仅列出【双方不一致处】供人工逐条复核, 请以语言学为准定夺。
+# 🔴=高优先(涉及 minority 读法, 训练最敏感)  🟡=一般多音字
+# 定位: 源行号@段落(原编号)  —— 回桌面文件按行号查原文
+
+【🔴】行2 @# 【# 第(di4)一(yi1)轮(lun2) 60条(tiao2)】 (原1)
+  原文: 银(yin2)行(xing2)安(an1)排(pai2)工(gong1)作(zuo4)人(ren2)员(yuan2)发(fa1)行(xing2)新(xin1)版(ban3)纪(ji4)念(nian4)纸(zhi3)币(bi4)。
+  分歧: 行: 网xing2/参hang2  行: 网xing2/参hang2
+
+【🔴】行3 @# 【# 第(di4)一(yi1)轮(lun2) 60条(tiao2)】 (原2)
+  原文: 他(ta1)好(hao3)钻(zuan1)研(yan2)难(nan2)题(ti2)，可(ke3)惜(xi1)基(ji1)础(chu3)不(bu2)算(suan4)好(hao3)。
+  分歧: 好: 网hao3/参hao4
+
+【🔴】行10 @# 【# 第(di4)一(yi1)轮(lun2) 60条(tiao2)】 (原9)
+  原文: 盛(sheng4)老(lao3)师(shi1)盛(sheng4)情(qing2)招(zhao1)待(dai4)，起(qi3)身(shen1)给(gei3)我(wo3)盛(sheng4)一(yi4)碗(wan3)汤(tang1)。
+  分歧: 盛: 网sheng4/参cheng2  盛: 网sheng4/参cheng2
+
+【🔴】行77 @# 【# 第(di4)二(er4)轮(lun2) 追(zhui1)加(jia1)70条(tiao2)】 (原75)
+  原文: 盛(sheng4)饭(fan4)入(ru4)碗(wan3)，盛(sheng4)夏(xia4)时(shi2)节(jie2)繁(fan2)花(hua1)盛(sheng4)放(fang4)。
+  分歧: 盛: 网sheng4/参cheng2
+
+【🔴】行287 @# 【## 金(jin1)融(rong2)/工(gong1)业(ye4)/医(yi1)疗(liao2)行(hang2)业(ye4)专(zhuan1)用(yong4) 51-70】 (原51)
+  原文: 银(yin2)行(xing2)发(fa1)行(xing2)国(guo2)债(zhai4)，各(ge4)行(hang2)各(ge4)业(ye4)有(you3)序(xu4)复(fu4)工(gong1)复(fu4)产(chan3)。
+  分歧: 行: 网xing2/参hang2  行: 网xing2/参hang2
+
+【🔴】行293 @# 【## 金(jin1)融(rong2)/工(gong1)业(ye4)/医(yi1)疗(liao2)行(hang2)业(ye4)专(zhuan1)用(yong4) 51-70】 (原57)
+  原文: 会计(kuai ji4)核(he2)算(suan4)收(shou1)支(zhi1)，计(ji4)量(liang2)单(dan1)位(wei4)统(tong3)一(yi1)规(gui1)范(fan4)标(biao1)准(zhun3)。
+  分歧: 量: 网liang2/参liang4
+
+【🔴】行400 @# 【## 日(ri4)常(chang2)口(kou3)语(yu3)补(bu3)充(chong1) 121-170】 (原161)
+  原文: 各(ge4)大(da4)银(yin2)行(hang2)发(fa1)行(xing2)专(zhuan1)项(xiang4)债(zhai4)券(quan4)，各(ge4)行(hang2)各(ge4)业(ye4)有(you3)序(xu4)复(fu4)工(gong1)复(fu4)产(chan3)。
+  分歧: 行: 网xing2/参hang2
+
+【🔴】行407 @# 【## 日(ri4)常(chang2)口(kou3)语(yu3)补(bu3)充(chong1) 121-170】 (原168)
+  原文: 会计(kuai ji4)精(jing1)准(zhun3)核(he2)算(suan4)收(shou1)支(zhi1)，计(ji4)量(liang2)单(dan1)位(wei4)统(tong3)一(yi1)执(zhi2)行(xing2)国(guo2)家(jia1)标(biao1)准(zhun3)。
+  分歧: 量: 网liang2/参liang4
+
+【🔴】行434 @# 【## 金(jin1)融(rong2)/工(gong1)业(ye4)/医(yi1)疗(liao2)行(hang2)业(ye4)补(bu3)充(chong1) 171-220】 (原194)
+  原文: 薄(bao2)钢(gang1)板(ban3)轻(qing1)量(liang2)化(hua4)构(gou4)件(jian4)，薄荷(bo he4)清(qing1)凉(liang2)剂(ji4)用(yong4)于(yu2)车(che1)间(jian1)降(jiang4)温(wen1)。
+  分歧: 量: 网liang2/参liang4  荷: 网he4/参he5
+
+【🔴】行451 @# 【## 金(jin1)融(rong2)/工(gong1)业(ye4)/医(yi1)疗(liao2)行(hang2)业(ye4)补(bu3)充(chong1) 171-220】 (原211)
+  原文: 薄(bao2)钢(gang1)板(ban3)轻(qing1)量(liang2)化(hua4)构(gou4)件(jian4)，薄荷(bo he4)清(qing1)凉(liang2)剂(ji4)车(che1)间(jian1)常(chang2)备(bei4)。
+  分歧: 量: 网liang2/参liang4  荷: 网he4/参he5
+
+【🔴】行484 @# 【## 成(cheng2)语(yu3)易(yi4)错(cuo4)读(du2)音(yin1)补(bu3)充(chong1) 221-270】 (原243)
+  原文: 削(xiao1)果(guo3)皮(pi2)简(jian3)单(dan1)轻(qing1)松(song1)，削(xue1)减(jian3)开(kai1)支(zhi1)渡(du4)过(guo4)行(xing2)业(ye4)寒(han2)冬(dong1)。
+  分歧: 行: 网xing2/参hang2
+
+【🔴】行568 @# 【## 日(ri4)常(chang2)通(tong1)用(yong4)增(zeng1)补(bu3) 271-340】 (原331)
+  原文: 薄(bao2)钢(gang1)板(ban3)轻(qing1)量(liang2)化(hua4)构(gou4)件(jian4)降(jiang4)低(di1)运(yun4)输(shu1)成(cheng2)本(ben3)。
+  分歧: 量: 网liang2/参liang4
+
+【🔴】行579 @# 【## 金(jin1)融(rong2)工(gong1)业(ye4)医(yi1)疗(liao2)增(zeng1)补(bu3) 341-410】 (原341)
+  原文: 各(ge4)大(da4)分(fen1)行(xing2)发(fa1)行(xing2)低(di1)息(xi1)扶(fu2)持(chi2)小(xiao3)微(wei1)企(qi3)业(ye4)债(zhai4)券(quan4)。
+  分歧: 行: 网xing2/参hang2  行: 网xing2/参hang2
+
+【🔴】行594 @# 【## 金(jin1)融(rong2)工(gong1)业(ye4)医(yi1)疗(liao2)增(zeng1)补(bu3) 341-410】 (原356)
+  原文: 计(ji4)量(liang2)单(dan1)位(wei4)统(tong3)一(yi1)执(zhi2)行(xing2)国(guo2)家(jia1)新(xin1)标(biao1)准(zhun3)。
+  分歧: 量: 网liang2/参liang4
+
+【🔴】行735 @# 【# 第(di4)一(yi1)轮(lun2) 80条(tiao2)】 (原33)
+  原文: 叶(ye4)公(gong1)好(hao3)龙(long2)典(dian3)故(gu4)流(liu2)传(chuan2)，古(gu3)音(yin1)叶(ye4)读(du2)shè，现(xian4)代(dai4)通(tong1)用(yong4)yè。
+  分歧: 好: 网hao3/参hao4
+
+【🔴】行813 @# 【# 第(di4)二(er4)轮(lun2) 追(zhui1)加(jia1)100条(tiao2)（81-180）】 (原110)
+  原文: 眭(sui1)弘(hong2)西(xi1)汉(han4)学(xue2)者(zhe3)，专(zhuan1)精(jing1)阴(yin1)阳(yang2)五(wu3)行(hang2)学(xue2)说(shuo1)。
+  分歧: 行: 网hang2/参xing2
+
+【🔴】行822 @# 【# 第(di4)二(er4)轮(lun2) 追(zhui1)加(jia1)100条(tiao2)（81-180）】 (原119)
+  原文: 邴(bing3)原(yuan2)年(nian2)少(shao4)勤(qin2)学(xue2)，不(bu4)贪(tan1)财(cai2)物(wu4)品(pin3)行(hang2)高(gao1)洁(jie2)。
+  分歧: 行: 网hang2/参xing2
+
+【🔴】行1051 @# 【## 补(bu3)充(chong1)遗(yi2)漏(lou4)A一(yi1)A、重(chong2)叠(die2)轻(qing1)声(sheng1) 31-40】 (原39)
+  原文: 打量(da3 liang)来(lai2)往(wang3)行(xing2)人(ren2)，量(liang2)字(zi4)搭(da1)配(pei4)打(da3)时(shi2)轻(qing1)声(sheng1)。
+  分歧: 量: 网liang2/参liang4
+
+【🔴】行1109 @# 【## 多(duo1)音(yin1)节(jie2)口(kou3)语(yu3)轻(qing1)声(sheng1) 81-100】 (原93)
+  原文: 打量(da3 liang)往(wang3)来路(lai2 lu)人(ren2)，量(liang2)字(zi4)搭(da1)配(pei4)打(da3)轻(qing1)声(sheng1)。
+  分歧: 量: 网liang2/参liang4
+
+【🔴】行1111 @# 【## 多(duo1)音(yin1)节(jie2)口(kou3)语(yu3)轻(qing1)声(sheng1) 81-100】 (原95)
+  原文: 思量(si1 liang)半(ban4)生(sheng1)坎(kan3)坷(ke3)经(jing1)历(li4)，量(liang2)字(zi4)规(gui1)范(fan4)轻(qing1)声(sheng1)。
+  分歧: 量: 网liang2/参liang4
+
+【🟡】行7 @# 【# 第(di4)一(yi1)轮(lun2) 60条(tiao2)】 (原6)
+  原文: 薄(bo2)雾(wu4)笼(long3)罩(zhao4)田(tian2)野(ye3)，桌(zhuo1)上(shang4)摆(bai3)着(zhe0)薄(bao2)脆(cui4)饼(bing3)，还(hai2)有(you3)薄荷(bo he4)糖(tang2)。
+  分歧: 荷: 网he4/参he5
+
+【🟡】行9 @# 【# 第(di4)一(yi1)轮(lun2) 60条(tiao2)】 (原8)
+  原文: 记(ji4)载(zai3)千(qian1)年(nian2)的(de0)史(shi3)书(shu1)，载(zai3)满(man3)古(gu3)人(ren2)的(de0)智(zhi4)慧(hui4)。
+  分歧: 载: 网zai3/参zai4
+
+【🟡】行12 @# 【# 第(di4)一(yi1)轮(lun2) 60条(tiao2)】 (原11)
+  原文: 瓶子(ping2 zi)倒(dao3)在(zai4)桌(zhuo1)面(mian4)，水(shui3)顺(shun4)着(zhe0)缝(feng4)隙(xi4)倒(dao3)了(le0)一(yi2)地(di4)。
+  分歧: 倒: 网dao3/参dao4  倒: 网dao3/参dao4
+
+【🟡】行14 @# 【# 第(di4)一(yi1)轮(lun2) 60条(tiao2)】 (原13)
+  原文: 他(ta1)揣(chuai1)着(zhe0)笔(bi3)记(ji4)本(ben3)，私(si1)下(xia4)揣(chuai1)测(ce4)对(dui4)方(fang1)真(zhen1)实(shi2)想法(xiang3 fa3)。
+  分歧: 揣: 网chuai1/参chuai3
+
+【🟡】行16 @# 【# 第(di4)一(yi1)轮(lun2) 60条(tiao2)】 (原15)
+  原文: 他(ta1)随(sui2)声(sheng1)附(fu4)和(he4)，性(xing4)格(ge2)温和(wen huo1)，从(cong2)不(bu4)和(he2)稀(xi1)泥(ni2)。
+  分歧: 和: 网huo1/参he2  和: 网he2/参huo4
+
+【🟡】行19 @# 【# 第(di4)一(yi1)轮(lun2) 60条(tiao2)】 (原18)
+  原文: 一(yi2)沓(ta4)文(wen2)件(jian4)，记(ji4)录(lu4)着(zhe0)纷(fen1)至(zhi4)沓(ta4)来(lai2)的(de0)访(fang3)客(ke4)信(xin4)息(xi1)。
+  分歧: 沓: 网ta4/参da2
+
+【🟡】行20 @# 【# 第(di4)一(yi1)轮(lun2) 60条(tiao2)】 (原19)
+  原文: 天(tian1)气(qi4)暖和(nuan huo3)，小(xiao3)和(he2)在(zai4)家(jia1)和(he2)水(shui3)泥(ni2)修(xiu1)补(bu3)墙(qiang2)面(mian4)。
+  分歧: 和: 网huo3/参huo5  和: 网he2/参huo2
+
+【🟡】行21 @# 【# 第(di4)一(yi1)轮(lun2) 60条(tiao2)】 (原20)
+  原文: 他(ta1)宁(ning4)肯(ken3)挨(ai1)饿(e4)，也(ye3)不(bu2)愿(yuan4)息(xi1)事(shi4)宁(ning2)人(ren2)委屈(wei3 qu)自(zi4)己(ji3)。
+  分歧: 挨: 网ai1/参ai2
+
+【🟡】行23 @# 【# 第(di4)一(yi1)轮(lun2) 60条(tiao2)】 (原22)
+  原文: 哄(hong3)骗(pian4)小(xiao3)孩(hai2)的(de0)玩(wan2)笑(xiao4)，引(yin3)得(de2)众(zhong4)人(ren2)哄(hong1)堂(tang2)大(da4)笑(xiao4)，最(zui4)后(hou4)一(yi4)哄(hong3)而(er2)散(san4)。
+  分歧: 哄: 网hong3/参hong4
+
+【🟡】行35 @# 【# 第(di4)一(yi1)轮(lun2) 60条(tiao2)】 (原34)
+  原文: 为(wei4)百(bai3)姓(xing4)谋(mou2)福(fu2)利(li4)，为(wei4)人(ren2)处(chu3)世(shi4)要(yao4)正(zheng4)直(zhi2)坦(tan3)荡(dang4)。
+  分歧: 为: 网wei4/参wei2
+
+【🟡】行37 @# 【# 第(di4)一(yi1)轮(lun2) 60条(tiao2)】 (原36)
+  原文: 落(luo4)下(xia4)行李(xing2 li)，树(shu4)叶(ye4)飘(piao1)落(luo4)，石头(shi2 tou)落(luo4)在(zai4)地(di4)上(shang4)。
+  分歧: 落: 网luo4/参la4
+
+【🟡】行38 @# 【# 第(di4)一(yi1)轮(lun2) 60条(tiao2)】 (原37)
+  原文: 强(qiang2)迫(po4)他(ta1)人(ren2)退(tui4)让(rang4)，身(shen1)体(ti3)强(qiang2)健(jian4)，性(xing4)格(ge2)倔(jue2)强(jiang4)。
+  分歧: 强: 网qiang2/参qiang3
+
+【🟡】行43 @# 【# 第(di4)一(yi1)轮(lun2) 60条(tiao2)】 (原42)
+  原文: 参(can1)加(jia1)科(ke1)考(kao3)，遇(yu4)见(jian4)人(ren2)参(can1)，参(cen1)差(ci1)不(bu4)齐(qi2)的(de0)草(cao3)木(mu4)。
+  分歧: 参: 网can1/参shen1
+
+【🟡】行44 @# 【# 第(di4)一(yi1)轮(lun2) 60条(tiao2)】 (原43)
+  原文: 弹(tan2)奏(zou4)古(gu3)琴(qin2)，桌(zhuo1)上(shang4)放(fang4)着(zhe0)子(zi3)弹(tan2)模(mo2)型(xing2)。
+  分歧: 弹: 网tan2/参dan4
+
+【🟡】行59 @# 【# 第(di4)一(yi1)轮(lun2) 60条(tiao2)】 (原58)
+  原文: 贴(tie1)好(hao3)海(hai3)报(bao4)，字(zi4)帖(tie4)，请(qing3)帖(tie1)妥(tuo3)善(shan4)收(shou1)好(hao3)。
+  分歧: 帖: 网tie1/参tie3
+
+【🟡】行60 @# 【# 第(di4)一(yi1)轮(lun2) 60条(tiao2)】 (原59)
+  原文: 薄(bao2)纸(zhi3)片(pian4)，浅(qian3)薄(bo2)见识(jian4 shi)，薄荷(bo he4)清(qing1)茶(cha2)。
+  分歧: 荷: 网he4/参he5
+
+【🟡】行61 @# 【# 第(di4)一(yi1)轮(lun2) 60条(tiao2)】 (原60)
+  原文: 累(lei3)计(ji4)工(gong1)时(shi2)，劳(lao2)累(lei4)一(yi4)天(tian1)，果(guo3)实(shi2)累(lei4)累(lei4)挂(gua4)满(man3)枝(zhi1)头(tou2)。
+  分歧: 累: 网lei4/参lei2  累: 网lei4/参lei2
+
+【🟡】行70 @# 【# 第(di4)二(er4)轮(lun2) 追(zhui1)加(jia1)70条(tiao2)】 (原68)
+  原文: 倒(dao3)塌(ta1)围(wei2)墙(qiang2)，倒(dao3)水(shui3)浇(jiao1)花(hua1)，颠(dian1)倒(dao3)黑(hei1)白(bai2)不(bu4)可(ke3)取(qu3)。
+  分歧: 倒: 网dao3/参dao4
+
+【🟡】行71 @# 【# 第(di4)二(er4)轮(lun2) 追(zhui1)加(jia1)70条(tiao2)】 (原69)
+  原文: 哄(hong3)然(ran2)大(da4)笑(xiao4)，哄(hong3)孩(hai2)童(tong2)入(ru4)睡(shui4)，人(ren2)群(qun2)一(yi4)哄(hong3)四(si4)散(san4)。
+  分歧: 哄: 网hong3/参hong1
+
+【🟡】行75 @# 【# 第(di4)二(er4)轮(lun2) 追(zhui1)加(jia1)70条(tiao2)】 (原73)
+  原文: 拓(tuo4)宽(kuan1)道(dao4)路(lu4)，临(lin2)摹(mo2)碑(bei1)拓(tuo4)学(xue2)习(xi2)书(shu1)法(fa3)。
+  分歧: 拓: 网tuo4/参ta4
+
+【🟡】行78 @# 【# 第(di4)二(er4)轮(lun2) 追(zhui1)加(jia1)70条(tiao2)】 (原76)
+  原文: 难(nan2)以(yi3)抉(jue2)择(ze2)，患(huan4)难(nan2)之(zhi1)交(jiao1)最(zui4)是(shi4)珍(zhen1)贵(gui4)。
+  分歧: 难: 网nan2/参nan4
+
+【🟡】行79 @# 【# 第(di4)二(er4)轮(lun2) 追(zhui1)加(jia1)70条(tiao2)】 (原77)
+  原文: 屏(ping2)风(feng1)遮(zhe1)挡(dang3)视(shi4)线(xian4)，屏(ping2)住(zhu4)呼(hu1)吸(xi1)静(jing4)观(guan1)动静(dong4 jing)。
+  分歧: 屏: 网ping2/参bing3
+
+【🟡】行85 @# 【# 第(di4)二(er4)轮(lun2) 追(zhui1)加(jia1)70条(tiao2)】 (原83)
+  原文: 累(lei4)累(lei4)硕(shuo4)果(guo3)，连(lian2)日(ri4)劳(lao2)累(lei4)，累(lei3)计(ji4)整(zheng3)年(nian2)营(ying2)收(shou1)。
+  分歧: 累: 网lei4/参lei2  累: 网lei4/参lei2  累: 网lei4/参lei2  累: 网lei3/参lei2
+
+【🟡】行86 @# 【# 第(di4)二(er4)轮(lun2) 追(zhui1)加(jia1)70条(tiao2)】 (原84)
+  原文: 觉(jue2)出(chu1)异(yi4)样(yang4)，午(wu3)觉(jue2)过(guo4)后(hou4)再(zai4)商(shang1)议(yi4)对(dui4)策(ce4)。
+  分歧: 觉: 网jue2/参jiao4
+
+【🟡】行88 @# 【# 第(di4)二(er4)轮(lun2) 追(zhui1)加(jia1)70条(tiao2)】 (原86)
+  原文: 薄(bao2)云(yun2)漫(man4)天(tian1)，薄(bao2)饼(bing3)酥(su1)脆(cui4)，泡(pao4)一(yi4)杯(bei1)薄荷(bo he4)清(qing1)茶(cha2)。
+  分歧: 荷: 网he4/参he5
+
+【🟡】行91 @# 【# 第(di4)二(er4)轮(lun2) 追(zhui1)加(jia1)70条(tiao2)】 (原89)
+  原文: 乐(le4)曲(qu3)悠(you1)扬(yang2)，人(ren2)人(ren2)乐(le4)于(yu2)参(can1)与(yu4)公(gong1)益(yi4)活(huo2)动(dong4)。
+  分歧: 乐: 网le4/参yue4
+
+【🟡】行95 @# 【# 第(di4)二(er4)轮(lun2) 追(zhui1)加(jia1)70条(tiao2)】 (原93)
+  原文: 为(wei4)人(ren2)谦(qian1)和(he2)，为(wei4)百(bai3)姓(xing4)谋(mou2)求(qiu2)长(chang2)久(jiu3)安(an1)稳(wen3)。
+  分歧: 为: 网wei4/参wei2
+
+【🟡】行97 @# 【# 第(di4)二(er4)轮(lun2) 追(zhui1)加(jia1)70条(tiao2)】 (原95)
+  原文: 落(luo4)叶(ye4)纷(fen1)飞(fei1)，赶(gan3)路(lu4)落(luo4)下(xia4)随(sui2)身(shen1)行(xing2)囊(nang2)。
+  分歧: 落: 网luo4/参la4
+
+【🟡】行98 @# 【# 第(di4)二(er4)轮(lun2) 追(zhui1)加(jia1)70条(tiao2)】 (原96)
+  原文: 强(qiang2)健(jian4)体(ti3)魄(po4)，强(qiang2)人(ren2)所(suo3)难(nan2)，性(xing4)格(ge2)倔(jue2)强(jiang4)执(zhi2)拗(niu4)。
+  分歧: 强: 网qiang2/参qiang3
+
+【🟡】行112 @# 【# 第(di4)二(er4)轮(lun2) 追(zhui1)加(jia1)70条(tiao2)】 (原110)
+  原文: 和(he2)善(shan4)待(dai4)人(ren2)，和(he2)泥(ni2)浆(jiang1)修(xiu1)补(bu3)墙(qiang2)面(mian4)，和(he2)诗(shi1)助(zhu4)兴(xing4)，打(da3)牌(pai2)和(he2)牌(pai2)，和(he2)药(yao4)调理(tiao2 li3)身(shen1)体(ti3)。
+  分歧: 和: 网he2/参huo2  和: 网he2/参he4  和: 网he2/参hu2  和: 网he2/参huo4
+
+【🟡】行114 @# 【# 第(di4)二(er4)轮(lun2) 追(zhui1)加(jia1)70条(tiao2)】 (原112)
+  原文: 沓(ta4)至(zhi4)宾(bin1)客(ke4)，桌(zhuo1)上(shang4)一(yi2)沓(ta4)纸(zhi3)质(zhi4)文(wen2)件(jian4)。
+  分歧: 沓: 网ta4/参da2
+
+【🟡】行119 @# 【# 第(di4)二(er4)轮(lun2) 追(zhui1)加(jia1)70条(tiao2)】 (原117)
+  原文: 大(da4)伯(bo2)待(dai4)人(ren2)温和(wen huo1)，大伯子(dabai zi3)今(jin1)日(ri4)登(deng1)门(men2)拜(bai4)访(fang3)。
+  分歧: 和: 网huo1/参he2
+
+【🟡】行121 @# 【# 第(di4)二(er4)轮(lun2) 追(zhui1)加(jia1)70条(tiao2)】 (原119)
+  原文: 揣(chuai1)好(hao3)证(zheng4)件(jian4)，私(si1)下(xia4)揣(chuai1)测(ce4)对(dui4)方(fang1)真(zhen1)实(shi2)意(yi4)图(tu2)。
+  分歧: 揣: 网chuai1/参chuai3
+
+【🟡】行126 @# 【# 第(di4)二(er4)轮(lun2) 追(zhui1)加(jia1)70条(tiao2)】 (原124)
+  原文: 舍(she4)弃(qi4)杂(za2)念(nian4)，宿(su4)舍(she4)整(zheng3)洁(jie2)干(gan1)净(jing4)。
+  分歧: 舍: 网she4/参she3
+
+【🟡】行127 @# 【# 第(di4)二(er4)轮(lun2) 追(zhui1)加(jia1)70条(tiao2)】 (原125)
+  原文: 教(jiao4)授(shou4)知识(zhi1 shi)，教(jiao4)书(shu1)育(yu4)人(ren2)是(shi4)毕(bi4)生(sheng1)追(zhui1)求(qiu2)。
+  分歧: 教: 网jiao4/参jiao1
+
+【🟡】行131 @# 【# 第(di4)二(er4)轮(lun2) 追(zhui1)加(jia1)70条(tiao2)】 (原129)
+  原文: 涨(zhang3)红(hong2)眼(yan3)眶(kuang4)，河(he2)水(shui3)涨(zhang3)起(qi3)淹(yan1)没(mo4)滩(tan1)涂(tu2)。
+  分歧: 涨: 网zhang3/参zhang4
+
+【🟡】行132 @# 【# 第(di4)二(er4)轮(lun2) 追(zhui1)加(jia1)70条(tiao2)】 (原130)
+  原文: 拓(tuo4)印(yin4)碑(bei1)刻(ke4)，拓(tuo4)宽(kuan1)山(shan1)间(jian1)通(tong1)行(xing2)小(xiao3)路(lu4)。
+  分歧: 拓: 网tuo4/参ta4
+
+【🟡】行138 @# 【# 第(di4)三(san1)轮(lun2) 追(zhui1)加(jia1)120条(tiao2)】 (原135)
+  原文: 劲(jin4)草(cao3)迎(ying2)风(feng1)，浑(hun2)身(shen1)劲(jin4)力(li4)挥(hui1)洒(sa3)汗(han4)水(shui3)。
+  分歧: 劲: 网jin4/参jing4
+
+【🟡】行142 @# 【# 第(di4)三(san1)轮(lun2) 追(zhui1)加(jia1)120条(tiao2)】 (原139)
+  原文: 分(fen1)外(wai4)好(hao3)看(kan4)，分(fen1)享(xiang3)美(mei3)食(shi2)温(wen1)暖(nuan3)众(zhong4)人(ren2)。
+  分歧: 分: 网fen1/参fen4
+
+【🟡】行148 @# 【# 第(di4)三(san1)轮(lun2) 追(zhui1)加(jia1)120条(tiao2)】 (原145)
+  原文: 担子(dan4 zi)沉(chen2)重(zhong4)，担(dan1)起(qi3)全(quan2)家(jia1)生(sheng1)活(huo2)重(zhong4)担(dan4)。
+  分歧: 担: 网dan1/参dan4
+
+【🟡】行150 @# 【# 第(di4)三(san1)轮(lun2) 追(zhui1)加(jia1)120条(tiao2)】 (原147)
+  原文: 屏(ping2)住(zhu4)呼(hu1)吸(xi1)，大(da4)屏(ping2)幕(mu4)播(bo1)放(fang4)风光(feng1 guang)影(ying3)片(pian4)。
+  分歧: 屏: 网ping2/参bing3
+
+【🟡】行152 @# 【# 第(di4)三(san1)轮(lun2) 追(zhui1)加(jia1)120条(tiao2)】 (原149)
+  原文: 拓(tuo4)印(yin4)古(gu3)碑(bei1)，拓(tuo4)宽(kuan1)乡(xiang1)间(jian1)通(tong1)行(xing2)小(xiao3)道(dao4)。
+  分歧: 拓: 网tuo4/参ta4  拓: 网tuo4/参ta4
+
+【🟡】行159 @# 【# 第(di4)三(san1)轮(lun2) 追(zhui1)加(jia1)120条(tiao2)】 (原156)
+  原文: 累(lei4)累(lei4)果(guo3)实(shi2)，累(lei3)计(ji4)工(gong1)时(shi2)身(shen1)心(xin1)劳(lao2)累(lei4)。
+  分歧: 累: 网lei4/参lei2  累: 网lei4/参lei2
+
+【🟡】行162 @# 【# 第(di4)三(san1)轮(lun2) 追(zhui1)加(jia1)120条(tiao2)】 (原159)
+  原文: 薄(bao2)云(yun2)漫(man4)卷(juan4)，薄(bao2)饼(bing3)搭(da1)配(pei4)薄荷(bo he4)茶(cha2)。
+  分歧: 卷: 网juan4/参juan3  荷: 网he4/参he5
+
+【🟡】行167 @# 【# 第(di4)三(san1)轮(lun2) 追(zhui1)加(jia1)120条(tiao2)】 (原164)
+  原文: 行家(hang jia2)老(lao3)手(shou3)，步(bu4)行(xing2)翻(fan1)越(yue4)山(shan1)野(ye3)小(xiao3)径(jing4)。
+  分歧: 家: 网jia2/参jia5
+
+【🟡】行169 @# 【# 第(di4)三(san1)轮(lun2) 追(zhui1)加(jia1)120条(tiao2)】 (原166)
+  原文: 为(wei4)民(min2)解(jie3)忧(you1)，为(wei4)人(ren2)正(zheng4)直(zhi2)坦(tan3)荡(dang4)无(wu2)私(si1)。
+  分歧: 为: 网wei4/参wei2
+
+【🟡】行171 @# 【# 第(di4)三(san1)轮(lun2) 追(zhui1)加(jia1)120条(tiao2)】 (原168)
+  原文: 落(luo4)叶(ye4)飘(piao1)零(ling2)，赶(gan3)路(lu4)落(luo4)下(xia4)随(sui2)身(shen1)行(xing2)囊(nang2)。
+  分歧: 落: 网luo4/参la4
+
+【🟡】行173 @# 【# 第(di4)三(san1)轮(lun2) 追(zhui1)加(jia1)120条(tiao2)】 (原170)
+  原文: 边(bian1)关(guan1)驻(zhu4)守(shou3)，瓶(ping2)塞(sai1)丢(diu1)失(shi1)河(he2)道(dao4)堵(du3)塞(sai1)。
+  分歧: 塞: 网sai1/参se4
+
+【🟡】行183 @# 【# 第(di4)三(san1)轮(lun2) 追(zhui1)加(jia1)120条(tiao2)】 (原183)
+  原文: 打(da3)牌(pai2)取(qu3)胜(sheng4)，和(he2)善(shan4)待(dai4)人(ren2)，和(he2)砂(sha1)浆(jiang1)，和(he2)药(yao4)，附(fu4)和(he4)诗(shi1)句(ju4)。
+  分歧: 和: 网he2/参huo2  和: 网he2/参huo4
+
+【🟡】行185 @# 【# 第(di4)三(san1)轮(lun2) 追(zhui1)加(jia1)120条(tiao2)】 (原185)
+  原文: 宾(bin1)客(ke4)纷(fen1)至(zhi4)，一(yi2)沓(ta4)纸(zhi3)质(zhi4)书(shu1)信(xin4)堆(dui1)积(ji1)。
+  分歧: 沓: 网ta4/参da2
+
+【🟡】行187 @# 【# 第(di4)三(san1)轮(lun2) 追(zhui1)加(jia1)120条(tiao2)】 (原187)
+  原文: 草(cao3)木(mu4)参(can1)差(cha4)不(bu4)齐(qi2)，出(chu1)差(chai1)常(chang2)出(chu1)差(chai1)小(xiao3)有(you3)差(cha1)距(ju4)。
+  分歧: 参: 网can1/参cen1  差: 网cha4/参ci1
+
+【🟡】行191 @# 【# 第(di4)三(san1)轮(lun2) 追(zhui1)加(jia1)120条(tiao2)】 (原191)
+  原文: 揣(chuai1)测(ce4)人(ren2)心(xin1)，揣(chuai1)好(hao3)证(zheng4)件(jian4)出(chu1)门(men2)。
+  分歧: 揣: 网chuai1/参chuai3
+
+【🟡】行193 @# 【# 第(di4)三(san1)轮(lun2) 追(zhui1)加(jia1)120条(tiao2)】 (原193)
+  原文: 合(he2)身(shen1)衣(yi1)衫(shan1)，称(cheng1)赞(zan4)美(mei3)德(de2)一(yi4)杆(gan1)秤(cheng4)。
+  分歧: 杆: 网gan1/参gan3
+
+【🟡】行199 @# 【# 第(di4)三(san1)轮(lun2) 追(zhui1)加(jia1)120条(tiao2)】 (原199)
+  原文: 空(kong1)旷(kuang4)山(shan1)谷(gu3)，空(kong1)出(chu1)地(di4)块(kuai4)栽(zai1)种(zhong4)果(guo3)树(shu4)。
+  分歧: 空: 网kong1/参kong4
+
+【🟡】行201 @# 【# 第(di4)三(san1)轮(lun2) 追(zhui1)加(jia1)120条(tiao2)】 (原201)
+  原文: 扒(ba1)窃(qie4)财(cai2)物(wu4)，扒(ba1)开(kai1)泥(ni2)土(tu3)寻(xun2)找(zhao3)古(gu3)物(wu4)。
+  分歧: 扒: 网ba1/参pa2
+
+【🟡】行203 @# 【# 第(di4)三(san1)轮(lun2) 追(zhui1)加(jia1)120条(tiao2)】 (原203)
+  原文: 种(zhong3)类(lei4)繁(fan2)多(duo1)，种(zhong3)植(zhi2)各(ge4)类(lei4)蔬(shu1)果(guo3)。
+  分歧: 种: 网zhong3/参zhong4
+
+【🟡】行206 @# 【# 第(di4)三(san1)轮(lun2) 追(zhui1)加(jia1)120条(tiao2)】 (原206)
+  原文: 拓(tuo4)展(zhan3)销(xiao1)路(lu4)，拓(tuo4)印(yin4)历(li4)代(dai4)碑(bei1)文(wen2)。
+  分歧: 拓: 网tuo4/参ta4
+
+【🟡】行207 @# 【# 第(di4)三(san1)轮(lun2) 追(zhui1)加(jia1)120条(tiao2)】 (原207)
+  原文: 涨(zhang3)红(hong2)脸(lian3)膛(tang2)，潮(chao2)水(shui3)涨(zhang3)漫(man4)堤(di1)岸(an4)。
+  分歧: 涨: 网zhang3/参zhang4
+
+【🟡】行218 @# 【# 第(di4)三(san1)轮(lun2) 追(zhui1)加(jia1)120条(tiao2)】 (原218)
+  原文: 单(chan2)于(yu2)狩(shou4)猎(lie4)，单(dan1)姓(xing4)老(lao3)人(ren2)独(du2)骑(qi2)单(dan1)车(che1)。
+  分歧: 单: 网dan1/参shan4
+
+【🟡】行220 @# 【# 第(di4)三(san1)轮(lun2) 追(zhui1)加(jia1)120条(tiao2)】 (原220)
+  原文: 贴(tie1)春(chun1)联(lian2)，喜(xi3)帖(tie1)，临(lin2)摹(mo2)古(gu3)帖(tie1)练(lian4)字(zi4)。
+  分歧: 帖: 网tie1/参tie3  帖: 网tie1/参tie4
+
+【🟡】行221 @# 【# 第(di4)三(san1)轮(lun2) 追(zhui1)加(jia1)120条(tiao2)】 (原221)
+  原文: 累(lei4)年(nian2)劳(lao2)作(zuo4)，果(guo3)实(shi2)累(lei4)累(lei4)身(shen1)心(xin1)劳(lao2)累(lei4)。
+  分歧: 累: 网lei4/参lei3  累: 网lei4/参lei2  累: 网lei4/参lei2
+
+【🟡】行224 @# 【# 第(di4)三(san1)轮(lun2) 追(zhui1)加(jia1)120条(tiao2)】 (原224)
+  原文: 薄(bao2)纱(sha1)轻(qing1)盈(ying2)，浅(qian3)薄(bo2)见识(jian4 shi)薄荷(bo he4)清(qing1)香(xiang1)。
+  分歧: 荷: 网he4/参he5
+
+【🟡】行237 @# 【## 日(ri4)常(chang2)口(kou3)语(yu3)类(lei4) 1-50】 (原2)
+  原文: 这(zhe4)种(zhong3)模(mu2)具(ju4)模(mo2)样(yang4)独(du2)特(te4)，很(hen3)难(nan2)模(mo2)仿(fang3)市(shi4)面(mian4)上(shang4)普(pu3)通(tong1)款(kuan3)式(shi4)。
+  分歧: 模: 网mo2/参mu2
+
+【🟡】行244 @# 【## 日(ri4)常(chang2)口(kou3)语(yu3)类(lei4) 1-50】 (原9)
+  原文: 把(ba3)海(hai3)报(bao4)贴(tie1)在(zai4)墙(qiang2)面(mian4)，临(lin2)摹(mo2)字(zi4)帖(tie4)，寄(ji4)出(chu1)喜(xi3)帖(tie1)通(tong1)知(zhi1)亲(qin1)友(you3)。
+  分歧: 帖: 网tie1/参tie3
+
+【🟡】行245 @# 【## 日(ri4)常(chang2)口(kou3)语(yu3)类(lei4) 1-50】 (原10)
+  原文: 累(lei4)计(ji4)全(quan2)年(nian2)营(ying2)收(shou1)，劳(lao2)累(lei4)一(yi4)天(tian1)后(hou4)，果(guo3)园(yuan2)果(guo3)实(shi2)累(lei4)累(lei4)挂(gua4)满(man3)枝(zhi1)头(tou2)。
+  分歧: 累: 网lei4/参lei3  累: 网lei4/参lei2  累: 网lei4/参lei2
+
+【🟡】行246 @# 【## 日(ri4)常(chang2)口(kou3)语(yu3)类(lei4) 1-50】 (原11)
+  原文: 他(ta1)揣(chuai1)着(zhuo2)手(shou3)机(ji1)出(chu1)门(men2)，私(si1)下(xia4)揣(chuai1)测(ce4)领(ling3)导(dao3)的(de0)调(tiao2)整(zheng3)意(yi4)图(tu2)。
+  分歧: 揣: 网chuai1/参chuai3
+
+【🟡】行247 @# 【## 日(ri4)常(chang2)口(kou3)语(yu3)类(lei4) 1-50】 (原12)
+  原文: 一(yi4)场(chang3)暴(bao4)雨(yu3)过(guo4)后(hou4)，体(ti3)育(yu4)场(chang3)地(di4)面(mian4)遍(bian4)布(bu4)积(ji1)水(shui3)。
+  分歧: 场: 网chang3/参chang2
+
+【🟡】行250 @# 【## 日(ri4)常(chang2)口(kou3)语(yu3)类(lei4) 1-50】 (原15)
+  原文: 匀称(yun chen2)的(de0)建(jian4)筑(zhu4)结(jie2)构(gou4)，称(cheng1)心(xin1)如(ru2)意(yi4)的(de0)居(ju1)住(zhu4)环(huan2)境(jing4)。
+  分歧: 称: 网chen2/参chen4  称: 网cheng1/参chen4
+
+【🟡】行265 @# 【## 日(ri4)常(chang2)口(kou3)语(yu3)类(lei4) 1-50】 (原30)
+  原文: 他(ta1)随(sui2)声(sheng1)附(fu4)和(he4)他(ta1)人(ren2)观(guan1)点(dian3)，性(xing4)格(ge2)温和(wen huo1)待(dai4)人(ren2)友(you3)善(shan4)。
+  分歧: 和: 网huo1/参he2
+
+【🟡】行269 @# 【## 日(ri4)常(chang2)口(kou3)语(yu3)类(lei4) 1-50】 (原34)
+  原文: 倔(jue2)强(jiang4)的(de0)少(shao4)年(nian2)不(bu4)肯(ken3)认(ren4)错(cuo4)，倔(jue4)脾气(pi2 qi)常(chang2)常(chang2)惹(re3)身(shen1)边(bian1)人(ren2)生(sheng1)气(qi4)。
+  分歧: 倔: 网jue4/参jue2
+
+【🟡】行272 @# 【## 日(ri4)常(chang2)口(kou3)语(yu3)类(lei4) 1-50】 (原37)
+  原文: 菲(fei1)薄(bao2)的(de0)薪(xin1)资(zi1)待(dai4)遇(yu4)，原(yuan2)野(ye3)芳(fang1)菲(fei1)开(kai1)满(man3)各(ge4)色(se4)野(ye3)花(hua1)。
+  分歧: 菲: 网fei1/参fei3  薄: 网bao2/参bo2
+
+【🟡】行274 @# 【## 日(ri4)常(chang2)口(kou3)语(yu3)类(lei4) 1-50】 (原39)
+  原文: 处(chu4)暑(shu3)时(shi2)节气(jie2 qi4)温(wen1)转(zhuan3)凉(liang2)，处(chu3)世(shi4)待(dai4)人(ren2)要(yao4)懂得(dong3 de)包(bao1)容(rong2)体(ti3)谅(liang4)。
+  分歧: 处: 网chu4/参chu3
+
+【🟡】行276 @# 【## 日(ri4)常(chang2)口(kou3)语(yu3)类(lei4) 1-50】 (原41)
+  原文: 一(yi4)场(chang3)演(yan3)出(chu1)圆(yuan2)满(man3)落(luo4)幕(mu4)，场(chang3)地(di4)工(gong1)作(zuo4)人(ren2)员(yuan2)有(you3)序(xu4)离(li2)场(chang3)。
+  分歧: 场: 网chang3/参chang2
+
+【🟡】行279 @# 【## 日(ri4)常(chang2)口(kou3)语(yu3)类(lei4) 1-50】 (原44)
+  原文: 匀称(yun chen2)的(de0)身(shen1)形(xing2)线(xian4)条(tiao2)，称(chen4)心(xin1)如(ru2)意(yi4)的(de0)定(ding4)制(zhi4)服(fu2)装(zhuang1)。
+  分歧: 称: 网chen2/参chen4
+
+【🟡】行283 @# 【## 日(ri4)常(chang2)口(kou3)语(yu3)类(lei4) 1-50】 (原48)
+  原文: 嘌(piao4)呤(ling4)含(han2)量(liang4)高(gao1)的(de0)食(shi2)物(wu4)，痛(tong4)风(feng1)人(ren2)群(qun2)需(xu1)要(yao4)少(shao3)吃(chi1)。
+  分歧: 呤: 网ling4/参ling2
+
+【🟡】行285 @# 【## 日(ri4)常(chang2)口(kou3)语(yu3)类(lei4) 1-50】 (原50)
+  原文: 几(ji3)案(an4)摆(bai3)放(fang4)笔(bi3)墨(mo4)纸(zhi3)砚(yan4)，窗(chuang1)明(ming2)几(ji1)净(jing4)适(shi4)合(he2)静(jing4)心(xin1)读(du2)书(shu1)。
+  分歧: 几: 网ji3/参ji1
+
+【🟡】行296 @# 【## 金(jin1)融(rong2)/工(gong1)业(ye4)/医(yi1)疗(liao2)行(hang2)业(ye4)专(zhuan1)用(yong4) 51-70】 (原60)
+  原文: 薄(bao2)利(li4)多(duo1)销(xiao1)经(jing1)营(ying2)模(mo2)式(shi4)，薄荷(bo he4)凉(liang2)茶(cha2)清(qing1)热(re4)解(jie3)暑(shu3)。
+  分歧: 薄: 网bao2/参bo2  荷: 网he4/参he5
+
+【🟡】行301 @# 【## 金(jin1)融(rong2)/工(gong1)业(ye4)/医(yi1)疗(liao2)行(hang2)业(ye4)专(zhuan1)用(yong4) 51-70】 (原65)
+  原文: 累(lei4)计(ji4)项(xiang4)目(mu4)成(cheng2)本(ben3)，高(gao1)强(qiang2)度(du4)工(gong1)作(zuo4)让(rang4)人(ren2)十(shi2)分(fen1)劳(lao2)累(lei4)。
+  分歧: 累: 网lei4/参lei3
+
+【🟡】行306 @# 【## 金(jin1)融(rong2)/工(gong1)业(ye4)/医(yi1)疗(liao2)行(hang2)业(ye4)专(zhuan1)用(yong4) 51-70】 (原70)
+  原文: 胴(dong4)体(ti3)扫(sao3)描(miao2)设(she4)备(bei4)，嘌(piao4)呤(ling4)检(jian3)测(ce4)仪(yi2)用(yong4)于(yu2)食(shi2)品(pin3)质(zhi4)检(jian3)。
+  分歧: 呤: 网ling4/参ling2
+
+【🟡】行312 @# 【## 成(cheng2)语(yu3)专(zhuan1)用(yong4)易(yi4)错(cuo4)读(du2)音(yin1) 71-120】 (原75)
+  原文: 往(wang3)来(lai2)商(shang1)贾(jia3)云(yun2)集(ji2)古(gu3)镇(zhen4)，沿(yan2)街(jie1)商(shang1)铺(pu4)络(luo4)绎(yi4)不(bu4)绝(jue2)。
+  分歧: 贾: 网jia3/参gu3
+
+【🟡】行316 @# 【## 成(cheng2)语(yu3)专(zhuan1)用(yong4)易(yi4)错(cuo4)读(du2)音(yin1) 71-120】 (原79)
+  原文: 酩(ming3)酊(ding1)大(da4)醉(zui4)之(zhi1)后(hou4)，方(fang1)才(cai2)知(zhi1)晓(xiao3)行(xing2)事(shi4)不(bu4)可(ke3)贪(tan1)杯(bei1)。
+  分歧: 酊: 网ding1/参ding3
+
+【🟡】行319 @# 【## 成(cheng2)语(yu3)专(zhuan1)用(yong4)易(yi4)错(cuo4)读(du2)音(yin1) 71-120】 (原82)
+  原文: 唾(tuo4)手(shou3)可(ke3)得(de2)的(de0)机(ji1)遇(yu4)，也(ye3)要(yao4)脚(jiao3)踏实(ta1 shi)地(di4)把(ba3)握(wo4)。
+  分歧: 踏: 网ta1/参ta4
+
+【🟡】行323 @# 【## 成(cheng2)语(yu3)专(zhuan1)用(yong4)易(yi4)错(cuo4)读(du2)音(yin1) 71-120】 (原86)
+  原文: 纷(fen1)至(zhi4)沓(ta4)来(lai2)的(de0)游(you2)客(ke4)，一(yi2)沓(ta4)沓(ta4)宣(xuan1)传(chuan2)手(shou3)册(ce4)分(fen1)发(fa1)完(wan2)毕(bi4)。
+  分歧: 沓: 网ta4/参da2  沓: 网ta4/参da2
+
+【🟡】行327 @# 【## 成(cheng2)语(yu3)专(zhuan1)用(yong4)易(yi4)错(cuo4)读(du2)音(yin1) 71-120】 (原90)
+  原文: 商(shang1)贾(jia3)往(wang3)来(lai2)互(hu4)通(tong1)有(you3)无(wu2)，古(gu3)镇(zhen4)集(ji2)市(shi4)热闹(re4 nao)非(fei1)凡(fan2)。
+  分歧: 贾: 网jia3/参gu3
+
+【🟡】行329 @# 【## 成(cheng2)语(yu3)专(zhuan1)用(yong4)易(yi4)错(cuo4)读(du2)音(yin1) 71-120】 (原92)
+  原文: 酩(ming3)酊(ding1)大(da4)醉(zui4)误(wu4)了(le0)行(xing2)程(cheng2)，清(qing1)晨(chen2)匆(cong1)忙(mang2)赶(gan3)路(lu4)出(chu1)行(xing2)。
+  分歧: 酊: 网ding1/参ding3
+
+【🟡】行332 @# 【## 成(cheng2)语(yu3)专(zhuan1)用(yong4)易(yi4)错(cuo4)读(du2)音(yin1) 71-120】 (原95)
+  原文: 暴(bao4)殄(tian3)天(tian1)物(wu4)挥(hui1)霍(huo4)粮食(liang2 shi)，应(ying4)当(dang1)养(yang3)成(cheng2)节(jie2)约(yue1)习(xi2)惯(guan4)。
+  分歧: 应: 网ying4/参ying1
+
+【🟡】行337 @# 【## 成(cheng2)语(yu3)专(zhuan1)用(yong4)易(yi4)错(cuo4)读(du2)音(yin1) 71-120】 (原100)
+  原文: 一(yi2)沓(ta4)沓(ta4)文(wen2)件(jian4)堆(dui1)积(ji1)桌(zhuo1)面(mian4)，访(fang3)客(ke4)纷(fen1)至(zhi4)沓(ta4)来(lai2)洽(qia4)谈(tan2)业(ye4)务(wu4)。
+  分歧: 沓: 网ta4/参da2  沓: 网ta4/参da2
+
+【🟡】行341 @# 【## 成(cheng2)语(yu3)专(zhuan1)用(yong4)易(yi4)错(cuo4)读(du2)音(yin1) 71-120】 (原104)
+  原文: 薄(bao2)利(li4)多(duo1)销(xiao1)经(jing1)营(ying2)小(xiao3)店(dian4)，薄荷(bo he4)清(qing1)茶(cha2)招(zhao1)待(dai4)来(lai2)客(ke4)。
+  分歧: 薄: 网bao2/参bo2  荷: 网he4/参he5
+
+【🟡】行346 @# 【## 成(cheng2)语(yu3)专(zhuan1)用(yong4)易(yi4)错(cuo4)读(du2)音(yin1) 71-120】 (原109)
+  原文: 地(di4)壳(ke2)深(shen1)处(chu4)蕴(yun4)藏(cang2)矿(kuang4)产(chan3)，鸡(ji1)蛋(dan4)壳(ke2)做(zuo4)成(cheng2)手(shou3)工(gong1)摆(bai3)件(jian4)。
+  分歧: 壳: 网ke2/参qiao4
+
+【🟡】行348 @# 【## 成(cheng2)语(yu3)专(zhuan1)用(yong4)易(yi4)错(cuo4)读(du2)音(yin1) 71-120】 (原111)
+  原文: 累(lei4)计(ji4)全(quan2)年(nian2)销(xiao1)售(shou4)额(e2)，整(zheng3)日(ri4)劳(lao2)累(lei4)身(shen1)心(xin1)疲(pi2)惫(bei4)。
+  分歧: 累: 网lei4/参lei3
+
+【🟡】行352 @# 【## 成(cheng2)语(yu3)专(zhuan1)用(yong4)易(yi4)错(cuo4)读(du2)音(yin1) 71-120】 (原116)
+  原文: 胴(dong4)体(ti3)检(jian3)测(ce4)用(yong4)于(yu2)畜(xu4)牧(mu4)行(hang2)业(ye4)，嘌(piao4)呤(ling4)检(jian3)测(ce4)把(ba3)控(kong4)食(shi2)品(pin3)安(an1)全(quan2)。
+  分歧: 呤: 网ling4/参ling2
+
+【🟡】行353 @# 【## 成(cheng2)语(yu3)专(zhuan1)用(yong4)易(yi4)错(cuo4)读(du2)音(yin1) 71-120】 (原117)
+  原文: 口(kou3)角(jiao3)冲(chong1)突(tu1)及(ji2)时(shi2)调(diao4)解(jie3)，墙(qiang2)角(jiao3)堆(dui1)放(fang4)闲(xian2)置(zhi4)设(she4)备(bei4)。
+  分歧: 调: 网diao4/参tiao2
+
+【🟡】行354 @# 【## 成(cheng2)语(yu3)专(zhuan1)用(yong4)易(yi4)错(cuo4)读(du2)音(yin1) 71-120】 (原118)
+  原文: 卡(qia3)壳(ke2)机器(ji1 qi4)暂(zan4)停(ting2)运(yun4)转(zhuan3)，卡(ka3)片(pian4)记(ji4)录(lu4)设(she4)备(bei4)运(yun4)行(xing2)数(shu4)据(ju4)。
+  分歧: 转: 网zhuan3/参zhuan4
+
+【🟡】行356 @# 【## 成(cheng2)语(yu3)专(zhuan1)用(yong4)易(yi4)错(cuo4)读(du2)音(yin1) 71-120】 (原120)
+  原文: 轧(zha2)钢(gang1)生(sheng1)产(chan3)线(xian4)全(quan2)天(tian1)运(yun4)转(zhuan3)，压(ya1)路(lu4)机(ji1)平(ping2)整(zheng3)施(shi1)工(gong1)路(lu4)面(mian4)。
+  分歧: 转: 网zhuan3/参zhuan4
+
+【🟡】行365 @# 【## 日(ri4)常(chang2)口(kou3)语(yu3)补(bu3)充(chong1) 121-170】 (原126)
+  原文: 累(lei3)计(ji4)全(quan2)年(nian2)收(shou1)入(ru4)，整(zheng3)日(ri4)劳(lao2)累(lei4)只(zhi1)想(xiang3)安(an1)稳(wen3)休(xiu1)憩(qi4)。
+  分歧: 只: 网zhi1/参zhi3
+
+【🟡】行366 @# 【## 日(ri4)常(chang2)口(kou3)语(yu3)补(bu3)充(chong1) 121-170】 (原127)
+  原文: 几(ji1)案(an4)摆(bai3)放(fang4)笔(bi3)墨(mo4)，窗(chuang1)明(ming2)几(ji3)净(jing4)适(shi4)合(he2)静(jing4)心(xin1)阅(yue4)读(du2)古(gu3)籍(ji2)。
+  分歧: 几: 网ji3/参ji1
+
+【🟡】行367 @# 【## 日(ri4)常(chang2)口(kou3)语(yu3)补(bu3)充(chong1) 121-170】 (原128)
+  原文: 一(yi2)沓(ta4)书(shu1)信(xin4)堆(dui1)积(ji1)桌(zhuo1)角(jiao3)，访(fang3)客(ke4)纷(fen1)至(zhi4)沓(ta4)来(lai2)洽(qia4)谈(tan2)合(he2)作(zuo4)。
+  分歧: 沓: 网ta4/参da2
+
+【🟡】行369 @# 【## 日(ri4)常(chang2)口(kou3)语(yu3)补(bu3)充(chong1) 121-170】 (原130)
+  原文: 他(ta1)随(sui2)声(sheng1)附(fu4)和(he2)旁(pang2)人(ren2)观(guan1)点(dian3)，缺(que1)少(shao3)独(du2)立(li4)思(si1)考(kao3)判(pan4)断(duan4)。
+  分歧: 和: 网he2/参he4
+
+【🟡】行370 @# 【## 日(ri4)常(chang2)口(kou3)语(yu3)补(bu3)充(chong1) 121-170】 (原131)
+  原文: 商(shang1)贾(jia3)往(wang3)来(lai2)热闹(re4 nao)集(ji2)市(shi4)，脍(kuai4)炙(zhi4)人(ren2)口(kou3)的(de0)小(xiao3)曲(qu3)四(si4)处(chu4)传(chuan2)唱(chang4)。
+  分歧: 贾: 网jia3/参gu3
+
+【🟡】行377 @# 【## 日(ri4)常(chang2)口(kou3)语(yu3)补(bu3)充(chong1) 121-170】 (原138)
+  原文: 唾(tuo4)手(shou3)可(ke3)得(de2)的(de0)机(ji1)遇(yu4)，也(ye3)需(xu1)要(yao4)脚(jiao3)踏实(ta1 shi)地(di4)牢(lao2)牢(lao2)把(ba3)握(wo4)。
+  分歧: 踏: 网ta1/参ta4
+
+【🟡】行386 @# 【## 日(ri4)常(chang2)口(kou3)语(yu3)补(bu3)充(chong1) 121-170】 (原147)
+  原文: 揣(chuai1)着(zhe0)零(ling2)钱(qian2)出(chu1)门(men2)采(cai3)购(gou4)，私(si1)下(xia4)揣(chuai1)测(ce4)政(zheng4)策(ce4)调(tiao2)整(zheng3)方向(fang1 xiang)。
+  分歧: 揣: 网chuai1/参chuai3
+
+【🟡】行387 @# 【## 日(ri4)常(chang2)口(kou3)语(yu3)补(bu3)充(chong1) 121-170】 (原148)
+  原文: 一(yi4)场(chang3)大(da4)雨(yu3)冲(chong1)刷(shua1)街(jie1)道(dao4)，体(ti3)育(yu4)场(chang3)清(qing1)理(li3)积(ji1)水(shui3)杂(za2)物(wu4)。
+  分歧: 场: 网chang3/参chang2
+
+【🟡】行394 @# 【## 日(ri4)常(chang2)口(kou3)语(yu3)补(bu3)充(chong1) 121-170】 (原155)
+  原文: 匀称(yun chen2)优(you1)美(mei3)的(de0)建(jian4)筑(zhu4)线(xian4)条(tiao2)，定(ding4)制(zhi4)服(fu2)装(zhuang1)称(chen4)心(xin1)如(ru2)意(yi4)。
+  分歧: 称: 网chen2/参chen4
+
+【🟡】行396 @# 【## 日(ri4)常(chang2)口(kou3)语(yu3)补(bu3)充(chong1) 121-170】 (原157)
+  原文: 胴(dong4)体(ti3)检(jian3)测(ce4)用(yong4)于(yu2)畜(xu4)牧(mu4)防(fang2)疫(yi4)，嘌(piao4)呤(ling4)筛(shai1)查(cha2)把(ba3)控(kong4)食(shi2)品(pin3)安(an1)全(quan2)。
+  分歧: 呤: 网ling4/参ling2
+
+【🟡】行402 @# 【## 日(ri4)常(chang2)口(kou3)语(yu3)补(bu3)充(chong1) 121-170】 (原163)
+  原文: 薄(bao2)利(li4)多(duo1)销(xiao1)是(shi4)小(xiao3)店(dian4)经(jing1)营(ying2)之(zhi1)道(dao4)，薄荷(bo he4)饮(yin3)片(pian4)用(yong4)于(yu2)清(qing1)热(re4)降(jiang4)火(huo3)。
+  分歧: 薄: 网bao2/参bo2  荷: 网he4/参he5
+
+【🟡】行406 @# 【## 日(ri4)常(chang2)口(kou3)语(yu3)补(bu3)充(chong1) 121-170】 (原167)
+  原文: 轧(ya4)钢(gang1)设(she4)备(bei4)持(chi2)续(xu4)运(yun4)转(zhuan3)，道(dao4)路(lu4)施(shi1)工(gong1)依(yi1)靠(kao4)压(ya1)路(lu4)机(ji1)整(zheng3)平(ping2)。
+  分歧: 轧: 网ya4/参zha2  转: 网zhuan3/参zhuan4
+
+【🟡】行414 @# 【## 金(jin1)融(rong2)/工(gong1)业(ye4)/医(yi1)疗(liao2)行(hang2)业(ye4)补(bu3)充(chong1) 171-220】 (原174)
+  原文: 匀称(yun chen2)配(pei4)比(bi3)化(hua4)工(gong1)原(yuan2)料(liao4)，定(ding4)制(zhi4)器(qi4)械(xie4)称(chen4)心(xin1)适(shi4)配(pei4)生(sheng1)产(chan3)线(xian4)。
+  分歧: 称: 网chen2/参chen4
+
+【🟡】行415 @# 【## 金(jin1)融(rong2)/工(gong1)业(ye4)/医(yi1)疗(liao2)行(hang2)业(ye4)补(bu3)充(chong1) 171-220】 (原175)
+  原文: 汆(cuan1)制(zhi4)食(shi2)材(cai2)把(ba3)控(kong4)火候(huo3 hou)，胴(dong4)体(ti3)扫(sao3)描(miao2)设(she4)备(bei4)保(bao3)障(zhang4)畜(chu4)牧(mu4)健(jian4)康(kang1)。
+  分歧: 畜: 网chu4/参xu4
+
+【🟡】行416 @# 【## 金(jin1)融(rong2)/工(gong1)业(ye4)/医(yi1)疗(liao2)行(hang2)业(ye4)补(bu3)充(chong1) 171-220】 (原176)
+  原文: 嘌(piao4)呤(ling4)过(guo4)高(gao1)食(shi2)材(cai2)痛(tong4)风(feng1)人(ren2)群(qun2)忌(ji4)口(kou3)，潜(qian2)在(zai4)风(feng1)险(xian3)提(ti2)前(qian2)排(pai2)查(cha2)。
+  分歧: 呤: 网ling4/参ling2
+
+【🟡】行418 @# 【## 金(jin1)融(rong2)/工(gong1)业(ye4)/医(yi1)疗(liao2)行(hang2)业(ye4)补(bu3)充(chong1) 171-220】 (原178)
+  原文: 霰(xian4)粒(li4)气(qi4)象(xiang4)数(shu4)据(ju4)实(shi2)时(shi2)监(jian1)测(ce4)，霰(xian4)弹(tan2)器(qi4)械(xie4)专(zhuan1)人(ren2)保(bao3)管(guan3)登(deng1)记(ji4)。
+  分歧: 弹: 网tan2/参dan4
+
+【🟡】行424 @# 【## 金(jin1)融(rong2)/工(gong1)业(ye4)/医(yi1)疗(liao2)行(hang2)业(ye4)补(bu3)充(chong1) 171-220】 (原184)
+  原文: 载(zai3)满(man3)原(yuan2)料(liao4)的(de0)货(huo4)车(che1)进(jin4)场(chang3)，史(shi3)书(shu1)载(zai3)录(lu4)工(gong1)业(ye4)发(fa1)展(zhan3)历(li4)程(cheng2)。
+  分歧: 载: 网zai3/参zai4
+
+【🟡】行425 @# 【## 金(jin1)融(rong2)/工(gong1)业(ye4)/医(yi1)疗(liao2)行(hang2)业(ye4)补(bu3)充(chong1) 171-220】 (原185)
+  原文: 牲(sheng1)畜(chu4)圈(quan1)养(yang3)规(gui1)范(fan4)管(guan3)理(li3)，农(nong2)户(hu4)畜(xu4)养(yang3)家(jia1)禽(qin2)增(zeng1)加(jia1)收(shou1)入(ru4)。
+  分歧: 圈: 网quan1/参juan4
+
+【🟡】行432 @# 【## 金(jin1)融(rong2)/工(gong1)业(ye4)/医(yi1)疗(liao2)行(hang2)业(ye4)补(bu3)充(chong1) 171-220】 (原192)
+  原文: 一(yi2)沓(ta4)沓(ta4)生(sheng1)产(chan3)报(bao4)表(biao3)归(gui1)档(dang4)，访(fang3)客(ke4)纷(fen1)至(zhi4)沓(ta4)来(lai2)考(kao3)察(cha2)厂(chang3)房(fang2)。
+  分歧: 沓: 网ta4/参da2  沓: 网ta4/参da2
+
+【🟡】行440 @# 【## 金(jin1)融(rong2)/工(gong1)业(ye4)/医(yi1)疗(liao2)行(hang2)业(ye4)补(bu3)充(chong1) 171-220】 (原200)
+  原文: 轧(ya4)辊(gun3)磨(mo2)损(sun3)及(ji2)时(shi2)更(geng1)换(huan4)，路(lu4)面(mian4)轧(ya4)实(shi2)保(bao3)障(zhang4)行(xing2)车(che1)安(an1)全(quan2)。
+  分歧: 轧: 网ya4/参zha2
+
+【🟡】行441 @# 【## 金(jin1)融(rong2)/工(gong1)业(ye4)/医(yi1)疗(liao2)行(hang2)业(ye4)补(bu3)充(chong1) 171-220】 (原201)
+  原文: 载(zai3)满(man3)商(shang1)品(pin3)的(de0)货(huo4)车(che1)配(pei4)送(song4)，史(shi3)书(shu1)载(zai3)录(lu4)商(shang1)贸(mao4)发(fa1)展(zhan3)历(li4)史(shi3)。
+  分歧: 载: 网zai3/参zai4
+
+【🟡】行442 @# 【## 金(jin1)融(rong2)/工(gong1)业(ye4)/医(yi1)疗(liao2)行(hang2)业(ye4)补(bu3)充(chong1) 171-220】 (原202)
+  原文: 牲(sheng1)畜(chu4)集(ji2)中(zhong1)圈(quan1)养(yang3)防(fang2)疫(yi4)，农(nong2)户(hu4)畜(xu4)养(yang3)家(jia1)禽(qin2)增(zeng1)加(jia1)收(shou1)入(ru4)。
+  分歧: 圈: 网quan1/参juan4
+
+【🟡】行449 @# 【## 金(jin1)融(rong2)/工(gong1)业(ye4)/医(yi1)疗(liao2)行(hang2)业(ye4)补(bu3)充(chong1) 171-220】 (原209)
+  原文: 一(yi2)沓(ta4)沓(ta4)生(sheng1)产(chan3)报(bao4)表(biao3)归(gui1)档(dang4)，合(he2)作(zuo4)商(shang1)纷(fen1)至(zhi4)沓(ta4)来(lai2)考(kao3)察(cha2)。
+  分歧: 沓: 网ta4/参da2  沓: 网ta4/参da2
+
+【🟡】行452 @# 【## 金(jin1)融(rong2)/工(gong1)业(ye4)/医(yi1)疗(liao2)行(hang2)业(ye4)补(bu3)充(chong1) 171-220】 (原212)
+  原文: 模(mo2)仿(fang3)成(cheng2)熟(shu2)生(sheng1)产(chan3)工(gong1)艺(yi4)，模(mo2)具(ju4)浇(jiao1)筑(zhu4)标(biao1)准(zhun3)化(hua4)零(ling2)部(bu4)件(jian4)。
+  分歧: 模: 网mo2/参mu2
+
+【🟡】行455 @# 【## 金(jin1)融(rong2)/工(gong1)业(ye4)/医(yi1)疗(liao2)行(hang2)业(ye4)补(bu3)充(chong1) 171-220】 (原215)
+  原文: 削(xue1)减(jian3)冗(rong3)余(yu2)工(gong1)序(xu4)提(ti2)升(sheng1)产(chan3)能(neng2)，地(di4)壳(ke2)岩(yan2)层(ceng2)采(cai3)样(yang4)勘(kan1)探(tan4)。
+  分歧: 壳: 网ke2/参qiao4
+
+【🟡】行457 @# 【## 金(jin1)融(rong2)/工(gong1)业(ye4)/医(yi1)疗(liao2)行(hang2)业(ye4)补(bu3)充(chong1) 171-220】 (原217)
+  原文: 轧(ya4)辊(gun3)磨(mo2)损(sun3)及(ji2)时(shi2)更(geng4)换(huan4)，路(lu4)面(mian4)轧(ya4)实(shi2)保(bao3)障(zhang4)车(che1)辆(liang4)通(tong1)行(xing2)。
+  分歧: 轧: 网ya4/参zha2  更: 网geng4/参geng1
+
+【🟡】行458 @# 【## 金(jin1)融(rong2)/工(gong1)业(ye4)/医(yi1)疗(liao2)行(hang2)业(ye4)补(bu3)充(chong1) 171-220】 (原218)
+  原文: 商(shang1)贾(jia3)往(wang3)来(lai2)互(hu4)通(tong1)货(huo4)物(wu4)，古(gu3)镇(zhen4)集(ji2)市(shi4)常(chang2)年(nian2)人(ren2)声(sheng1)鼎(ding3)沸(fei4)。
+  分歧: 贾: 网jia3/参gu3
+
+【🟡】行460 @# 【## 金(jin1)融(rong2)/工(gong1)业(ye4)/医(yi1)疗(liao2)行(hang2)业(ye4)补(bu3)充(chong1) 171-220】 (原220)
+  原文: 酩(ming3)酊(ding1)大(da4)醉(zui4)耽误(dan1 wu)工(gong1)作(zuo4)，自(zi4)律(lü4)方(fang1)能(neng2)稳(wen3)步(bu4)前(qian2)行(xing2)。
+  分歧: 酊: 网ding1/参ding3
+
+【🟡】行468 @# 【## 成(cheng2)语(yu3)易(yi4)错(cuo4)读(du2)音(yin1)补(bu3)充(chong1) 221-270】 (原227)
+  原文: 往(wang3)来(lai2)商(shang1)贾(jia3)云(yun2)集(ji2)古(gu3)镇(zhen4)，沿(yan2)街(jie1)商(shang1)铺(pu4)人(ren2)声(sheng1)鼎(ding3)沸(fei4)。
+  分歧: 贾: 网jia3/参gu3
+
+【🟡】行472 @# 【## 成(cheng2)语(yu3)易(yi4)错(cuo4)读(du2)音(yin1)补(bu3)充(chong1) 221-270】 (原231)
+  原文: 酩(ming3)酊(ding1)大(da4)醉(zui4)耽误(dan1 wu)行(xing2)程(cheng2)，自(zi4)律(lü4)方(fang1)能(neng2)把(ba3)控(kong4)人(ren2)生(sheng1)。
+  分歧: 酊: 网ding1/参ding3
+
+【🟡】行477 @# 【## 成(cheng2)语(yu3)易(yi4)错(cuo4)读(du2)音(yin1)补(bu3)充(chong1) 221-270】 (原236)
+  原文: 一(yi2)沓(ta4)沓(ta4)书(shu1)信(xin4)堆(dui1)积(ji1)案(an4)头(tou2)，访(fang3)客(ke4)纷(fen1)至(zhi4)沓(ta4)来(lai2)拜(bai4)访(fang3)。
+  分歧: 沓: 网ta4/参da2  沓: 网ta4/参da2
+
+【🟡】行478 @# 【## 成(cheng2)语(yu3)易(yi4)错(cuo4)读(du2)音(yin1)补(bu3)充(chong1) 221-270】 (原237)
+  原文: 一(yi2)曝(pu4)十(shi2)寒(han2)练(lian4)习(xi2)书(shu1)法(fa3)，技(ji4)艺(yi4)只(zhi1)会(hui4)日(ri4)渐(jian4)生(sheng1)疏(shu1)。
+  分歧: 只: 网zhi1/参zhi3
+
+【🟡】行480 @# 【## 成(cheng2)语(yu3)易(yi4)错(cuo4)读(du2)音(yin1)补(bu3)充(chong1) 221-270】 (原239)
+  原文: 薄(bao2)利(li4)多(duo1)销(xiao1)经(jing1)营(ying2)小(xiao3)店(dian4)，薄荷(bo he4)清(qing1)茶(cha2)招(zhao1)待(dai4)往(wang3)来(lai2)客人(ke4 ren2)。
+  分歧: 薄: 网bao2/参bo2  荷: 网he4/参he5
+
+【🟡】行492 @# 【## 成(cheng2)语(yu3)易(yi4)错(cuo4)读(du2)音(yin1)补(bu3)充(chong1) 221-270】 (原251)
+  原文: 胴(dong4)体(ti3)检(jian3)测(ce4)保(bao3)障(zhang4)畜(xu4)牧(mu4)安(an1)全(quan2)，嘌(piao4)呤(ling4)检(jian3)测(ce4)把(ba3)控(kong4)食(shi2)材(cai2)健(jian4)康(kang1)。
+  分歧: 呤: 网ling4/参ling2
+
+【🟡】行493 @# 【## 成(cheng2)语(yu3)易(yi4)错(cuo4)读(du2)音(yin1)补(bu3)充(chong1) 221-270】 (原252)
+  原文: 口(kou3)角(jiao3)矛(mao2)盾(dun4)及(ji2)时(shi2)调(diao4)解(jie3)，墙(qiang2)角(jiao3)堆(dui1)放(fang4)闲(xian2)置(zhi4)生(sheng1)产(chan3)器(qi4)械(xie4)。
+  分歧: 调: 网diao4/参tiao2
+
+【🟡】行496 @# 【## 成(cheng2)语(yu3)易(yi4)错(cuo4)读(du2)音(yin1)补(bu3)充(chong1) 221-270】 (原255)
+  原文: 轧(zha2)钢(gang1)生(sheng1)产(chan3)线(xian4)不(bu4)间(jian1)断(duan4)作(zuo4)业(ye4)，压(ya1)路(lu4)机(ji1)平(ping2)整(zheng3)施(shi1)工(gong1)路(lu4)面(mian4)。
+  分歧: 间: 网jian1/参jian4
+
+【🟡】行502 @# 【## 成(cheng2)语(yu3)易(yi4)错(cuo4)读(du2)音(yin1)补(bu3)充(chong1) 221-270】 (原267)
+  原文: 一(yi2)沓(ta4)沓(ta4)文(wen2)件(jian4)等(deng3)待(dai4)批(pi1)阅(yue4)，访(fang3)客(ke4)络(luo4)绎(yi4)不(bu4)绝(jue2)洽(qia4)谈(tan2)。
+  分歧: 沓: 网ta4/参da2  沓: 网ta4/参da2
+
+【🟡】行509 @# 【## 日(ri4)常(chang2)通(tong1)用(yong4)增(zeng1)补(bu3) 271-340】 (原272)
+  原文: 纷(fen1)至(zhi4)沓(ta4)来(lai2)的(de0)游(you2)客(ke4)带(dai4)走(zou3)一(yi2)沓(ta4)沓(ta4)景(jing3)区(qu1)宣(xuan1)传(chuan2)手(shou3)册(ce4)。
+  分歧: 沓: 网ta4/参da2  沓: 网ta4/参da2
+
+【🟡】行510 @# 【## 日(ri4)常(chang2)通(tong1)用(yong4)增(zeng1)补(bu3) 271-340】 (原273)
+  原文: 窗(chuang1)明(ming2)几(ji1)净(jing4)的(de0)书(shu1)房(fang2)里(li3)几(ji3)案(an4)整(zheng3)齐(qi2)摆(bai3)放(fang4)笔(bi3)墨(mo4)纸(zhi3)砚(yan4)。
+  分歧: 几: 网ji3/参ji1
+
+【🟡】行512 @# 【## 日(ri4)常(chang2)通(tong1)用(yong4)增(zeng1)补(bu3) 271-340】 (原275)
+  原文: 唾(tuo4)手(shou3)可(ke3)得(de2)的(de0)机(ji1)遇(yu4)也(ye3)要(yao4)脚(jiao3)踏实(ta1 shi)地(di4)用(yong4)心(xin1)把(ba3)握(wo4)。
+  分歧: 踏: 网ta1/参ta4
+
+【🟡】行515 @# 【## 日(ri4)常(chang2)通(tong1)用(yong4)增(zeng1)补(bu3) 271-340】 (原278)
+  原文: 参(can1)差(cha4)不(bu4)齐(qi2)的(de0)花(hua1)草(cao3)铺(pu4)满(man3)屋(wu1)后(hou4)整(zheng3)片(pian4)空(kong4)地(di4)。
+  分歧: 参: 网can1/参cen1  差: 网cha4/参ci1  空: 网kong4/参kong1
+
+【🟡】行517 @# 【## 日(ri4)常(chang2)通(tong1)用(yong4)增(zeng1)补(bu3) 271-340】 (原280)
+  原文: 自(zi4)怨(yuan4)自(zi4)艾(yi4)只(zhi1)会(hui4)困(kun4)住(zhu4)自(zi4)己(ji3)不(bu4)如(ru2)主(zhu3)动(dong4)改(gai3)变(bian4)现(xian4)状(zhuang4)。
+  分歧: 只: 网zhi1/参zhi3
+
+【🟡】行519 @# 【## 日(ri4)常(chang2)通(tong1)用(yong4)增(zeng1)补(bu3) 271-340】 (原282)
+  原文: 往(wang3)来(lai2)商(shang1)贾(jia3)互(hu4)通(tong1)有(you3)无(wu2)古(gu3)镇(zhen4)集(ji2)市(shi4)常(chang2)年(nian2)喧(xuan1)闹(nao4)。
+  分歧: 贾: 网jia3/参gu3
+
+【🟡】行521 @# 【## 日(ri4)常(chang2)通(tong1)用(yong4)增(zeng1)补(bu3) 271-340】 (原284)
+  原文: 酩(ming3)酊(ding1)大(da4)醉(zui4)容(rong2)易(yi4)误(wu4)事(shi4)日(ri4)常(chang2)饮(yin3)酒(jiu3)应(ying1)当(dang1)适(shi4)度(du4)。
+  分歧: 酊: 网ding1/参ding3
+
+【🟡】行541 @# 【## 日(ri4)常(chang2)通(tong1)用(yong4)增(zeng1)补(bu3) 271-340】 (原304)
+  原文: 嘌(piao4)呤(ling4)过(guo4)高(gao1)食(shi2)材(cai2)痛(tong4)风(feng1)人(ren2)群(qun2)应(ying1)当(dang1)少(shao3)食(shi2)。
+  分歧: 呤: 网ling4/参ling2
+
+【🟡】行548 @# 【## 日(ri4)常(chang2)通(tong1)用(yong4)增(zeng1)补(bu3) 271-340】 (原311)
+  原文: 轧(zha2)钢(gang1)设(she4)备(bei4)持(chi2)续(xu4)运(yun4)转(zhuan3)产(chan3)出(chu1)各(ge4)类(lei4)钢(gang1)材(cai2)。
+  分歧: 转: 网zhuan3/参zhuan4
+
+【🟡】行550 @# 【## 日(ri4)常(chang2)通(tong1)用(yong4)增(zeng1)补(bu3) 271-340】 (原313)
+  原文: 载(zai3)满(man3)生(sheng1)鲜(xian1)货(huo4)车(che1)凌(ling2)晨(chen2)配(pei4)送(song4)各(ge4)大(da4)商(shang1)超(chao1)。
+  分歧: 载: 网zai3/参zai4
+
+【🟡】行553 @# 【## 日(ri4)常(chang2)通(tong1)用(yong4)增(zeng1)补(bu3) 271-340】 (原316)
+  原文: 牲(sheng1)畜(chu4)集(ji2)中(zhong1)圈(quan1)养(yang3)做(zuo4)好(hao3)日(ri4)常(chang2)防(fang2)疫(yi4)工(gong1)作(zuo4)。
+  分歧: 圈: 网quan1/参juan4
+
+【🟡】行562 @# 【## 日(ri4)常(chang2)通(tong1)用(yong4)增(zeng1)补(bu3) 271-340】 (原325)
+  原文: 企(qi3)业(ye4)宰(zai3)相(xiang4)统(tong3)筹(chou2)各(ge4)部(bu4)门(men2)协(xie2)同(tong2)运(yun4)转(zhuan3)。
+  分歧: 转: 网zhuan3/参zhuan4
+
+【🟡】行565 @# 【## 日(ri4)常(chang2)通(tong1)用(yong4)增(zeng1)补(bu3) 271-340】 (原328)
+  原文: 一(yi2)沓(ta4)沓(ta4)生(sheng1)产(chan3)报(bao4)表(biao3)统(tong3)一(yi4)归(gui1)档(dang4)存(cun2)放(fang4)。
+  分歧: 沓: 网ta4/参da2  沓: 网ta4/参da2
+
+【🟡】行569 @# 【## 日(ri4)常(chang2)通(tong1)用(yong4)增(zeng1)补(bu3) 271-340】 (原332)
+  原文: 薄荷(bo he4)清(qing1)凉(liang2)剂(ji4)常(chang2)备(bei4)车(che1)间(jian1)缓(huan3)解(jie3)燥(zao4)热(re4)。
+  分歧: 荷: 网he4/参he5
+
+【🟡】行583 @# 【## 金(jin1)融(rong2)工(gong1)业(ye4)医(yi1)疗(liao2)增(zeng1)补(bu3) 341-410】 (原345)
+  原文: 薄(bao2)利(li4)多(duo1)销(xiao1)是(shi4)线(xian4)下(xia4)小(xiao3)店(dian4)长(chang2)久(jiu3)经(jing1)营(ying2)之(zhi1)道(dao4)。
+  分歧: 薄: 网bao2/参bo2  长: 网chang2/参zhang3
+
+【🟡】行584 @# 【## 金(jin1)融(rong2)工(gong1)业(ye4)医(yi1)疗(liao2)增(zeng1)补(bu3) 341-410】 (原346)
+  原文: 薄荷(bo he4)饮(yin3)片(pian4)多(duo1)用(yong4)于(yu2)风(feng1)热(re4)感(gan3)冒(mao4)清(qing1)热(re4)降(jiang4)火(huo3)。
+  分歧: 荷: 网he4/参he5
+
+【🟡】行605 @# 【## 金(jin1)融(rong2)工(gong1)业(ye4)医(yi1)疗(liao2)增(zeng1)补(bu3) 341-410】 (原367)
+  原文: 化(hua4)工(gong1)原(yuan2)料(liao4)匀称(yun chen2)配(pei4)比(bi3)保(bao3)证(zheng4)成(cheng2)品(pin3)质(zhi4)量(liang4)。
+  分歧: 称: 网chen2/参chen4
+
+【🟡】行609 @# 【## 金(jin1)融(rong2)工(gong1)业(ye4)医(yi1)疗(liao2)增(zeng1)补(bu3) 341-410】 (原371)
+  原文: 嘌(piao4)呤(ling4)检(jian3)测(ce4)仪(yi2)器(qi4)每(mei3)日(ri4)开(kai1)机(ji1)自(zi4)检(jian3)。
+  分歧: 呤: 网ling4/参ling2
+
+【🟡】行611 @# 【## 金(jin1)融(rong2)工(gong1)业(ye4)医(yi1)疗(liao2)增(zeng1)补(bu3) 341-410】 (原373)
+  原文: 几(ji1)案(an4)存(cun2)放(fang4)实(shi2)验(yan4)试(shi4)剂(ji4)做(zuo4)好(hao3)标(biao1)识(shi2)。
+  分歧: 识: 网shi2/参zhi4
+
+【🟡】行624 @# 【## 金(jin1)融(rong2)工(gong1)业(ye4)医(yi1)疗(liao2)增(zeng1)补(bu3) 341-410】 (原386)
+  原文: 载(zai3)满(man3)原(yuan2)料(liao4)货(huo4)车(che1)进(jin4)场(chang3)先(xian1)过(guo4)安(an1)检(jian3)。
+  分歧: 载: 网zai3/参zai4
+
+【🟡】行640 @# 【## 金(jin1)融(rong2)工(gong1)业(ye4)医(yi1)疗(liao2)增(zeng1)补(bu3) 341-410】 (原402)
+  原文: 一(yi2)沓(ta4)沓(ta4)生(sheng1)产(chan3)单(dan1)据(ju4)按(an4)月(yue4)装(zhuang1)订(ding4)保(bao3)存(cun2)。
+  分歧: 沓: 网ta4/参da2  沓: 网ta4/参da2
+
+【🟡】行641 @# 【## 金(jin1)融(rong2)工(gong1)业(ye4)医(yi1)疗(liao2)增(zeng1)补(bu3) 341-410】 (原403)
+  原文: 合(he2)作(zuo4)商(shang1)纷(fen1)至(zhi4)沓(ta4)来(lai2)洽(qia4)谈(tan2)长(chang2)期(qi1)供(gong4)货(huo4)。
+  分歧: 供: 网gong4/参gong1
+
+【🟡】行644 @# 【## 金(jin1)融(rong2)工(gong1)业(ye4)医(yi1)疗(liao2)增(zeng1)补(bu3) 341-410】 (原406)
+  原文: 薄荷(bo he4)清(qing1)凉(liang2)喷(pen1)雾(wu4)发(fa1)放(fang4)一(yi2)线(xian4)工(gong1)人(ren2)。
+  分歧: 荷: 网he4/参he5
+
+【🟡】行650 @# 【## 成(cheng2)语(yu3)专(zhuan1)项(xiang4)增(zeng1)补(bu3) 411-470】 (原411)
+  原文: 自(zi4)怨(yuan4)自(zi4)艾(yi4)不(bu4)如(ru2)脚(jiao3)踏实(ta1 shi)地(di4)重(zhong4)新(xin1)出(chu1)发(fa1)。
+  分歧: 踏: 网ta1/参ta4  重: 网zhong4/参chong2
+
+【🟡】行654 @# 【## 成(cheng2)语(yu3)专(zhuan1)项(xiang4)增(zeng1)补(bu3) 411-470】 (原415)
+  原文: 往(wang3)来(lai2)商(shang1)贾(jia3)汇(hui4)聚(ju4)古(gu3)镇(zhen4)热闹(re4 nao)非(fei1)凡(fan2)。
+  分歧: 贾: 网jia3/参gu3
+
+【🟡】行656 @# 【## 成(cheng2)语(yu3)专(zhuan1)项(xiang4)增(zeng1)补(bu3) 411-470】 (原417)
+  原文: 酩(ming3)酊(ding1)大(da4)醉(zui4)容(rong2)易(yi4)耽误(dan1 wu)重(zhong4)要(yao4)事(shi4)务(wu4)。
+  分歧: 酊: 网ding1/参ding3
+
+【🟡】行663 @# 【## 成(cheng2)语(yu3)专(zhuan1)项(xiang4)增(zeng1)补(bu3) 411-470】 (原424)
+  原文: 一(yi2)沓(ta4)沓(ta4)书(shu1)信(xin4)承(cheng2)载(zai4)亲(qin1)友(you3)思(si1)念(nian4)之(zhi1)情(qing2)。
+  分歧: 沓: 网ta4/参da2  沓: 网ta4/参da2
+
+【🟡】行668 @# 【## 成(cheng2)语(yu3)专(zhuan1)项(xiang4)增(zeng1)补(bu3) 411-470】 (原429)
+  原文: 商(shang1)贾(jia3)互(hu4)通(tong1)有(you3)无(wu2)繁(fan2)荣(rong2)乡(xiang1)间(jian1)集(ji2)市(shi4)。
+  分歧: 贾: 网jia3/参gu3
+
+【🟡】行670 @# 【## 成(cheng2)语(yu3)专(zhuan1)项(xiang4)增(zeng1)补(bu3) 411-470】 (原431)
+  原文: 酩(ming3)酊(ding1)大(da4)醉(zui4)之(zhi1)后(hou4)懊(ao4)悔(hui3)虚(xu1)度(du4)光(guang1)阴(yin1)。
+  分歧: 酊: 网ding1/参ding3
+
+【🟡】行675 @# 【## 成(cheng2)语(yu3)专(zhuan1)项(xiang4)增(zeng1)补(bu3) 411-470】 (原436)
+  原文: 参(can1)差(cha4)苗(miao2)木(mu4)定(ding4)期(qi1)修(xiu1)剪(jian3)规(gui1)整(zheng3)长(zhang3)势(shi4)。
+  分歧: 参: 网can1/参cen1  差: 网cha4/参ci1
+
+【🟡】行678 @# 【## 成(cheng2)语(yu3)专(zhuan1)项(xiang4)增(zeng1)补(bu3) 411-470】 (原439)
+  原文: 薄(bao2)利(li4)多(duo1)销(xiao1)小(xiao3)店(dian4)客(ke4)源(yuan2)常(chang2)年(nian2)稳(wen3)定(ding4)。
+  分歧: 薄: 网bao2/参bo2
+
+【🟡】行695 @# 【## 成(cheng2)语(yu3)专(zhuan1)项(xiang4)增(zeng1)补(bu3) 411-470】 (原456)
+  原文: 嘌(piao4)呤(ling4)管(guan3)控(kong4)合(he2)理(li3)搭(da1)配(pei4)日(ri4)常(chang2)饮(yin3)食(shi2)。
+  分歧: 呤: 网ling4/参ling2
+
+【🟡】行705 @# 【# 第(di4)一(yi1)轮(lun2) 80条(tiao2)】 (原3)
+  原文: 冒(mao4)顿(dun4)是(shi4)匈(xiong1)奴(nu2)首(shou3)领(ling3)，常(chang2)年(nian2)率(lü4)军(jun1)侵(qin1)扰(rao3)汉(han4)朝(chao2)边(bian1)境(jing4)。
+  分歧: 冒: 网mao4/参mo4  顿: 网dun4/参du2  率: 网lv4/参shuai4
+
+【🟡】行716 @# 【# 第(di4)一(yi1)轮(lun2) 80条(tiao2)】 (原14)
+  原文: 金(jin1)兀(wu4)术(shu4)是(shi4)金(jin1)朝(chao2)名(ming2)将(jiang4)，常(chang2)年(nian2)率(lü4)军(jun1)南(nan2)下(xia4)与(yu3)宋(song4)交(jiao1)战(zhan4)。
+  分歧: 率: 网lv4/参shuai4
+
+【🟡】行721 @# 【# 第(di4)一(yi1)轮(lun2) 80条(tiao2)】 (原19)
+  原文: 女(nü3)贾(jia3)是(shi4)春(chun1)秋(qiu1)晋(jin4)国(guo2)大夫(dai fu4)，朝(chao2)堂(tang2)之(zhi1)上(shang4)颇(po1)有(you3)声(sheng1)望(wang4)。
+  分歧: 大: 网dai/参da4  夫: 网fu4/参fu1
+
+【🟡】行722 @# 【# 第(di4)一(yi1)轮(lun2) 80条(tiao2)】 (原20)
+  原文: 大(da4)月(yue4)氏(zhi1)地(di4)处(chu3)西(xi1)域(yu4)，曾(ceng2)与(yu3)汉(han4)朝(chao2)结(jie2)盟(meng2)共(gong4)抗(kang4)匈(xiong1)奴(nu2)。
+  分歧: 氏: 网zhi1/参shi4  处: 网chu3/参chu4
+
+【🟡】行733 @# 【# 第(di4)一(yi1)轮(lun2) 80条(tiao2)】 (原31)
+  原文: 墨(mo4)翟(zhai2)创(chuang4)立(li4)墨(mo4)家(jia1)学(xue2)派(pai4)，主(zhu3)张(zhang1)兼(jian1)爱(ai4)非(fei1)攻(gong1)理(li3)念(nian4)。
+  分歧: 翟: 网zhai2/参di2
+
+【🟡】行736 @# 【# 第(di4)一(yi1)轮(lun2) 80条(tiao2)】 (原34)
+  原文: 东(dong1)汉(han4)蔡(cai4)邕(yong1)精(jing1)通(tong1)音(yin1)律(lü4)，书(shu1)法(fa3)造(zao4)诣(yi4)冠(guan1)绝(jue2)一(yi4)时(shi2)。
+  分歧: 冠: 网guan1/参guan4
+
+【🟡】行742 @# 【# 第(di4)一(yi1)轮(lun2) 80条(tiao2)】 (原40)
+  原文: 杞(qi3)子(zi3)是(shi4)秦(qin2)国(guo2)大夫(dai fu4)，驻(zhu4)守(shou3)郑(zheng4)国(guo2)边(bian1)关(guan1)之(zhi1)地(di4)。
+  分歧: 大: 网dai/参da4  夫: 网fu4/参fu1
+
+【🟡】行745 @# 【# 第(di4)一(yi1)轮(lun2) 80条(tiao2)】 (原43)
+  原文: 射(she4)干(gan4)是(shi4)山(shan1)野(ye3)草(cao3)本(ben3)植(zhi2)物(wu4)，劝(quan4)学(xue2)篇(pian1)中(zhong1)提(ti2)及(ji2)此(ci3)种(zhong3)草(cao3)木(mu4)。
+  分歧: 射: 网she4/参ye4  种: 网zhong3/参zhong4
+
+【🟡】行759 @# 【# 第(di4)一(yi1)轮(lun2) 80条(tiao2)】 (原57)
+  原文: 冒(mao4)顿(dun4)单(chan2)于(yu2)统(tong3)一(yi1)匈(xiong1)奴(nu2)各(ge4)部(bu4)，实(shi2)力(li4)震(zhen4)慑(she4)中(zhong1)原(yuan2)王(wang2)朝(chao2)。
+  分歧: 冒: 网mao4/参mo4  顿: 网dun4/参du2
+
+【🟡】行769 @# 【# 第(di4)一(yi1)轮(lun2) 80条(tiao2)】 (原67)
+  原文: 金(jin1)兀(wu4)术(shu4)率(lü4)军(jun1)南(nan2)下(xia4)，多(duo1)次(ci4)与(yu3)南(nan2)宋(song4)军(jun1)队(dui4)交(jiao1)战(zhan4)。
+  分歧: 率: 网lv4/参shuai4
+
+【🟡】行772 @# 【# 第(di4)一(yi1)轮(lun2) 80条(tiao2)】 (原70)
+  原文: 大(da4)月(yue4)氏(zhi1)与(yu3)汉(han4)朝(chao2)互(hu4)通(tong1)使(shi3)节(jie2)，交(jiao1)换(huan4)丝(si1)绸(chou2)特(te4)产(chan3)。
+  分歧: 氏: 网zhi1/参shi4
+
+【🟡】行780 @# 【# 第(di4)一(yi1)轮(lun2) 80条(tiao2)】 (原78)
+  原文: 墨(mo4)翟(zhai2)游(you2)历(li4)各(ge4)国(guo2)，宣(xuan1)扬(yang2)墨(mo4)家(jia1)兼(jian1)爱(ai4)思(si1)想(xiang3)。
+  分歧: 翟: 网zhai2/参di2
+
+【🟡】行786 @# 【# 第(di4)二(er4)轮(lun2) 追(zhui1)加(jia1)100条(tiao2)（81-180）】 (原83)
+  原文: 尉(wei4)迟(chi2)恭(gong1)持(chi2)钢(gang1)鞭(bian1)护(hu4)主(zhu3)，是(shi4)唐(tang2)太(tai4)宗(zong1)信(xin4)赖(lai4)的(de0)开(kai1)国(guo2)功(gong1)臣(chen2)。
+  分歧: 尉: 网wei4/参yu4
+
+【🟡】行790 @# 【# 第(di4)二(er4)轮(lun2) 追(zhui1)加(jia1)100条(tiao2)（81-180）】 (原87)
+  原文: 逢(feng2)丑(chou3)是(shi4)春(chun1)秋(qiu1)齐(qi2)国(guo2)大夫(dai fu4)，善(shan4)于(yu2)谋(mou2)划(hua4)外(wai4)交(jiao1)事(shi4)宜(yi2)。
+  分歧: 大: 网dai/参da4  夫: 网fu4/参fu1
+
+【🟡】行792 @# 【# 第(di4)二(er4)轮(lun2) 追(zhui1)加(jia1)100条(tiao2)（81-180）】 (原89)
+  原文: 单(dan1)父(fu4)是(shi4)春(chun1)秋(qiu1)古(gu3)邑(yi4)，单(dan1)卷(juan4)隐(yin3)居(ju1)此(ci3)地(di4)教(jiao4)化(hua4)百(bai3)姓(xing4)。
+  分歧: 卷: 网juan4/参juan3
+
+【🟡】行799 @# 【# 第(di4)二(er4)轮(lun2) 追(zhui1)加(jia1)100条(tiao2)（81-180）】 (原96)
+  原文: 员(yuan2)峤(qiao2)是(shi4)上(shang4)古(gu3)仙(xian1)山(shan1)之(zhi1)名(ming2)，记(ji4)载(zai3)于(yu2)古(gu3)籍(ji2)山(shan1)海(hai3)经(jing1)。
+  分歧: 峤: 网qiao2/参jiao4
+
+【🟡】行800 @# 【# 第(di4)二(er4)轮(lun2) 追(zhui1)加(jia1)100条(tiao2)（81-180）】 (原97)
+  原文: 缪(miu4)贤(xian2)举(ju3)荐(jian4)蔺(lin4)相(xiang1)如(ru2)，促(cu4)成(cheng2)完(wan2)璧(bi4)归(gui1)赵(zhao4)千(qian1)古(gu3)佳(jia1)话(hua4)。
+  分歧: 缪: 网miu4/参miao4
+
+【🟡】行804 @# 【# 第(di4)二(er4)轮(lun2) 追(zhui1)加(jia1)100条(tiao2)（81-180）】 (原101)
+  原文: 万(wan4)俟(si4)咏(yong3)是(shi4)宋(song4)代(dai4)词(ci2)人(ren2)，词(ci2)作(zuo4)风(feng1)格(ge2)婉(wan3)约(yue1)流(liu2)传(chuan2)后(hou4)世(shi4)。
+  分歧: 万: 网wan4/参mo4  俟: 网si4/参qi2
+
+【🟡】行805 @# 【# 第(di4)二(er4)轮(lun2) 追(zhui1)加(jia1)100条(tiao2)（81-180）】 (原102)
+  原文: 澹(dan4)台(tai2)氏(shi4)为(wei4)孔(kong3)门(men2)弟(di4)子(zi3)，澹(dan4)台(tai2)灭(mie4)明(ming2)品(pin3)行(xing2)端(duan1)正(zheng4)受(shou4)人(ren2)敬(jing4)重(zhong4)。
+  分歧: 澹: 网dan4/参tan2  澹: 网dan4/参tan2
+
+【🟡】行808 @# 【# 第(di4)二(er4)轮(lun2) 追(zhui1)加(jia1)100条(tiao2)（81-180）】 (原105)
+  原文: 啜(chuo4)希(xi1)是(shi4)古(gu3)代(dai4)文(wen2)人(ren2)，诗(shi1)文(wen2)清(qing1)雅(ya3)被(bei4)典(dian3)籍(ji2)收(shou1)录(lu4)。
+  分歧: 啜: 网chuo4/参chuai4
+
+【🟡】行814 @# 【# 第(di4)二(er4)轮(lun2) 追(zhui1)加(jia1)100条(tiao2)（81-180）】 (原111)
+  原文: 睢(sui1)景(jing3)臣(chen2)元(yuan2)代(dai4)散(san4)曲(qu3)家(jia1)，创(chuang4)作(zuo4)高(gao1)祖(zu3)还(huan2)乡(xiang1)闻(wen2)名(ming2)于(yu2)世(shi4)。
+  分歧: 散: 网san4/参san3
+
+【🟡】行819 @# 【# 第(di4)二(er4)轮(lun2) 追(zhui1)加(jia1)100条(tiao2)（81-180）】 (原116)
+  原文: 郗(chi1)超(chao1)东(dong1)晋(jin4)谋(mou2)士(shi4)，辅(fu3)佐(zuo3)桓(huan2)温(wen1)谋(mou2)划(hua4)军(jun1)政(zheng4)大(da4)事(shi4)。
+  分歧: 郗: 网chi1/参xi1
+
+【🟡】行828 @# 【# 第(di4)二(er4)轮(lun2) 追(zhui1)加(jia1)100条(tiao2)（81-180）】 (原125)
+  原文: 陂(bei1)是(shi4)上(shang4)古(gu3)蓄(xu4)水(shui3)设(she4)施(shi1)，黄(huang2)陂(bei1)自(zi4)古(gu3)人(ren2)文(wen2)兴(xing1)盛(sheng4)。
+  分歧: 陂: 网bei1/参pi2
+
+【🟡】行833 @# 【# 第(di4)二(er4)轮(lun2) 追(zhui1)加(jia1)100条(tiao2)（81-180）】 (原130)
+  原文: 於(wu1)陵(ling2)是(shi4)春(chun1)秋(qiu1)古(gu3)邑(yi4)，於(wu1)姓(xing4)起(qi3)源(yuan2)于(yu2)此(ci3)地(di4)。
+  分歧: 於: 网wu1/参yu2  於: 网wu1/参yu2
+
+【🟡】行845 @# 【# 第(di4)二(er4)轮(lun2) 追(zhui1)加(jia1)100条(tiao2)（81-180）】 (原142)
+  原文: 范(fan4)蠡(li2)泛(fan4)舟(zhou1)蠡(li2)湖(hu2)，蠡(li2)县(xian4)为(wei4)其(qi2)早(zao3)年(nian2)隐(yin3)居(ju1)之(zhi1)地(di4)。
+  分歧: 蠡: 网li2/参li3  蠡: 网li2/参li3  蠡: 网li2/参li3
+
+【🟡】行847 @# 【# 第(di4)二(er4)轮(lun2) 追(zhui1)加(jia1)100条(tiao2)（81-180）】 (原144)
+  原文: 歙(xi1)县(xian4)盛(sheng4)产(chan3)徽(hui1)墨(mo4)歙(xi1)砚(yan4)，古(gu3)文(wen2)中(zhong1)歙(xi1)可(ke3)表(biao3)吸(xi1)气(qi4)之(zhi1)意(yi4)。
+  分歧: 歙: 网xi1/参she4  歙: 网xi1/参she4  歙: 网xi1/参she4
+
+【🟡】行854 @# 【# 第(di4)二(er4)轮(lun2) 追(zhui1)加(jia1)100条(tiao2)（81-180）】 (原151)
+  原文: 硇(nao2)洲(zhou1)岛(dao3)火(huo3)山(shan1)地(di4)貌(mao4)独(du2)特(te4)，地(di4)处(chu3)湛(zhan4)江(jiang1)外(wai4)海(hai3)。
+  分歧: 处: 网chu3/参chu4
+
+【🟡】行856 @# 【# 第(di4)二(er4)轮(lun2) 追(zhui1)加(jia1)100条(tiao2)（81-180）】 (原153)
+  原文: 大(da4)埔(pu3)客(ke4)家(jia1)文(wen2)化(hua4)浓(nong2)厚(hou4)，广(guang3)东(dong1)梅(mei2)州(zhou1)知(zhi1)名(ming2)古(gu3)县(xian4)。
+  分歧: 埔: 网pu3/参bu4
+
+【🟡】行865 @# 【# 第(di4)二(er4)轮(lun2) 追(zhui1)加(jia1)100条(tiao2)（81-180）】 (原162)
+  原文: 莘(shen1)县(xian4)盛(sheng4)产(chan3)小(xiao3)麦(mai4)，莘(shen1)庄(zhuang1)是(shi4)上(shang4)海(hai3)城(cheng2)镇(zhen4)地(di4)名(ming2)。
+  分歧: 莘: 网shen1/参xin1
+
+【🟡】行871 @# 【# 第(di4)二(er4)轮(lun2) 追(zhui1)加(jia1)100条(tiao2)（81-180）】 (原168)
+  原文: 陂(bei1)陀(tuo2)地(di4)势(shi4)起(qi3)伏(fu2)，古(gu3)文(wen2)中(zhong1)常(chang2)用(yong4)来(lai2)形(xing2)容(rong2)山(shan1)野(ye3)地(di4)貌(mao4)。
+  分歧: 陂: 网bei1/参po1
+
+【🟡】行875 @# 【# 第(di4)二(er4)轮(lun2) 追(zhui1)加(jia1)100条(tiao2)（81-180）】 (原172)
+  原文: 珲(hui1)春(chun1)地(di4)处(chu3)三(san1)国(guo2)交(jiao1)界(jie4)，吉(ji2)林(lin2)边(bian1)境(jing4)重(zhong4)镇(zhen4)。
+  分歧: 处: 网chu3/参chu4
+
+【🟡】行878 @# 【# 第(di4)二(er4)轮(lun2) 追(zhui1)加(jia1)100条(tiao2)（81-180）】 (原175)
+  原文: 郴(chen1)州(zhou1)地(di4)处(chu3)湘(xiang1)南(nan2)，自(zi4)古(gu3)连(lian2)通(tong1)两(liang3)广(guang3)要(yao4)道(dao4)。
+  分歧: 处: 网chu3/参chu4
+
+【🟡】行886 @# 【# 第(di4)三(san1)轮(lun2) 追(zhui1)加(jia1)120条(tiao2)（181-300）】 (原182)
+  原文: 荀(xun2)息(xi1)忠(zhong1)心(xin1)护(hu4)晋(jin4)为(wei4)国(guo2)舍(she4)生(sheng1)取(qu3)义(yi4)。
+  分歧: 舍: 网she4/参she3
+
+【🟡】行892 @# 【# 第(di4)三(san1)轮(lun2) 追(zhui1)加(jia1)120条(tiao2)（181-300）】 (原188)
+  原文: 范(fan4)蠡(li2)功(gong1)成(cheng2)身(shen1)退(tui4)泛(fan4)舟(zhou1)五(wu3)湖(hu2)归(gui1)隐(yin3)。
+  分歧: 蠡: 网li2/参li3
+
+【🟡】行904 @# 【# 第(di4)三(san1)轮(lun2) 追(zhui1)加(jia1)120条(tiao2)（181-300）】 (原200)
+  原文: 澹(dan4)台(tai2)灭(mie4)明(ming2)游(you2)学(xue2)南(nan2)方(fang1)广(guang3)收(shou1)弟(di4)子(zi3)。
+  分歧: 澹: 网dan4/参tan2
+
+【🟡】行909 @# 【# 第(di4)三(san1)轮(lun2) 追(zhui1)加(jia1)120条(tiao2)（181-300）】 (原205)
+  原文: 颛(zhuan1)孙(sun1)师(shi1)为(wei4)人(ren2)豪(hao2)爽(shuang3)善(shan4)于(yu2)交(jiao1)际(ji4)。
+  分歧: 为: 网wei4/参wei2
+
+【🟡】行917 @# 【# 第(di4)三(san1)轮(lun2) 追(zhui1)加(jia1)120条(tiao2)（181-300）】 (原213)
+  原文: 单(dan1)父(fu4)古(gu3)城(cheng2)因(yin1)单(dan1)卷(juan4)隐(yin3)居(ju1)得(de2)名(ming2)。
+  分歧: 卷: 网juan4/参juan3
+
+【🟡】行919 @# 【# 第(di4)三(san1)轮(lun2) 追(zhui1)加(jia1)120条(tiao2)（181-300）】 (原215)
+  原文: 於(wu1)陵(ling2)子(zi3)安(an1)淡(dan4)泊(bo2)名(ming2)利(li4)隐(yin3)居(ju1)山(shan1)野(ye3)。
+  分歧: 於: 网wu1/参yu2
+
+【🟡】行925 @# 【# 第(di4)三(san1)轮(lun2) 追(zhui1)加(jia1)120条(tiao2)（181-300）】 (原221)
+  原文: 员(yuan2)峤(qiao2)仙(xian1)山(shan1)与(yu3)岱(dai4)舆(yu2)并(bing4)称(cheng1)仙(xian1)境(jing4)。
+  分歧: 峤: 网qiao2/参jiao4
+
+【🟡】行926 @# 【# 第(di4)三(san1)轮(lun2) 追(zhui1)加(jia1)120条(tiao2)（181-300）】 (原222)
+  原文: 缪(miu4)公(gong1)即(ji2)秦(qin2)穆(mu4)公(gong1)春(chun1)秋(qiu1)霸(ba4)主(zhu3)。
+  分歧: 缪: 网miu4/参mu4
+
+【🟡】行930 @# 【# 第(di4)三(san1)轮(lun2) 追(zhui1)加(jia1)120条(tiao2)（181-300）】 (原226)
+  原文: 万(wan4)俟(si4)卨(xie4)与(yu3)秦(qin2)桧(gui4)同(tong2)构(gou4)陷(xian4)岳(yue4)飞(fei1)。
+  分歧: 万: 网wan4/参mo4  俟: 网si4/参qi2
+
+【🟡】行933 @# 【# 第(di4)三(san1)轮(lun2) 追(zhui1)加(jia1)120条(tiao2)（181-300）】 (原229)
+  原文: 啜(chuo4)氏(shi4)源(yuan2)自(zi4)北(bei3)方(fang1)游(you2)牧(mu4)部(bu4)族(zu2)首(shou3)领(ling3)。
+  分歧: 啜: 网chuo4/参chuai4
+
+【🟡】行943 @# 【# 第(di4)三(san1)轮(lun2) 追(zhui1)加(jia1)120条(tiao2)（181-300）】 (原239)
+  原文: 郗(chi1)鉴(jian4)平(ping2)定(ding4)东(dong1)晋(jin4)内(nei4)部(bu4)叛(pan4)乱(luan4)。
+  分歧: 郗: 网chi1/参xi1
+
+【🟡】行957 @# 【# 第(di4)三(san1)轮(lun2) 追(zhui1)加(jia1)120条(tiao2)（181-300）】 (原253)
+  原文: 於(wu1)陵(ling2)古(gu3)城(cheng2)遗(yi2)址(zhi3)尚(shang4)存(cun2)旧(jiu4)瓦(wa3)。
+  分歧: 於: 网wu1/参yu2
+
+【🟡】行969 @# 【# 第(di4)三(san1)轮(lun2) 追(zhui1)加(jia1)120条(tiao2)（181-300）】 (原265)
+  原文: 蠡(li2)湖(hu2)因(yin1)范(fan4)蠡(li2)泛(fan4)舟(zhou1)得(de2)名(ming2)江(jiang1)南(nan2)。
+  分歧: 蠡: 网li2/参li3  蠡: 网li2/参li3
+
+【🟡】行970 @# 【# 第(di4)三(san1)轮(lun2) 追(zhui1)加(jia1)120条(tiao2)（181-300）】 (原266)
+  原文: 歙(xi1)川(chuan1)溪(xi1)流(liu2)贯(guan4)穿(chuan1)徽(hui1)州(zhou1)群(qun2)山(shan1)。
+  分歧: 歙: 网xi1/参she4
+
+【🟡】行979 @# 【# 第(di4)三(san1)轮(lun2) 追(zhui1)加(jia1)120条(tiao2)（181-300）】 (原275)
+  原文: 大(da4)埔(pu3)山(shan1)间(jian1)留(liu2)存(cun2)客(ke4)家(jia1)围(wei2)屋(wu1)。
+  分歧: 埔: 网pu3/参bu4
+
+【🟡】行994 @# 【# 第(di4)三(san1)轮(lun2) 追(zhui1)加(jia1)120条(tiao2)（181-300）】 (原290)
+  原文: 陂(bei1)陀(tuo2)山(shan1)道(dao4)崎(qi2)岖(qu1)起(qi3)伏(fu2)不(bu4)平(ping2)。
+  分歧: 陂: 网bei1/参po1
+
+【🟡】行1013 @# 【## 名(ming2)词(ci2)后(hou4)缀(zhui4)轻(qing1)声(sheng1) 1-10】 (原4)
+  原文: 做(zuo4)人(ren2)守(shou3)好(hao3)规矩(gui1 ju)，规矩(gui1 ju)二(er4)字(zi4)后(hou4)字(zi4)轻(qing1)读(du2)不(bu2)重(zhong4)读(du2)。
+  分歧: 重: 网zhong4/参chong2
+
+【🟡】行1017 @# 【## 名(ming2)词(ci2)后(hou4)缀(zhui4)轻(qing1)声(sheng1) 1-10】 (原8)
+  原文: 萝卜(luo bo2)清(qing1)甜(tian2)爽(shuang3)口(kou3)，萝卜(luo bo2)二(er4)字(zi4)第(di4)二(er4)个(ge4)字(zi4)固(gu4)定(ding4)轻(qing1)声(sheng1)。
+  分歧: 卜: 网bo2/参bo5  卜: 网bo2/参bo5
+
+【🟡】行1034 @# 【## 多(duo1)音(yin1)节(jie2)口(kou3)语(yu3)轻(qing1)声(sheng1) 21-30】 (原23)
+  原文: 暖和(nuan huo3)舒(shu1)适(shi4)的(de0)小(xiao3)屋(wu1)，和(he2)字(zi4)末(mo4)尾(wei3)轻(qing1)读(du2)。
+  分歧: 和: 网huo3/参huo5
+
+【🟡】行1037 @# 【## 多(duo1)音(yin1)节(jie2)口(kou3)语(yu3)轻(qing1)声(sheng1) 21-30】 (原26)
+  原文: 麻利(ma2 li)收拾(shou1 shi)碗(wan3)筷(kuai4)，利(li4)字(zi4)口(kou3)语(yu3)轻(qing1)读(du2)不(bu2)重(zhong4)读(du2)。
+  分歧: 重: 网zhong4/参chong2
+
+【🟡】行1062 @# 【## 名(ming2)词(ci2)后(hou4)缀(zhui4)轻(qing1)声(sheng1) 41-60】 (原47)
+  原文: 新鲜(xin1 xian1)萝卜(luo bo2)清(qing1)甜(tian2)多(duo1)汁(zhi1)，萝卜(luo bo2)第(di4)二(er4)个(ge4)字(zi4)轻(qing1)读(du2)。
+  分歧: 卜: 网bo2/参bo5  卜: 网bo2/参bo5
+
+【🟡】行1071 @# 【## 名(ming2)词(ci2)后(hou4)缀(zhui4)轻(qing1)声(sheng1) 41-60】 (原56)
+  原文: 凉(liang2)拌(ban4)萝卜(luo bo2)爽(shuang3)口(kou3)开(kai1)胃(wei4)，萝卜(luo bo2)后(hou4)字(zi4)固(gu4)定(ding4)轻(qing1)音(yin1)。
+  分歧: 卜: 网bo2/参bo5  卜: 网bo2/参bo5
+
+【🟡】行1100 @# 【## 多(duo1)音(yin1)节(jie2)口(kou3)语(yu3)轻(qing1)声(sheng1) 81-100】 (原83)
+  原文: 小(xiao3)屋(wu1)暖和(nuan huo3)舒(shu1)适(shi4)，和(he2)字(zi4)搭(da1)配(pei4)暖(nuan3)轻(qing1)读(du2)。
+  分歧: 和: 网huo3/参huo5
+
+【🟡】行1171 @# 【## 口(kou3)语(yu3)多(duo1)音(yin1)节(jie2)轻(qing1)声(sheng1) 141-160】 (原150)
+  原文: 模糊(mo2 hu)记(ji4)忆(yi4)只(zhi1)剩(sheng4)零(ling2)星(xing1)片(pian4)段(duan4)。
+  分歧: 只: 网zhi1/参zhi3
+
+【🟡】行1175 @# 【## 口(kou3)语(yu3)多(duo1)音(yin1)节(jie2)轻(qing1)声(sheng1) 141-160】 (原154)
+  原文: 小(xiao3)店(dian4)伙计(huo3 ji)待(dai4)客(ke4)温和(wen huo1)有(you3)礼(li3)。
+  分歧: 和: 网huo1/参he2
+
+【🟡】行1177 @# 【## 口(kou3)语(yu3)多(duo1)音(yin1)节(jie2)轻(qing1)声(sheng1) 141-160】 (原156)
+  原文: 暖和(nuan huo3)春(chun1)日(ri4)适(shi4)合(he2)郊(jiao1)外(wai4)踏(ta4)青(qing1)。
+  分歧: 和: 网huo3/参huo5
+

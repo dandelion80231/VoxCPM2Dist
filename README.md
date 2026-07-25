@@ -42,6 +42,7 @@
 
 ## 版本历史
 
+- **v5.3.5（发布 tag，APP 版本仍为 5.3）**：多音字 LoRA 训练完整经验文档 + 语料工具链入库；网页端 LoRA 挂载状态面板实时刷新修复；听测验证工具链（`app/Scripts/verify_listen.py`、`verify_xing.py`）。
 - **v5.3.3（发布 tag，APP 版本仍为 5.3）**：网页端新增「下载/校验模型」按钮——模型缺失时页面顶部自动出现「📦 下载模型」卡片，点击即在后台线程拉取模型（约 5GB，断点续传 + 实时进度条），无需切出浏览器；「⚙ 设置 → 下载/校验模型」也提供常驻入口用于更新/校验已装模型。后端新增 `POST /api/download-model`、`GET /api/download-model/status`、`POST /api/download-model/cancel` 三接口；`download_model.py` 重构为可编程 + 进度回调（`progress_cb`/`should_stop`），CLI 双击 `下载模型.bat` 行为不变。Web UI 保持单一源码，按钮按 `model_present()` 运行时显示，带模型版（模型已随包）自动隐藏，两个版本安装包无需分叉。**分发**：本次先将无模型版（单文件 exe，约 1.56GB）发布到 GitHub Release；带模型版（含完整模型，约 5GB）沿用云盘分发，后续随云盘重新上传即含本功能（代码同源，无需分别维护）。**2026-07-17 补丁**：该 tag 已重新指向修复 commit——模型已存在时点「下载/校验模型」按钮改为给出文件级反馈（设置弹窗常驻列出 7 个模型文件状态：✓完整 / ✗异常 + 体积 + 问题说明），启动脚本还原为简洁形态（双击快捷方式窗口一闪、服务后台静默运行）；安装包文件名仍为 `VoxCPM2_TTS_v5.3_nomodel_Setup.exe`（`.iss` 的 Version 固定 5.3，不含补丁号，与惯例一致）。
 - **v5.3.4（发布 tag，APP 版本仍为 5.3）**：新增「多音字修正 LoRA」微调通道——VoxCPM2 是 tokenizer-free 字符级 TTS，多音字读音靠上下文消歧，多数能读对、少数生僻字会读错；本版内置 LoRA 训练 + 挂载管线，可用少量录音微调出「多音字修正权重」，挂载后让模型在该类字上读得更准（根治方案，需自备 GPU + 朗读数据；VoxCPM2 **不支持** `{pinyin}`/`{ni3}` 音素注入，机械式拼音标注无效）。**训练侧**：`app/Scripts/training/`（核心 `train_voxcpm_finetune.py` 修复了 `datasets` 5.0.0 强制 `torchcodec`（离线包无 ffmpeg）崩溃——monkeypatch `Audio.decode_example` 改用 soundfile 恢复旧 dict 接口；`voxcpm_finetune_lora.yaml` 默认 `r=32, alpha=32` 仅挂 LM；`train_polyphone_lora.ps1` 一键启动）、数据准备 `prepare_polyphone_lora_data.py`/`bootstrap_lora_audio.py`、验证对比 `verify_lora.py`、`lora_helper.py`（从训练产出的 `lora_config.json` 重建 LoRAConfig，规避「只给权重路径→自动建默认 r=8→与训练 r=32 形状不匹配→加载失败」的隐藏坑）。**挂载侧**：网页 UI 设置新增「多音字 LoRA 权重」输入 + 状态栏显示「已挂载 / 未挂载」；CLI `--lora <目录>` 或环境变量 `VOXCPM_LORA`；留空 = 原版模型。LoRA 权重仅数 MB~数十 MB，可随包/网盘分发，用户填路径即启用，无需重训。训练数据 `lora_audio/` 与产出 `lora_output/` 已 gitignore，不入库（详见 README「多音字修正（LoRA）」一节）。
 - **v5.3.2（发布 tag，APP 版本仍为 5.3）**：数字/文本归一化（`text_norm_cn.py`）增强——① 普通整数上限 8→12 位（支持亿/兆级，`2亿`→`两亿元`），并新增「编号关键词守卫」（订单号/编号/账号/卡号/密码/手机/QQ/微信号/快递单号…后数字强制逐位读，复刻 WeTextProcessing whitelist 思路）；② 全角→半角归一化（中文逗号/句号保留以保 TTS 停顿）；③ 英文缩写拆字母（CPU→C P U），并新增「按单词读」白名单 `_ACRONYM_AS_WORD`（NASA/Intel/Google…约 80 条机构与品牌名按单词读，FBI/IBM/UN 等逐字母读缩写刻意排除）；④ 修复 `±5%` 漏读符号。详见《开发经验与避雷手册》§2.5。APP 版本号保持 5.3，仅以 tag v5.3.2 标记本次发布；已安装用户直接用本仓库 `app/Scripts/text_norm_cn.py` 覆盖安装目录下 `Scripts\text_norm_cn.py` 并重启网页服务/重跑 CLI 即生效。**分发采用双资产**：无模型版挂 GitHub Release（单文件 exe，约 1.56GB）；带模型版（含完整模型，约 5GB）随本次更新上传网盘（阿里云盘 / 夸克，链接见上方「下载方式」），覆盖旧分发、链接不变。
@@ -557,6 +558,15 @@ VoxCPM2 是 tokenizer-free、字符级 TTS，多音字读音主要靠上下文�
 - **命令行**：`--lora <step_XXXXXXX 目录>`，或设环境变量 `VOXCPM_LORA=<目录>`；`--show-config` 可查看当前挂载状态。
 
 > 提示：LoRA 权重体积小（仅 adapter，数 MB~数十 MB），可随包分发或放网盘，用户填入路径即可启用，无需重训。
+
+### 完整训练经验与语料工具链
+
+随 v5.3.5，把一份**多音字 LoRA 训练完整经验手册**与配套的**语料工具链脚本/数据**一并入库到 `app/Scripts/training/polyphone_corpus/`：
+
+- [`LORA_TRAINING.md`](app/Scripts/training/polyphone_corpus/LORA_TRAINING.md) —— 训练文档（详，方法论文通用、步骤可直接照做）
+- [`README_v23_完整经验.md`](app/Scripts/training/polyphone_corpus/README_v23_完整经验.md) —— 全量训练日志（v1→v23 全覆盖，含踩坑与结论）
+
+> 注意：仓库**自带**一套训练管线 `app/Scripts/training/train_voxcpm_finetune.py`（VoxCPM2 自举，依赖 `prepare_polyphone_lora_data.py`/`bootstrap_lora_audio.py`，见上方「训练」小节）；文档所述 `polyphone_corpus/train_lora.py` 则采用 **IndexTTS2 教师引擎**（需另行获取，不在本仓库）。两套管线方法论文通用——都是「少量朗读数据 → LoRA 修正权重」，可据手头引擎任选其一。
 
 ## 原始资源
 
