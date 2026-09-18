@@ -628,11 +628,17 @@ def _load_model_background(force: bool = False):
         print(f"[VoxCPM2] 手动加载模型失败: {e}")
 
 
+# 合法 VoxCPM 音素块（模块级，供 split_text / _is_phoneme_text 共用）：
+# {hang2}（拼音声调）或 {HH AH0 L OW1}（CMU 英文音素）。
+# 只匹配英文字母/ü/数字/空格/'-/. 组成的花括号块，普通中文花括号（如 {重要}）不匹配。
+_PHONEME_BLOCK_RE = re.compile(r"\{[a-zA-ZüÜ0-9\s\-'\.]+\}")
+
+
 def split_text(text: str, chunk_size: int = MAX_CHUNK_SIZE) -> list:
     if len(text) <= chunk_size:
         return [text]
-    # 音素模式：按 } 边界切分，绝不切断 {ni3} 音素块
-    if re.search(r'\{[^{}]*\}\s*\{[^{}]*\}', text):
+    # 音素/混合模式：按 } 边界切分，绝不切断 {ni3} / {hang2} 音素块
+    if _PHONEME_BLOCK_RE.search(text):
         blocks = re.findall(r'\{[^{}]*\}\s*', text) or [text]
         rest = re.sub(r'\{[^{}]*\}\s*', '', text)
         if rest:
@@ -793,9 +799,15 @@ def synthesize(args: dict) -> dict:
     #（官方要求音素输入必须 normalize=False，且不能把 {} 块交给归一化/模型二次归一化）。
     requested_normalize = str(args.get("normalize", "true")).lower() in ("true", "1", "yes", True)
     requested_phoneme_mode = str(args.get("phoneme_mode", "false")).lower() in ("true", "1", "yes", True)
+    # 合法 VoxCPM 音素块判定见模块级 _PHONEME_BLOCK_RE（split_text 共用）。
     def _is_phoneme_text(s: str) -> bool:
-        """粗略检测是否包含 VoxCPM 音素串：连续 2+ 个 {xxx} 块，或单块也视为音素模式候选。"""
-        return bool(re.search(r'\{[^{}]*\}\s*\{[^{}]*\}', s)) or bool(re.search(r'^\{[^{}]*\}\s*$', s.strip()))
+        """检测文本是否含 VoxCPM 音素块：任意合法 {} 块即进入音素/混合模式。
+
+        支持纯音素串（{ni3}{hao3}）、单块（{hang2}）以及「普通文本 + 局部音素标注」
+        混合输入（如"今天一行{hang2}代码写完了"）。合法块由 _PHONEME_BLOCK_RE
+        限定（仅字母/ü/数字/空格等），避免把普通中文花括号误判为音素。
+        """
+        return bool(_PHONEME_BLOCK_RE.search(s or ""))
     # 音素模式 = 前端显式开关 OR 文本自动检测兜底（官方要求音素输入必须 normalize=False）
     phoneme_mode = requested_phoneme_mode or _is_phoneme_text(text)
     normalize = requested_normalize and not phoneme_mode
@@ -883,10 +895,16 @@ def synthesize(args: dict) -> dict:
             })
             task_results[job_id] = r
 
-        # 音素模式兜底：即使 normalize 因故为 True（如用户手工强制），检测到音素串也必须跳过文本归一化，
-        # 保证 {ni3} 声调数字不被 normalize_text 破坏（配合问题1的豁免，双保险）。
-        if normalize and phoneme_mode:
-            processed_chunk = chunk
+        # 音素/混合模式处理：
+        # - 纯音素串（{ni3}{hao3}）与「普通文本 + 局部 {音素} 标注」（如"今天一行{hang2}代码"）
+        #   统一走混合处理：normalize_text 已对 {..} 音素块做占位保护（问题1修复），
+        #   普通段的数字/符号转中文读法后保留中文原文交给模型自读（默认正常链路），
+        #   {hang2} 等标注块保留并强制按音素读音；模型侧 normalize 强制 False，
+        #   防止模型自带归一化二次破坏 {} 块（问题2双保险）。
+        # - 非音素模式：维持原有 normalize 行为。
+        if phoneme_mode:
+            processed_chunk = normalize_text(chunk)
+            normalize = False
         else:
             processed_chunk = normalize_text(chunk) if normalize else chunk
         chunk_text = f"({control}){processed_chunk}" if control else processed_chunk

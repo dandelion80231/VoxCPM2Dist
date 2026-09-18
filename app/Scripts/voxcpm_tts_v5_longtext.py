@@ -119,6 +119,28 @@ def build_text(input_text: str, control: str = None, normalize: bool = False) ->
     return text
 
 
+def prepare_text(input_text: str, control: str = None, normalize: bool = False) -> tuple:
+    """构建最终合成文本，并返回模型侧 normalize 标记（与 Web UI 行为一致）。
+
+    混合模式（普通文本 + 局部 {音素} 标注，如"今天一行{hang2}代码写完了"）：
+    检测到任意合法 VoxCPM 音素块时——
+      - 普通段照常做文本归一化（数字/符号转中文读法，{..} 块被 text_norm_cn 占位保护），
+        中文保留原文交给模型自读（默认正常链路），{hang2} 等标注块保留并强制按音素读；
+      - 模型侧 normalize 必须为 False，防止模型自带归一化二次破坏 {} 块。
+    非混合模式：行为与原有 build_text 完全一致。
+
+    返回 (final_text, model_normalize)。
+    """
+    try:
+        from g2p_phoneme import has_phoneme_block
+        has_mix = has_phoneme_block(input_text or "")
+    except Exception:
+        has_mix = False
+    model_normalize = normalize and not has_mix
+    # 混合模式下即使 --no-normalize 也强制普通段归一化，保证数字等读对
+    return build_text(input_text, control, normalize=(normalize or has_mix)), model_normalize
+
+
 def generate(model, text: str, cfg: float = 2.5, steps: int = 15, normalize: bool = False) -> tuple:
     """单段生成（Voice Design 模式，兼容旧版）"""
     control_match = re.search(r"\(([^)]+)\)", text)
@@ -589,8 +611,8 @@ def main():
                 with open(filepath, "r", encoding="utf-8") as f:
                     text = f.read()
                 control = None
-                final = build_text(text, control, normalize=args.normalize)
-                sr, wav, elapsed, duration = generate_chunk(model, final, cfg=args.cfg, steps=args.steps, normalize=args.normalize)
+                final, mnorm = prepare_text(text, control, args.normalize)
+                sr, wav, elapsed, duration = generate_chunk(model, final, cfg=args.cfg, steps=args.steps, normalize=mnorm)
                 out = resolve_output_path(None, text)
                 import soundfile as sf
                 sf.write(str(out), wav, sr)
@@ -601,8 +623,8 @@ def main():
                     parts = line.rsplit("|", 2)
                     if len(parts) == 3:
                         line, control = parts[0].strip(), parts[1].strip()
-                final = build_text(line, control, normalize=args.normalize)
-                sr, wav, elapsed, duration = generate_chunk(model, final, cfg=args.cfg, steps=args.steps, normalize=args.normalize)
+                final, mnorm = prepare_text(line, control, args.normalize)
+                sr, wav, elapsed, duration = generate_chunk(model, final, cfg=args.cfg, steps=args.steps, normalize=mnorm)
                 out = resolve_output_path(None, line)
                 import soundfile as sf
                 sf.write(str(out), wav, sr)
@@ -641,10 +663,12 @@ def main():
         control, input_text = res.group(1), res.group(2).strip()
 
     do_normalize = args.normalize
-    final_text = build_text(input_text, control, normalize=do_normalize)
+    final_text, do_normalize = prepare_text(input_text, control, do_normalize)
 
     # ── 设置输出目录 ──
     if args.dir:
+        # 修复：args.dir 分支原来引用未赋值的局部 DEFAULT_OUTPUT_DIR 导致 UnboundLocalError
+        DEFAULT_OUTPUT_DIR = Path(args.dir)
         DEFAULT_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
         global_DEFAULT_OUTPUT_DIR = DEFAULT_OUTPUT_DIR
 
@@ -719,10 +743,10 @@ def main():
 
     if args.voice and args.voice in VOICE_PRESETS:
         baseline_control = VOICE_PRESETS[args.voice]
-        baseline_text = build_text(input_text[:60], baseline_control, normalize=do_normalize)
+        baseline_text, bnorm = prepare_text(input_text[:60], baseline_control, do_normalize)
         if control and not args.no_baseline and not args.reference and not args.prompt_audio:
             print(f"\n[基线] 生成基线参考音频（用于对比）...")
-            sr_b, wav_b = generate(model, baseline_text, cfg=args.cfg, steps=args.steps, normalize=do_normalize)
+            sr_b, wav_b = generate(model, baseline_text, cfg=args.cfg, steps=args.steps, normalize=bnorm)
             baseline_path = resolve_output_path(None, "baseline_" + input_text[:20], suffix="_baseline")
             sf.write(str(baseline_path), wav_b, sr_b)
             print(f"[基线] 已保存: {baseline_path}")

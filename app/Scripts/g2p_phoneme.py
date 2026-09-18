@@ -43,6 +43,9 @@ _MODEL_DIR = os.environ.get("VOXCPM_G2PW_MODEL_DIR", _DEFAULT_MODEL_DIR)
 _CJK_RE = re.compile(r"[\u4e00-\u9fff\u3400-\u4dbf]")
 # 可接受的拼音音节（声调数字结尾）
 _SYLLABLE_RE = re.compile(r"^[a-zü]+[1-5]$", re.IGNORECASE)
+# 合法 VoxCPM 音素块：{hang2}（拼音声调）或 {HH AH0 L OW1}（CMU 英文音素）。
+# 只匹配英文字母/ü/数字/空格/'-/. 组成的花括号块，普通中文花括号（如 {重要}）不匹配。
+_PHONEME_BLOCK_RE = re.compile(r"\{[a-zA-ZüÜ0-9\s\-'\.]+\}")
 
 _engine = None
 _engine_v_to_u = None
@@ -199,6 +202,42 @@ def _load_overlay_rules():
 def overlay_stats():
     """返回已加载语料条数（供诊断/测试）。"""
     return len(_load_overlay_rules())
+
+
+def has_phoneme_block(text: str) -> bool:
+    """检测文本是否含任意合法 VoxCPM 音素块（{hang2} / {HH AH0 L OW1}）。
+
+    与 is_phoneme_text 的区别：is_phoneme_text 用于判断「整段已是音素串」，
+    这里只要出现一个合法音素块即视为混合模式（普通文本 + 局部音素标注），
+    供 Web UI / CLI 合成链路决定是否走 mixed_to_phonemes。
+    """
+    return bool(_PHONEME_BLOCK_RE.search(text or ""))
+
+
+def mixed_to_phonemes(text: str, normalize_segments: bool = True) -> str:
+    """混合模式：普通文本 + 局部 {音素} 标注 -> 全音素串。
+
+    - 普通部分（中文/数字/标点等）：先归一化（数字转中文读法，音素块被
+      text_norm_cn 占位保护不会破坏），再经 G2P 转为 {pin1} 音素，保证读对；
+    - 用户标注的 {hang2} 等合法音素块：作为非汉字片段原样保留，强制按
+      标注读音；
+    - 返回串为纯音素串，调用方必须以 normalize=False 传给模型（音素串
+      不可再做二次归一化）。
+
+    例: "今天一行{hang2}代码写完了" ->
+        "{jin1}{tian1}{yi1}{hang2}{dai4}{ma3}{xie1}{wan2}{le0}{hang2}"
+    （若 98 条多音字语料命中“一行”，普通部分的“行”也会被纠为 hang2，
+     与用户标注读音一致；未命中的多音字则以标注为准。）
+    """
+    if not text:
+        return text
+    if normalize_segments:
+        try:
+            from text_norm_cn import normalize_text
+            text = normalize_text(text)
+        except Exception:
+            pass  # 归一化失败不阻塞，直接按原文转音素
+    return text_to_phonemes(text, v_to_u=True)
 
 
 def is_phoneme_text(text: str) -> bool:
