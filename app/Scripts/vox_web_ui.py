@@ -631,6 +631,23 @@ def _load_model_background(force: bool = False):
 def split_text(text: str, chunk_size: int = MAX_CHUNK_SIZE) -> list:
     if len(text) <= chunk_size:
         return [text]
+    # 音素模式：按 } 边界切分，绝不切断 {ni3} 音素块
+    if re.search(r'\{[^{}]*\}\s*\{[^{}]*\}', text):
+        blocks = re.findall(r'\{[^{}]*\}\s*', text) or [text]
+        rest = re.sub(r'\{[^{}]*\}\s*', '', text)
+        if rest:
+            blocks.append(rest)
+        chunks, current = [], ""
+        for b in blocks:
+            if len(current) + len(b) <= chunk_size:
+                current += b
+            else:
+                if current:
+                    chunks.append(current)
+                current = b
+        if current:
+            chunks.append(current)
+        return chunks
     chunks = []
     sentences = re.split(r'([。！？；\.\!\?\;，,])', text)
     current = ""
@@ -772,7 +789,14 @@ def synthesize(args: dict) -> dict:
     prompt_text = args.get("prompt_text")
     cfg = float(args.get("cfg", 2.5))
     steps = int(args.get("steps", 15))
-    normalize = str(args.get("normalize", "true")).lower() in ("true", "1", "yes", True)
+    # normalize：用户显式开关（默认开）。若检测到音素串 {ni3}，自动强制切音素模式
+    #（官方要求音素输入必须 normalize=False，且不能把 {} 块交给归一化/模型二次归一化）。
+    requested_normalize = str(args.get("normalize", "true")).lower() in ("true", "1", "yes", True)
+    def _is_phoneme_text(s: str) -> bool:
+        """粗略检测是否包含 VoxCPM 音素串：连续 2+ 个 {xxx} 块，或单块也视为音素模式候选。"""
+        return bool(re.search(r'\{[^{}]*\}\s*\{[^{}]*\}', s)) or bool(re.search(r'^\{[^{}]*\}\s*$', s.strip()))
+    phoneme_mode = _is_phoneme_text(text)
+    normalize = requested_normalize and not phoneme_mode
     denoise = str(args.get("denoise", "false")).lower() in ("true", "1", "yes", True)
     prompt_text = args.get("prompt_text") or None  # 终极克隆：参考音频的转录文本
     crossfade = int(args.get("crossfade", 80))
@@ -857,7 +881,12 @@ def synthesize(args: dict) -> dict:
             })
             task_results[job_id] = r
 
-        processed_chunk = normalize_text(chunk) if normalize else chunk
+        # 音素模式兜底：即使 normalize 因故为 True（如用户手工强制），检测到音素串也必须跳过文本归一化，
+        # 保证 {ni3} 声调数字不被 normalize_text 破坏（配合问题1的豁免，双保险）。
+        if normalize and phoneme_mode:
+            processed_chunk = chunk
+        else:
+            processed_chunk = normalize_text(chunk) if normalize else chunk
         chunk_text = f"({control}){processed_chunk}" if control else processed_chunk
         chunk_start = time.time()
         try:
