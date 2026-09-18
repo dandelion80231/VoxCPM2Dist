@@ -85,15 +85,120 @@ def text_to_phonemes(text: str, v_to_u: bool = True) -> str:
 
     engine = _get_engine(v_to_u=v_to_u)
     parts = engine.pinyin(text, style=Style.TONE3)
+    # 字符级对齐：连续汉字逐字成 item、连续非汉字合并为一段（pypinyin 分组行为）
+    tokens = _tokenize(text)
+    if len(tokens) != len(parts):
+        # 对齐失败（异常输入），回退到无纠错的原有逻辑
+        out_parts = []
+        for item in parts:
+            syl = item[0] if item else ""
+            out_parts.append("{%s}" % syl if _SYLLABLE_RE.match(syl) else syl)
+        return "".join(out_parts)
+
+    overlays = _load_overlay_rules()
+    forced = {}  # token 索引 -> 强制读音（TONE3，v 风格）
+    if overlays:
+        for word, char, forced_t3 in overlays:
+            # 在文本中定位 word 出现的每个区间，仅对区间内的目标字生效（与 v19 force_pos 语义一致）
+            for start in _find_all(text, word):
+                for off, ch in enumerate(word):
+                    if ch == char:
+                        pos = start + off
+                        forced[pos] = forced_t3
     out_parts = []
-    for item in parts:
-        # item 形如 ['ni3']（汉字音节）或 [' world 123，']（非汉字片段）
+    for idx, item in enumerate(parts):
         syl = item[0] if item else ""
-        if _SYLLABLE_RE.match(syl):
+        tok = tokens[idx]
+        if tok["is_han"] and idx in forced:
+            fs = forced[idx]
+            if v_to_u:
+                fs = fs.replace("v", "ü")
+            out_parts.append("{%s}" % fs)
+        elif _SYLLABLE_RE.match(syl):
             out_parts.append("{%s}" % syl)
         else:
             out_parts.append(syl)
     return "".join(out_parts)
+
+
+def _tokenize(text: str):
+    """将文本切分为 tokens：汉字单字（记录字符与起始偏移），非汉字连续段。"""
+    tokens = []
+    i = 0
+    n = len(text)
+    while i < n:
+        ch = text[i]
+        if _CJK_RE.match(ch):
+            tokens.append({"char": ch, "start": i, "is_han": True})
+            i += 1
+        else:
+            j = i
+            while j < n and not _CJK_RE.match(text[j]):
+                j += 1
+            tokens.append({"char": text[i:j], "start": i, "is_han": False})
+            i = j
+    return tokens
+
+
+def _find_all(text: str, word: str):
+    """返回 word 在 text 中所有出现位置的起始索引列表。"""
+    res = []
+    start = 0
+    while True:
+        idx = text.find(word, start)
+        if idx == -1:
+            break
+        res.append(idx)
+        start = idx + 1
+    return res
+
+
+# ---- 多音字修正语料后置纠错（overlay_override_risk.txt，98 条） ----
+_OVERLAY_PATH = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)),
+    "training", "polyphone_corpus", "data", "overlay_override_risk.txt",
+)
+_OVERLAY_RE = re.compile(
+    r"^(?P<word>.+?)\s*·\s*(?P<char>.)\s*:\s*pypinyin默认=(?P<default>[a-züv]+[1-5])\s*→\s*强制=(?P<forced>[a-züv]+[1-5])"
+)
+_overlay_cache = None
+
+
+def _load_overlay_rules():
+    """解析语料为 [(上下文词, 目标字, 强制读音TONE3(v风格))]，失败/缺失时返回 []。"""
+    global _overlay_cache
+    if _overlay_cache is not None:
+        return _overlay_cache
+    rules = []
+    if not os.path.isfile(_OVERLAY_PATH):
+        print(f"[g2p_phoneme] 警告: 多音字修正语料不存在，跳过后置纠错: {_OVERLAY_PATH}", file=sys.stderr)
+        _overlay_cache = []
+        return _overlay_cache
+    try:
+        with open(_OVERLAY_PATH, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                m = _OVERLAY_RE.match(line)
+                if m:
+                    word = m.group("word").strip()
+                    char = m.group("char").strip()
+                    forced = m.group("forced").strip().replace("ü", "v").replace("u:", "v")
+                    if word and char and forced and char in word:
+                        rules.append((word, char, forced))
+    except OSError as e:
+        print(f"[g2p_phoneme] 警告: 读取语料失败: {e}", file=sys.stderr)
+        _overlay_cache = []
+        return _overlay_cache
+    _overlay_cache = rules
+    print(f"[g2p_phoneme] 已加载多音字修正语料 {len(rules)} 条: {_OVERLAY_PATH}", file=sys.stderr)
+    return _overlay_cache
+
+
+def overlay_stats():
+    """返回已加载语料条数（供诊断/测试）。"""
+    return len(_load_overlay_rules())
 
 
 def is_phoneme_text(text: str) -> bool:
