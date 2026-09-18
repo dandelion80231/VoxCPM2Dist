@@ -213,7 +213,20 @@ def normalize_text(text: str) -> str:
     """数字/编号归一化：将阿拉伯数字、版本号、百分号、日期等转换为中文读法，
     同时去掉字母与数字之间的连字符/下划线，避免 GPT-5.6 被读成「杠」。
 
-    流程：先全角→半角（Y），再做各类 NSW 规则，最后英文缩写拆字母（Z）。"""
+    流程：先全角→半角（Y），再做各类 NSW 规则，最后英文缩写拆字母（Z）。
+
+    ★ 音素块豁免（Phoneme 兼容）：VoxCPM 原生支持 `{ni3}{hao3}` 形式的音素串，
+    大括号内的声调数字（3/4 等）是音素标记，绝不能转成中文读法。
+    因此函数开头将 `{...}` 音素块整体替换为占位符，末尾统一还原，
+    确保所有数字/符号规则都不触碰音素内容。"""
+
+    # P) 音素块保护：形如 {ni3}{hao3}{shi4}{jie4} 的块整体占位。
+    #    占位符用字母序号（§PA§、§PB§…），避免 \d+ 数字规则把序号数字转成中文。
+    phoneme_blocks = []
+    def _phoneme_ph(m):
+        phoneme_blocks.append(m.group(0))
+        return f"\u00a7P{chr(ord('A') + len(phoneme_blocks) - 1)}\u00a7"
+    text = re.sub(r'\{[^{}]*\}', _phoneme_ph, text)
 
     # Y) 全角→半角（必须最先做，否则全角数字/字母会漏过后续所有规则）
     text = _fullwidth_to_halfwidth(text)
@@ -393,10 +406,16 @@ def normalize_text(text: str) -> str:
     #    - 不拆混合大小写单词（如 iPhone、macOS）：只匹配「前后非字母」的纯大写串。
     #    - 不拆单字母（如 A股 的 A）：要求 {2,}。
     text = re.sub(
-        r'(?<![A-Za-z])([A-Z]{2,})(?![a-z])',
+        r'(?<![A-Za-z\u00a7])([A-Z]{2,})(?![a-z])',
         lambda m: " ".join(m.group(1)) if m.group(1) not in _ACRONYM_AS_WORD else m.group(1),
         text,
     )
+
+    # P') 音素块还原：把开头占位的 {ni3} 等原样放回
+    if phoneme_blocks:
+        def _phoneme_unph(m):
+            return phoneme_blocks[ord(m.group(1)) - ord('A')]
+        text = re.sub(r'\xa7P([A-Z])\xa7', _phoneme_unph, text)
 
     return text
 
