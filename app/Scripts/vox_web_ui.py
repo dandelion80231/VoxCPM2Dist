@@ -68,17 +68,17 @@ executor = ThreadPoolExecutor(max_workers=2)
 
 # ── 音色预设 ─────────────────────────────────────────────
 VOICE_PRESETS = {
-    "sweet_girl": "25岁年轻温柔甜美女声，语速平缓自然",
+    "sweet_girl": "25岁年轻温柔甜美女声，带一点播音腔，语速稍平缓",
     "warm_woman": "年轻女性，温柔甜美，语速适中",
-    "gentleman": "中年男性，温润儒雅，语速平缓",
-    "energetic_broadcaster": "热情洋溢的中年男声，声音低沉富有磁性",
+    "gentleman": "中年男性，温润儒雅，播音腔，语速平缓",
+    "energetic_broadcaster": "热情洋溢的中年男性播音员，声音低沉富有磁性",
     "elder_woman": "老年女性，声音温和慈祥，语速缓慢",
     "cool_guy": "年轻男性，声音低沉冷静，略带磁性",
     "cheerful_girl": "年轻女性，活泼开朗，语速偏快",
     "storyteller": "中年男性，深沉有磁性，适合讲故事，节奏平缓",
     "calm_male": "年轻男性，声音沉稳，语速平缓，适合新闻播报",
     "teacher": "中年女性，声音清晰有力，语速适中，适合教学讲解",
-    "default": "25岁年轻温柔甜美女声，语速平缓自然",
+    "default": "25岁年轻温柔甜美女声，带一点播音腔，语速稍平缓",
 }
 
 # 示例 / 方言音色芯片（点击填入音色描述，便于新手）
@@ -2196,7 +2196,7 @@ HTML_CONTENT = r"""
     <!-- 音色描述 + 示例 -->
     <div class="control-card">
       <h3>音色描述（可选，留空使用左侧预设；也可写方言/角色）</h3>
-      <textarea id="controlText" class="prompt-text-input" placeholder="例如：25岁温柔甜美女声。或『深宫太后，威严庄重』『河南方言大叔』"></textarea>
+      <textarea id="controlText" class="prompt-text-input" placeholder="例如：25岁温柔甜美女声，带一点播音腔。或『深宫太后，威严庄重』『河南方言大叔』"></textarea>
       <div class="example-chips" id="exampleChips"></div>
     </div>
 
@@ -2469,7 +2469,7 @@ async function cancelModelDownload() {
 // ── 初始化 ─────────────────────────────────────
 const VOICE_LIST = {
   default: { icon: '🎤', name: '默认音色', desc: '25岁温柔女声' },
-  sweet_girl: { icon: '👧', name: '甜美女孩', desc: '25岁温柔女声' },
+  sweet_girl: { icon: '👧', name: '甜美女孩', desc: '25岁温柔女声，播音腔' },
   warm_woman: { icon: '👩', name: '温柔女性', desc: '温柔甜美，语速适中' },
   gentleman: { icon: '👨', name: '温雅绅士', desc: '中年男性，温润儒雅' },
   energetic_broadcaster: { icon: '🎙️', name: '热情播音', desc: '低沉磁性，男性播音' },
