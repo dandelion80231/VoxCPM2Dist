@@ -132,11 +132,25 @@ def prepare_text(input_text: str, control: str = None, normalize: bool = False) 
     返回 (final_text, model_normalize)。
     """
     try:
-        from g2p_phoneme import has_phoneme_block
+        from g2p_phoneme import has_phoneme_block, strip_annotated_hanzi, apply_overlay_auto
         has_mix = has_phoneme_block(input_text or "")
     except Exception:
         has_mix = False
+    # 默认链路（无音素标注）自动纠错：98 条多音字语料命中的上下文词自动注入
+    # {音素} 标注（如"一行" -> "一行{hang2}"），使默认链路也读对（hang2），
+    # 注入后与用户标注同等走混合模式流程（剥离被标注字 + 模型侧 normalize=False）。
+    if not has_mix:
+        try:
+            from g2p_phoneme import apply_overlay_auto
+            input_text, applied = apply_overlay_auto(input_text or "")
+            has_mix = applied
+        except Exception:
+            pass
     model_normalize = normalize and not has_mix
+    # 混合模式下去重读：{音素块} 紧跟的前一个汉字读音由音素块接管，送模型前舍去该字
+    # （"今天一行{hang2}代码" -> "今天一{hang2}代码"），UI/输入文本仍保留原字供对照。
+    if has_mix:
+        input_text = strip_annotated_hanzi(input_text)
     # 混合模式下即使 --no-normalize 也强制普通段归一化，保证数字等读对
     return build_text(input_text, control, normalize=(normalize or has_mix)), model_normalize
 
@@ -489,17 +503,17 @@ def resolve_base_filename(text: str) -> str:
 
 # ── 音色预设 ──────────────────────────────────────────────
 VOICE_PRESETS = {
-    "sweet_girl": "25岁年轻温柔甜美女声，带一点播音腔，语速稍平缓",
+    "sweet_girl": "25岁年轻温柔甜美女声，语速平缓自然",
     "warm_woman": "年轻女性，温柔甜美，语速适中",
-    "gentleman": "中年男性，温润儒雅，播音腔，语速平缓",
-    "energetic_broadcaster": "热情洋溢的中年男性播音员，声音低沉富有磁性",
+    "gentleman": "中年男性，温润儒雅，语速平缓",
+    "energetic_broadcaster": "热情洋溢的中年男声，声音低沉富有磁性",
     "elder_woman": "老年女性，声音温和慈祥，语速缓慢",
     "cool_guy": "年轻男性，声音低沉冷静，略带磁性",
     "cheerful_girl": "年轻女性，活泼开朗，语速偏快",
     "storyteller": "中年男性，深沉有磁性，适合讲故事，节奏平缓",
     "calm_male": "年轻男性，声音沉稳，语速平缓，适合新闻播报",
     "teacher": "中年女性，声音清晰有力，语速适中，适合教学讲解",
-    "default": "25岁年轻温柔甜美女声，带一点播音腔，语速稍平缓",
+    "default": "25岁年轻温柔甜美女声，语速平缓自然",
 }
 
 # ── 主入口 ─────────────────────────────────────────────────

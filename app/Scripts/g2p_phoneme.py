@@ -214,6 +214,58 @@ def has_phoneme_block(text: str) -> bool:
     return bool(_PHONEME_BLOCK_RE.search(text or ""))
 
 
+def strip_annotated_hanzi(text: str) -> str:
+    """混合模式去重读：{音素块} 紧跟标注的是其前面的那个汉字，读音已由音素块
+    接管，送入模型前舍去该汉字本身，避免“汉字读一遍、{音素}又读一遍”。
+
+    - 仅处理「汉字紧贴 {音素块}」形态（如"今天一行{hang2}代码" -> "今天一{hang2}代码"），
+      汉字与块之间有无空格/换行等非汉字字符时不处理；
+    - 仅移除单个汉字（标注对象是音素块紧邻的前一个汉字），连续块前无汉字不误删；
+    - 纯音素串（块前是空格或行首）不受影响；
+    - UI / 输入文本仍保留原字供对照，此处仅作用于“送入模型的文本”。
+
+    例: "今天一行{hang2}代码写完了" -> "今天一{hang2}代码写完了"
+    """
+    if not text:
+        return text
+    return re.sub(r"([\u4e00-\u9fff])(\{[a-zA-ZüÜ0-9\s\-'\.]+\})", r"\2", text)
+
+
+def apply_overlay_auto(text: str) -> tuple:
+    """默认链路（无音素标注）自动纠错：98 条多音字语料命中的上下文词，
+    在目标字后自动注入 {音素} 标注（如"一行" -> "一行{hang2}"），
+    返回 (new_text, applied)。applied=True 时调用方应进入混合模式：
+    strip_annotated_hanzi 会把紧贴块前的汉字舍去，模型只按 {hang2} 读音。
+
+    - 同一位置多规则命中时取语料顺序靠前的一条；
+    - 无命中 / 无语料时原样返回 (text, False)，不影响默认链路。
+    """
+    if not text:
+        return text, False
+    overlays = _load_overlay_rules()
+    if not overlays:
+        return text, False
+    marks = []  # (pos, forced)
+    for word, char, forced_t3 in overlays:
+        forced = forced_t3.replace("v", "ü")
+        for start in _find_all(text, word):
+            for off, ch in enumerate(word):
+                if ch == char:
+                    marks.append((start + off, forced))
+    if not marks:
+        return text, False
+    seen = {}
+    for pos, forced in marks:
+        if pos not in seen:
+            seen[pos] = forced
+    out = list(text)
+    # 倒序插入，避免索引偏移
+    for pos in sorted(seen, reverse=True):
+        out.insert(pos + 1, "{%s}" % seen[pos])
+    new_text = "".join(out)
+    return new_text, (new_text != text)
+
+
 def mixed_to_phonemes(text: str, normalize_segments: bool = True) -> str:
     """混合模式：普通文本 + 局部 {音素} 标注 -> 全音素串。
 

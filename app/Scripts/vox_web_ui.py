@@ -68,17 +68,17 @@ executor = ThreadPoolExecutor(max_workers=2)
 
 # ── 音色预设 ─────────────────────────────────────────────
 VOICE_PRESETS = {
-    "sweet_girl": "25岁年轻温柔甜美女声，带一点播音腔，语速稍平缓",
+    "sweet_girl": "25岁年轻温柔甜美女声，语速平缓自然",
     "warm_woman": "年轻女性，温柔甜美，语速适中",
-    "gentleman": "中年男性，温润儒雅，播音腔，语速平缓",
-    "energetic_broadcaster": "热情洋溢的中年男性播音员，声音低沉富有磁性",
+    "gentleman": "中年男性，温润儒雅，语速平缓",
+    "energetic_broadcaster": "热情洋溢的中年男声，声音低沉富有磁性",
     "elder_woman": "老年女性，声音温和慈祥，语速缓慢",
     "cool_guy": "年轻男性，声音低沉冷静，略带磁性",
     "cheerful_girl": "年轻女性，活泼开朗，语速偏快",
     "storyteller": "中年男性，深沉有磁性，适合讲故事，节奏平缓",
     "calm_male": "年轻男性，声音沉稳，语速平缓，适合新闻播报",
     "teacher": "中年女性，声音清晰有力，语速适中，适合教学讲解",
-    "default": "25岁年轻温柔甜美女声，带一点播音腔，语速稍平缓",
+    "default": "25岁年轻温柔甜美女声，语速平缓自然",
 }
 
 # 示例 / 方言音色芯片（点击填入音色描述，便于新手）
@@ -810,6 +810,17 @@ def synthesize(args: dict) -> dict:
         return bool(_PHONEME_BLOCK_RE.search(s or ""))
     # 音素模式 = 前端显式开关 OR 文本自动检测兜底（官方要求音素输入必须 normalize=False）
     phoneme_mode = requested_phoneme_mode or _is_phoneme_text(text)
+    # 默认链路（无音素标注）自动纠错：98 条多音字语料命中词自动注入 {音素} 标注，
+    # 使"一行"等默认链路也读对（hang2）。注入后强制进入混合模式（normalize 自动关闭）。
+    if not phoneme_mode:
+        try:
+            from g2p_phoneme import apply_overlay_auto
+            auto_text, applied = apply_overlay_auto(text)
+            if applied:
+                text = auto_text
+                phoneme_mode = True
+        except Exception:
+            pass  # 自动纠错失败不阻塞，退回默认链路（多音字可能读错，可手动标注兜底）
     normalize = requested_normalize and not phoneme_mode
     denoise = str(args.get("denoise", "false")).lower() in ("true", "1", "yes", True)
     prompt_text = args.get("prompt_text") or None  # 终极克隆：参考音频的转录文本
@@ -855,6 +866,16 @@ def synthesize(args: dict) -> dict:
             "elapsed_seconds": time.time() - start_ts,
             "remaining_seconds": max(0, est_total - (time.time() - start_ts)),
         }
+
+    # 混合模式去重读：{音素块} 紧跟标注的是其前面的那个汉字，读音由音素块接管，
+    # 送入模型前舍去该字（"今天一行{hang2}代码" -> "今天一{hang2}代码"），
+    # UI 输入框仍保留原字供对照。纯音素串（块前无汉字）不受影响。
+    if phoneme_mode:
+        try:
+            from g2p_phoneme import strip_annotated_hanzi
+            text = strip_annotated_hanzi(text)
+        except Exception:
+            pass  # 剥离失败不阻塞合成，退回原文本（可能重复读但保证能出结果）
 
     chunks = split_text(text, chunk_size=chunk_size)
     total_chunks = len(chunks)
@@ -2175,7 +2196,7 @@ HTML_CONTENT = r"""
     <!-- 音色描述 + 示例 -->
     <div class="control-card">
       <h3>音色描述（可选，留空使用左侧预设；也可写方言/角色）</h3>
-      <textarea id="controlText" class="prompt-text-input" placeholder="例如：25岁温柔甜美女声，带一点播音腔。或『深宫太后，威严庄重』『河南方言大叔』"></textarea>
+      <textarea id="controlText" class="prompt-text-input" placeholder="例如：25岁温柔甜美女声。或『深宫太后，威严庄重』『河南方言大叔』"></textarea>
       <div class="example-chips" id="exampleChips"></div>
     </div>
 
@@ -2448,7 +2469,7 @@ async function cancelModelDownload() {
 // ── 初始化 ─────────────────────────────────────
 const VOICE_LIST = {
   default: { icon: '🎤', name: '默认音色', desc: '25岁温柔女声' },
-  sweet_girl: { icon: '👧', name: '甜美女孩', desc: '25岁温柔女声，播音腔' },
+  sweet_girl: { icon: '👧', name: '甜美女孩', desc: '25岁温柔女声' },
   warm_woman: { icon: '👩', name: '温柔女性', desc: '温柔甜美，语速适中' },
   gentleman: { icon: '👨', name: '温雅绅士', desc: '中年男性，温润儒雅' },
   energetic_broadcaster: { icon: '🎙️', name: '热情播音', desc: '低沉磁性，男性播音' },
