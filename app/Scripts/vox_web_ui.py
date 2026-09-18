@@ -2143,6 +2143,7 @@ HTML_CONTENT = r"""
         <h3>待合成文本</h3>
         <div style="display:flex;gap:8px;align-items:center;">
           <span class="char-count" id="charCount">0 字符</span>
+          <button class="mode-btn" id="g2pBtn" onclick="g2pConvertText()" style="padding:4px 10px;font-size:11px;cursor:pointer;" title="将输入文本转换为 {ni3}{hao3} 音素串（需已下载 G2PW 离线模型）">🔤 转音素</button>
           <button class="mode-btn" id="txtUploadBtn" onclick="document.getElementById('txtFileInput').click()" style="padding:4px 10px;font-size:11px;cursor:pointer;">📄 上传TXT</button>
           <input type="file" id="txtFileInput" accept=".txt,text/plain" style="display:none">
         </div>
@@ -2573,6 +2574,29 @@ function bindSliders() {
         showToast && showToast('已开启音素输入：文本中的 {ni3}{hao3} 将原样传给模型（数字归一化已自动关闭）', 'info');
       }
     });
+  }
+}
+
+// G2P：将输入文本转为 {ni3}{hao3} 音素串并回填，同时自动开启音素模式
+async function g2pConvertText() {
+  const ta = document.getElementById('textInput');
+  const btn = document.getElementById('g2pBtn');
+  const text = ta.value.trim();
+  if (!text) { showToast && showToast('请先输入要转换的文本', 'error'); return; }
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ 转换中...'; }
+  try {
+    const r = await fetch('/api/g2p', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({text: text}) });
+    const d = await r.json();
+    if (d.error) { showToast && showToast(d.error, 'error'); return; }
+    ta.value = d.phonemes;
+    document.getElementById('charCount').textContent = ta.value.length + ' 字符';
+    const pt = document.getElementById('phonemeToggle');
+    if (pt && !pt.checked) pt.click();
+    showToast && showToast('已转换为音素串，音素输入模式已开启', 'info');
+  } catch (e) {
+    showToast && showToast('G2P 转换失败: ' + (e.message || e), 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '🔤 转音素'; }
   }
 }
 
@@ -3597,6 +3621,21 @@ if HAS_WEB:
             "reference_wav": ref_wav_path,
         })
         return JSONResponse({"job_id": job_id, "status": "queued"})
+
+    @app.post("/api/g2p")
+    async def g2p_convert(payload: dict):
+        """G2P 转换：汉字文本 -> VoxCPM2 音素串（{ni3}{hao3}）。需已下载 G2PW 离线模型。"""
+        text = (payload or {}).get("text", "")
+        if not text or not text.strip():
+            raise HTTPException(400, "文本不能为空")
+        try:
+            import g2p_phoneme
+            phonemes = g2p_phoneme.text_to_phonemes(text.strip())
+            return JSONResponse({"phonemes": phonemes})
+        except FileNotFoundError as e:
+            raise HTTPException(503, str(e))
+        except Exception as e:
+            raise HTTPException(500, f"G2P 转换失败: {e}")
 
     @app.get("/api/audio/{filename}")
     async def serve_audio(filename: str):
