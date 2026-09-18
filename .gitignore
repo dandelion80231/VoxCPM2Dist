@@ -38,3 +38,6 @@ app/Scripts/lora_output/
 
 # ===== 本地运行时配置（含机器专属绝对路径，不入库）=====
 app/Scripts/voxcpm_web_config.json
+
+# ===== 离线 G2P 模型（pypinyin-g2pW，体积大不入库）=====
+models/
