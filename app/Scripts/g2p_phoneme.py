@@ -156,30 +156,43 @@ def _find_all(text: str, word: str):
     return res
 
 
-# ---- 多音字修正语料后置纠错（overlay_override_risk.txt，98 条） ----
+# ---- 多音字修正语料后置纠错 ----
+# 默认语料：随项目分发的已知误读 badcase 清单（overlay_override_risk.txt，98 条）。
+# 用户语料：overlay_user_override.txt，用户可自行增补/修改，无需改代码；
+#           加载顺序在默认语料之后，同一位置冲突时用户规则优先生效。
+#           可用环境变量 VOXCPM_OVERLAY_USER_PATH 覆盖用户语料路径。
 _OVERLAY_PATH = os.path.join(
     os.path.dirname(os.path.abspath(__file__)),
     "training", "polyphone_corpus", "data", "overlay_override_risk.txt",
 )
+_OVERLAY_USER_PATH = os.environ.get(
+    "VOXCPM_OVERLAY_USER_PATH",
+    os.path.join(
+        os.path.dirname(os.path.abspath(__file__)),
+        "training", "polyphone_corpus", "data", "overlay_user_override.txt",
+    ),
+)
 _OVERLAY_RE = re.compile(
     r"^(?P<word>.+?)\s*·\s*(?P<char>.)\s*:\s*pypinyin默认=(?P<default>[a-züv]+[1-5])\s*→\s*强制=(?P<forced>[a-züv]+[1-5])"
 )
-_overlay_cache = None
+_overlay_cache = None          # 已合并的规则列表
+_overlay_mtime_key = None      # 各文件 mtime 指纹（热加载）
+_overlay_counts = {"default": 0, "user": 0, "skipped": 0}
 
 
-def _load_overlay_rules():
-    """解析语料为 [(上下文词, 目标字, 强制读音TONE3(v风格))]，失败/缺失时返回 []。"""
-    global _overlay_cache
-    if _overlay_cache is not None:
-        return _overlay_cache
+def _parse_overlay_file(path, src_name):
+    """解析单个语料文件为 [(上下文词, 目标字, 强制读音TONE3(v风格))]。
+
+    不兼容行（格式不符/目标字不在上下文词中）静默跳过，仅统计并返回
+    (rules, skipped_lines)，由 _load_overlay_rules 统一打印提示。
+    """
     rules = []
-    if not os.path.isfile(_OVERLAY_PATH):
-        print(f"[g2p_phoneme] 警告: 多音字修正语料不存在，跳过后置纠错: {_OVERLAY_PATH}", file=sys.stderr)
-        _overlay_cache = []
-        return _overlay_cache
+    skipped = []
+    if not os.path.isfile(path):
+        return rules, skipped
     try:
-        with open(_OVERLAY_PATH, encoding="utf-8") as f:
-            for line in f:
+        with open(path, encoding="utf-8-sig") as f:
+            for line_no, line in enumerate(f, 1):
                 line = line.strip()
                 if not line or line.startswith("#"):
                     continue
@@ -190,18 +203,82 @@ def _load_overlay_rules():
                     forced = m.group("forced").strip().replace("ü", "v").replace("u:", "v")
                     if word and char and forced and char in word:
                         rules.append((word, char, forced))
+                    else:
+                        skipped.append((src_name, line_no, line))
+                else:
+                    skipped.append((src_name, line_no, line))
     except OSError as e:
-        print(f"[g2p_phoneme] 警告: 读取语料失败: {e}", file=sys.stderr)
-        _overlay_cache = []
+        print(f"[g2p_phoneme] 警告: 读取语料失败: {path}: {e}", file=sys.stderr)
+    return rules, skipped
+
+
+def _overlay_mtime():
+    """返回默认+用户语料文件的 mtime 指纹；任一文件变化即重载（热加载）。"""
+    key = []
+    for p in (_OVERLAY_PATH, _OVERLAY_USER_PATH):
+        try:
+            key.append(f"{os.path.getmtime(p):.3f}")
+        except OSError:
+            key.append("-")
+    return ";".join(key)
+
+
+def _load_overlay_rules():
+    """解析并合并多来源语料为 [(上下文词, 目标字, 强制读音TONE3(v风格))]。
+
+    - 来源：默认 overlay_override_risk.txt + 用户 overlay_user_override.txt（在后）；
+    - 用户语料在后，text_to_phonemes 与 apply_overlay_auto 均为 last-wins，
+      同一位置冲突时用户规则优先生效；
+    - 不兼容行静默跳过（不阻断加载），汇总打印提示（含来源、行号与样例）；
+    - 文件缺失时静默（不打印错误，视为无该来源）；
+    - 文件 mtime 变化自动重载：用户编辑语料后无需重启进程。
+    """
+    global _overlay_cache, _overlay_mtime_key, _overlay_counts
+    mtime = _overlay_mtime()
+    if _overlay_cache is not None and mtime == _overlay_mtime_key:
         return _overlay_cache
+
+    default_rules, default_skip = _parse_overlay_file(_OVERLAY_PATH, os.path.basename(_OVERLAY_PATH))
+    user_rules, user_skip = _parse_overlay_file(_OVERLAY_USER_PATH, os.path.basename(_OVERLAY_USER_PATH))
+    rules = default_rules + user_rules
+    skipped = default_skip + user_skip
+
+    _overlay_counts = {
+        "default": len(default_rules),
+        "user": len(user_rules),
+        "skipped": len(skipped),
+    }
     _overlay_cache = rules
-    print(f"[g2p_phoneme] 已加载多音字修正语料 {len(rules)} 条: {_OVERLAY_PATH}", file=sys.stderr)
+    _overlay_mtime_key = mtime
+
+    if skipped:
+        shown = "；".join(f"{s}:{n}『{t[:30]}』" for s, n, t in skipped[:3])
+        print(f"[g2p_phoneme] 提示: 语料 {len(skipped)} 行格式不兼容已跳过（不影响其他规则），样例: {shown}", file=sys.stderr)
+    if rules:
+        print(
+            f"[g2p_phoneme] 已加载多音字修正语料 {len(rules)} 条"
+            f"（默认 {_overlay_counts['default']} + 用户 {_overlay_counts['user']}）",
+            file=sys.stderr,
+        )
     return _overlay_cache
 
 
 def overlay_stats():
-    """返回已加载语料条数（供诊断/测试）。"""
+    """返回已加载语料总条数（默认+用户，供诊断/测试）。"""
     return len(_load_overlay_rules())
+
+
+def overlay_info():
+    """返回语料加载详情 dict（默认条数/用户条数/跳过行数/文件路径），供诊断。"""
+    _load_overlay_rules()
+    return {
+        "default_count": _overlay_counts["default"],
+        "user_count": _overlay_counts["user"],
+        "total": len(_overlay_cache or []),
+        "skipped": _overlay_counts["skipped"],
+        "default_path": _OVERLAY_PATH,
+        "user_path": _OVERLAY_USER_PATH,
+    }
 
 
 def has_phoneme_block(text: str) -> bool:
@@ -256,8 +333,7 @@ def apply_overlay_auto(text: str) -> tuple:
         return text, False
     seen = {}
     for pos, forced in marks:
-        if pos not in seen:
-            seen[pos] = forced
+        seen[pos] = forced  # last-wins：与 text_to_phonemes 一致，用户语料（在后）优先生效
     out = list(text)
     # 倒序插入，避免索引偏移
     for pos in sorted(seen, reverse=True):
