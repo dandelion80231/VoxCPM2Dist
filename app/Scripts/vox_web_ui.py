@@ -792,10 +792,12 @@ def synthesize(args: dict) -> dict:
     # normalize：用户显式开关（默认开）。若检测到音素串 {ni3}，自动强制切音素模式
     #（官方要求音素输入必须 normalize=False，且不能把 {} 块交给归一化/模型二次归一化）。
     requested_normalize = str(args.get("normalize", "true")).lower() in ("true", "1", "yes", True)
+    requested_phoneme_mode = str(args.get("phoneme_mode", "false")).lower() in ("true", "1", "yes", True)
     def _is_phoneme_text(s: str) -> bool:
         """粗略检测是否包含 VoxCPM 音素串：连续 2+ 个 {xxx} 块，或单块也视为音素模式候选。"""
         return bool(re.search(r'\{[^{}]*\}\s*\{[^{}]*\}', s)) or bool(re.search(r'^\{[^{}]*\}\s*$', s.strip()))
-    phoneme_mode = _is_phoneme_text(text)
+    # 音素模式 = 前端显式开关 OR 文本自动检测兜底（官方要求音素输入必须 normalize=False）
+    phoneme_mode = requested_phoneme_mode or _is_phoneme_text(text)
     normalize = requested_normalize and not phoneme_mode
     denoise = str(args.get("denoise", "false")).lower() in ("true", "1", "yes", True)
     prompt_text = args.get("prompt_text") or None  # 终极克隆：参考音频的转录文本
@@ -2125,6 +2127,10 @@ HTML_CONTENT = r"""
               <input type="checkbox" id="normalizeToggle" checked>
               <span>数字归一化</span>
             </label>
+            <label class="param-toggle" title="音素输入模式：文本中的 {ni3}{hao3} 音素串将原样传给模型（自动关闭数字归一化）">
+              <input type="checkbox" id="phonemeToggle">
+              <span>音素输入</span>
+            </label>
           </div>
         </div>
         <input type="range" id="chunkSlider" min="60" max="400" step="20" value="180">
@@ -2556,6 +2562,18 @@ function bindSliders() {
     updateRangeProgress(r);
     r.addEventListener('input', () => updateRangeProgress(r));
   });
+
+  // 音素输入开关联动：开启音素模式时自动关闭数字归一化（官方要求 normalize=False）
+  const phonemeToggle = document.getElementById('phonemeToggle');
+  const normalizeToggle = document.getElementById('normalizeToggle');
+  if (phonemeToggle && normalizeToggle) {
+    phonemeToggle.addEventListener('change', () => {
+      if (phonemeToggle.checked) {
+        normalizeToggle.checked = false;
+        showToast && showToast('已开启音素输入：文本中的 {ni3}{hao3} 将原样传给模型（数字归一化已自动关闭）', 'info');
+      }
+    });
+  }
 }
 
 function bindTextArea() {
@@ -3021,6 +3039,7 @@ async function doSynthesize() {
   formData.append('crossfade', document.getElementById('crossfadeSlider').value);
   formData.append('chunk_size', document.getElementById('chunkSlider').value);
   formData.append('normalize', document.getElementById('normalizeToggle').checked ? 'true' : 'false');
+  formData.append('phoneme_mode', document.getElementById('phonemeToggle').checked ? 'true' : 'false');
   formData.append('denoise', document.getElementById('denoiseToggle').checked ? 'true' : 'false');
   formData.append('target_sr', localStorage.getItem('voxcpm_sr') || 'native');
   const pt = document.getElementById('promptText').value.trim();
@@ -3542,6 +3561,7 @@ if HAS_WEB:
         crossfade: int = Form(80),
         chunk_size: int = Form(180),
         normalize: str = Form("true"),
+        phoneme_mode: str = Form("false"),
         denoise: str = Form("false"),
         target_sr: str = Form("native"),
         prompt_text: str = Form(""),
@@ -3570,6 +3590,7 @@ if HAS_WEB:
             "crossfade": crossfade,
             "chunk_size": chunk_size,
             "normalize": normalize,
+            "phoneme_mode": phoneme_mode,
             "denoise": denoise,
             "target_sr": target_sr,
             "prompt_text": prompt_text,
