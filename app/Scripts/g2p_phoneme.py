@@ -101,12 +101,26 @@ def text_to_phonemes(text: str, v_to_u: bool = True) -> str:
     overlays = _load_overlay_rules()
     forced = {}  # 字符偏移 -> 强制读音（TONE3，v 风格）
     if overlays:
+        # 去块化匹配：{音素} 块可能插入上下文词内部（如「高处不胜{hang2}寒」），
+        # 直接在原文上 _find_all 会匹配不到完整词，导致该词语料纠错失效。
+        # 先剔除块生成净化文本 clean，并记录 clean[i] -> 原文本偏移 offs 与
+        # 块区间 blocks；在 clean 上找词命中后，经 offs 映射回原文本字符位置。
+        clean, offs, blocks = _strip_phoneme_blocks(text)
         for word, char, forced_t3 in overlays:
-            # 在文本中定位 word 出现的每个区间，仅对区间内的目标字生效（与 v19 force_pos 语义一致）
-            for start in _find_all(text, word):
+            # 在净化文本中定位 word 出现的每个区间，仅对区间内的目标字生效（与 v19 force_pos 语义一致）
+            for start_c in _find_all(clean, word):
                 for off, ch in enumerate(word):
                     if ch == char:
-                        pos = start + off
+                        pos = offs[start_c + off]
+                        # 词内块字豁免：目标字是被 {音素} 块显式注音的对象
+                        # （落在块区间内，或为紧邻块前的汉字）时跳过该字纠错，
+                        # 用户显式注音优先；词内其他未标注字照常应用语料规则。
+                        if any(
+                            bs <= pos < be
+                            or (pos == bs - 1 and _CJK_RE.match(text[pos]))
+                            for bs, be in blocks
+                        ):
+                            continue
                         forced[pos] = forced_t3
     out_parts = []
     for idx, item in enumerate(parts):
@@ -154,6 +168,38 @@ def _find_all(text: str, word: str):
         res.append(idx)
         start = idx + 1
     return res
+
+
+def _strip_phoneme_blocks(text: str):
+    """剔除文本中的 {音素} 块，生成用于上下文词匹配的净化文本并记录偏移映射。
+
+    背景：{音素} 块可能插入上下文词内部（如「高处不胜{hang2}寒」），直接在原文上
+    用 _find_all 找完整词会失败，导致该词语料 overlay 纠错失效。本函数把块整体
+    剔除后，词内插块也能被匹配到；同时记录 clean[i] -> 原文本偏移 与块区间，
+    供命中后映射回原文本字符位置、并对块标注字做豁免。
+
+    返回 (clean, offs, blocks)：
+    - clean ：去除所有合法音素块后的文本（块字符不保留，长度 <= 原文本）；
+    - offs  ：clean[i] 对应原文本的字符偏移（一一映射，可还原命中位置）；
+    - blocks：原文本中每个音素块的 (start, end) 左闭右开区间列表。
+
+    例: "高处不胜{hang2}寒" -> ("高处不胜寒", [0,1,2,3,11], [(4, 11)])
+    """
+    offs = []
+    blocks = []
+    out = []
+    i = 0
+    n = len(text)
+    while i < n:
+        m = _PHONEME_BLOCK_RE.match(text, i)
+        if m:
+            blocks.append((m.start(), m.end()))
+            i = m.end()
+        else:
+            out.append(text[i])
+            offs.append(i)
+            i += 1
+    return "".join(out), offs, blocks
 
 
 # ---- 多音字修正语料后置纠错 ----
