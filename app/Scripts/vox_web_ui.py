@@ -2341,7 +2341,12 @@ HTML_CONTENT = r"""
   <div class="modal" style="width:720px;max-width:92vw">
     <div class="modal-head">
       <h3>编辑多音字语料</h3>
-      <button class="btn-secondary" style="height:32px;padding:0 12px" onclick="closeCorpusEditor()">✕</button>
+      <div style="display:flex;gap:6px;align-items:center;">
+        <button class="btn-secondary" style="height:32px;padding:0 12px" onclick="exportCorpusFile()">导出语料</button>
+        <button class="btn-secondary" style="height:32px;padding:0 12px" onclick="document.getElementById('corpusImportFile').click()">导入语料</button>
+        <input type="file" id="corpusImportFile" accept=".txt,text/plain" style="display:none" onchange="importCorpusFile(this)">
+        <button class="btn-secondary" style="height:32px;padding:0 12px" onclick="closeCorpusEditor()">✕</button>
+      </div>
     </div>
     <div class="param-desc" id="corpusPathHint" style="margin-bottom:8px">加载中...</div>
     <textarea id="corpusContent" spellcheck="false" style="width:100%;height:340px;font-family:var(--font-mono);font-size:12px;line-height:1.6;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:10px;padding:10px;box-sizing:border-box;resize:vertical;white-space:pre" placeholder="（文件为空或不存在，保存时将新建）"></textarea>
@@ -2358,7 +2363,12 @@ HTML_CONTENT = r"""
   <div class="modal" style="width:720px;max-width:92vw">
     <div class="modal-head">
       <h3>音色档案管理</h3>
-      <button class="btn-secondary" style="height:32px;padding:0 12px" onclick="closeProfileManager()">✕</button>
+      <div style="display:flex;gap:6px;align-items:center;">
+        <button class="btn-secondary" style="height:32px;padding:0 12px" onclick="exportProfilesFile()">导出档案</button>
+        <button class="btn-secondary" style="height:32px;padding:0 12px" onclick="document.getElementById('profileImportFile').click()">导入档案</button>
+        <input type="file" id="profileImportFile" accept=".json,application/json,.txt" style="display:none" onchange="importProfilesFile(this)">
+        <button class="btn-secondary" style="height:32px;padding:0 12px" onclick="closeProfileManager()">✕</button>
+      </div>
     </div>
     <div class="param-desc" id="profilePathHint" style="margin-bottom:8px">加载中...</div>
     <div class="param-desc" style="margin-bottom:8px">音色档案 = 当前界面音色设置的快照（预设 voice + 音色描述 + 模式 + 参考音频路径 + 提示文本）。保存后可随时一键应用。</div>
@@ -3539,6 +3549,96 @@ async function deleteProfile(name) {
   }
 }
 
+// ── 语料 / 音色档案：导入导出（REST 标准化）──
+function downloadBlob(filename, content, mime) {
+  const blob = new Blob([content], { type: mime || 'text/plain;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 800);
+}
+async function exportCorpusFile() {
+  try {
+    const r = await fetch('/api/corpus/export', { method: 'POST' });
+    const d = await r.json();
+    if (!d.ok) { showToast(d.error || '导出失败', 'error'); return; }
+    downloadBlob(d.filename || 'corpus_user_override.txt', d.content || '');
+    showToast('已导出语料' + (d.file_path ? '（同时保存至 ' + d.file_path + '）' : ''), 'success');
+  } catch (e) {
+    showToast('导出失败: ' + (e.message || e), 'error');
+  }
+}
+async function importCorpusFile(input) {
+  const file = input.files && input.files[0];
+  if (!file) return;
+  try {
+    const content = await file.text();
+    const r = await fetch('/api/corpus/import', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content: content })
+    });
+    const d = await r.json();
+    if (d.ok) {
+      showToast(d.message || '导入完成', 'success');
+      if (d.skipped_detail && d.skipped_detail.length) {
+        const bad = d.skipped_detail.slice(0, 5).map(x => '  第' + x.line + '行: ' + x.text.slice(0, 60)).join('\n');
+        showToast('已跳过 ' + d.skipped_detail.length + ' 条坏行（详见提示）', 'error');
+        console.warn('[corpus import] 坏行:\n' + bad);
+      }
+      // 刷新编辑器内容
+      try {
+        const g = await fetch('/api/corpus');
+        const gd = await g.json();
+        document.getElementById('corpusContent').value = gd.content || '';
+        document.getElementById('corpusPathHint').textContent = '语料文件：' + (gd.path || '');
+      } catch (_) {}
+    } else {
+      showToast(d.error || '导入失败', 'error');
+    }
+  } catch (e) {
+    showToast('导入失败: ' + (e.message || e), 'error');
+  } finally {
+    input.value = '';
+  }
+}
+async function exportProfilesFile() {
+  try {
+    const r = await fetch('/api/profiles/export', { method: 'POST' });
+    const d = await r.json();
+    if (!d.ok) { showToast(d.error || '导出失败', 'error'); return; }
+    downloadBlob(d.filename || 'voxcpm_profiles.json', d.content || '[]', 'application/json;charset=utf-8');
+    showToast('已导出音色档案' + (d.file_path ? '（同时保存至 ' + d.file_path + '）' : ''), 'success');
+  } catch (e) {
+    showToast('导出失败: ' + (e.message || e), 'error');
+  }
+}
+async function importProfilesFile(input) {
+  const file = input.files && input.files[0];
+  if (!file) return;
+  try {
+    const content = await file.text();
+    const r = await fetch('/api/profiles/import', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content: content })
+    });
+    const d = await r.json();
+    if (d.ok) {
+      showToast(d.message || '导入完成', 'success');
+      await refreshProfileList();
+    } else {
+      showToast(d.error || '导入失败', 'error');
+    }
+  } catch (e) {
+    showToast('导入失败: ' + (e.message || e), 'error');
+  } finally {
+    input.value = '';
+  }
+}
+
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', init);
 } else {
@@ -3969,6 +4069,36 @@ if HAS_WEB:
         if not name.strip():
             raise HTTPException(400, "档案名称不能为空")
         return JSONResponse(voxcpm_api.delete_profile(name))
+
+    # ── 语料 / 音色档案：导入导出（REST 标准化）──
+    @app.post("/api/corpus/import")
+    async def import_corpus(payload: dict):
+        """导入语料文本：逐行校验（与 g2p_phoneme 同口径），坏行跳过并统计；
+        有效行合并写入现有语料（保留原内容，last-wins 语义一致）。入参：{content}"""
+        content = (payload or {}).get("content", "")
+        return JSONResponse(voxcpm_api.import_corpus_text(content))
+
+    @app.post("/api/corpus/export")
+    async def export_corpus():
+        """导出当前语料内容（UTF-8 文本）；同时落盘 exports/ 便于 CLI/分享。"""
+        r = voxcpm_api.export_corpus_text()
+        f = voxcpm_api.export_corpus_to_file()
+        r["file_path"] = f.get("path")
+        return JSONResponse(r)
+
+    @app.post("/api/profiles/import")
+    async def import_profiles(payload: dict):
+        """导入音色档案（JSON 数组文本）：坏项跳过，合法项合并写入（同名覆盖）。入参：{content}"""
+        content = (payload or {}).get("content", "")
+        return JSONResponse(voxcpm_api.import_profiles_text(content))
+
+    @app.post("/api/profiles/export")
+    async def export_profiles():
+        """导出全部音色档案为 JSON 文本；同时落盘 exports/ 便于 CLI/分享。"""
+        r = voxcpm_api.export_profiles_text()
+        f = voxcpm_api.export_profiles_to_file()
+        r["file_path"] = f.get("path")
+        return JSONResponse(r)
 
     @app.get("/api/audio/{filename}")
     async def serve_audio(filename: str):

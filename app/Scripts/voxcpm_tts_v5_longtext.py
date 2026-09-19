@@ -571,6 +571,14 @@ def main():
     parser.add_argument("--profile-save", type=str, default=None, metavar="NAME[:voice[:control_text]]",
                         help="保存当前 CLI 音色配置为档案（可带 --voice/--control/--reference/--prompt-text/--mode）")
     parser.add_argument("--profile-delete", type=str, default=None, metavar="NAME", help="删除指定音色档案")
+    parser.add_argument("--corpus-export", type=str, default=None, nargs="?", const="auto", metavar="PATH",
+                        help="导出用户语料到 PATH（缺省自动生成 exports/ 文件名）")
+    parser.add_argument("--corpus-import", type=str, default=None, metavar="PATH",
+                        help="导入用户语料文本文件（校验格式、坏行跳过、合并写入）")
+    parser.add_argument("--profile-export", type=str, default=None, nargs="?", const="auto", metavar="PATH",
+                        help="导出音色档案为 JSON 到 PATH（缺省自动生成 exports/ 文件名）")
+    parser.add_argument("--profile-import", type=str, default=None, metavar="PATH",
+                        help="导入音色档案 JSON 文件（坏项跳过、同名覆盖）")
     parser.add_argument("--show-config", action="store_true", help="显示当前配置")
     parser.add_argument("-v", "--version", action="store_true", help="显示版本号")
 
@@ -610,6 +618,59 @@ def main():
     if args.profile_delete:
         r = voxcpm_api.delete_profile(args.profile_delete)
         print(("[OK] " if r.get("ok") else "[失败] ") + r.get("message", str(r)))
+        sys.exit(0)
+
+    # ── 语料 / 音色档案：导入导出（与 Web UI 共用 voxcpm_api）──
+    if args.corpus_export:
+        if args.corpus_export == "auto":
+            r = voxcpm_api.export_corpus_to_file()
+        else:
+            out = Path(args.corpus_export)
+            out.parent.mkdir(parents=True, exist_ok=True)
+            content = voxcpm_api.read_corpus()["content"] or ""
+            out.write_text(content, encoding="utf-8")
+            r = {"ok": True, "path": str(out), "bytes": out.stat().st_size,
+                 "message": f"语料已导出：{out}"}
+        print(("[OK] " if r.get("ok") else "[失败] ") + r.get("message", str(r)))
+        if r.get("path"):
+            print(f"  文件: {r['path']} ({r.get('bytes', 0)} bytes)")
+        sys.exit(0)
+    if args.corpus_import:
+        try:
+            text = Path(args.corpus_import).read_text(encoding="utf-8")
+        except OSError as e:
+            print(f"[失败] 读取语料文件失败: {e}")
+            sys.exit(1)
+        r = voxcpm_api.import_corpus_text(text)
+        print(("[OK] " if r.get("ok") else "[失败] ") + r.get("message", str(r)))
+        if r.get("skipped_detail"):
+            for x in r["skipped_detail"][:5]:
+                print(f"  [跳过] 第{x.get('line')}行: {x.get('text', '')[:60]}")
+        sys.exit(0)
+    if args.profile_export:
+        if args.profile_export == "auto":
+            r = voxcpm_api.export_profiles_to_file()
+        else:
+            out = Path(args.profile_export)
+            out.parent.mkdir(parents=True, exist_ok=True)
+            out.write_text(voxcpm_api.export_profiles_text()["content"], encoding="utf-8")
+            r = {"ok": True, "path": str(out), "bytes": out.stat().st_size,
+                 "message": f"已导出音色档案：{out}"}
+        print(("[OK] " if r.get("ok") else "[失败] ") + r.get("message", str(r)))
+        if r.get("path"):
+            print(f"  文件: {r['path']} ({r.get('bytes', 0)} bytes)")
+        sys.exit(0)
+    if args.profile_import:
+        try:
+            text = Path(args.profile_import).read_text(encoding="utf-8")
+        except OSError as e:
+            print(f"[失败] 读取档案文件失败: {e}")
+            sys.exit(1)
+        r = voxcpm_api.import_profiles_text(text)
+        print(("[OK] " if r.get("ok") else "[失败] ") + r.get("message", str(r)))
+        if r.get("skipped_detail"):
+            for x in r["skipped_detail"][:5]:
+                print(f"  [跳过] 第{x.get('index')}项: {x.get('reason', '')}")
         sys.exit(0)
 
     if args.version:

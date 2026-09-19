@@ -240,6 +240,57 @@ def export_corpus_to_file() -> dict:
     }
 
 
+def export_corpus_text() -> dict:
+    """返回当前语料内容与建议文件名（供 Web UI 前端直接下载）。"""
+    data = read_corpus()
+    return {
+        "ok": True,
+        "content": data["content"] or "",
+        "filename": "corpus_user_override.txt",
+        "exists": data["exists"],
+    }
+
+
+def import_corpus_text(text: str, merge: bool = True) -> dict:
+    """导入语料文本：逐行校验（与 g2p_phoneme 同口径），坏行跳过并统计；
+    有效行合并写入现有语料（保留原内容，last-wins 语义一致）。"""
+    v = validate_corpus_text(text)
+    lines = (text or "").splitlines()
+    kept = []
+    for raw in lines:
+        line = raw.strip()
+        if not line:
+            continue
+        if line.startswith("#"):
+            kept.append(line)
+            continue
+        m = _CORPUS_RE.match(line)
+        if m and m.group("char") in m.group("word"):
+            kept.append(line)
+    if kept:
+        existing = read_corpus()["content"].strip()
+        merged = (existing + "\n\n" if existing else "") + "\n".join(kept) + "\n"
+        p = user_corpus_path()
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(merged, encoding="utf-8")
+    return {
+        "ok": True,
+        "imported": len(kept),
+        "skipped": v["bad_count"],
+        "skipped_detail": v["bad_lines"],
+        "message": f"语料导入完成：合并 {len(kept)} 条，跳过 {v['bad_count']} 条坏行（格式不符）",
+    }
+
+
+def export_profiles_text() -> dict:
+    """返回全部音色档案 JSON 文本（供 Web UI 前端直接下载）。"""
+    return {
+        "ok": True,
+        "content": json.dumps(_load_profiles(), ensure_ascii=False, indent=2),
+        "filename": "voxcpm_profiles.json",
+    }
+
+
 def export_profiles_to_file() -> dict:
     """导出全部音色档案为 JSON 文件（写入 exports/，返回文件路径）。"""
     profiles = _load_profiles()
