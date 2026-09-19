@@ -361,8 +361,11 @@ def _resolve_zipenhancer_dir():
 
 
 def resolve_model_dir(local_path: str = "") -> str:
-    """解析模型目录：优先用户指定，无效时回退到分发版自带本地权重，最后回退到 MODEL_ID。"""
-    local_path = (local_path or os.environ.get("VOXCPM_MODEL_DIR", "")).strip()
+    """解析模型目录：优先环境变量 VOXCPM_MODELS_DIR（新标准）→ VOXCPM_MODEL_DIR（兼容旧键）
+    → 分发版自带本地权重 → 回退 MODEL_ID。"""
+    local_path = (local_path
+                  or os.environ.get("VOXCPM_MODELS_DIR", "")
+                  or os.environ.get("VOXCPM_MODEL_DIR", "")).strip()
     base = Path(__file__).resolve().parent
 
     user_candidates = []
@@ -3639,7 +3642,9 @@ if HAS_WEB:
             dl = dict(_dl_state)
         return JSONResponse({"state": state, "error": err, "model_present": model_present(),
                              "download_available": HAS_DL, "download": dl,
-                             "lora": _build_lora_status()})
+                             "lora": _build_lora_status(),
+                             "model_dir": resolve_model_dir(),
+                             "models_dir_env": os.environ.get("VOXCPM_MODELS_DIR", "")})
 
     @app.post("/api/download-model")
     async def api_download_model_start():
@@ -3758,6 +3763,7 @@ if HAS_WEB:
             # 自动修正到包含 config.json 的有效路径；若用户选错目录，会回退到分发版默认路径
             resolved = resolve_model_dir(model_dir)
             os.environ["VOXCPM_MODEL_DIR"] = resolved
+            os.environ["VOXCPM_MODELS_DIR"] = resolved
             # 触发下次合成重载模型
             with state_lock:
                 _model_loaded = False
@@ -3773,7 +3779,7 @@ if HAS_WEB:
         _save_config()
         return JSONResponse({
             "ok": True,
-            "model_dir": os.environ.get("VOXCPM_MODEL_DIR", ""),
+            "model_dir": resolve_model_dir(),
             "output_dir": str(_output_dir),
             "lora_weights_path": _lora_weights_path,
         })
@@ -4021,6 +4027,9 @@ def run_server(port: int = 18978, host: str = "127.0.0.1", hide_console: bool = 
     print(f"\n{'='*50}")
     print(f"  VoxCPM2 Web UI 已启动")
     print(f"  访问地址: {url}")
+    print(f"  模型目录: {resolve_model_dir()}")
+    print(f"    (VOXCPM_MODELS_DIR={os.environ.get('VOXCPM_MODELS_DIR', '') or '(未设置)'}, "
+          f"VOXCPM_MODEL_DIR={os.environ.get('VOXCPM_MODEL_DIR', '') or '(未设置)'})")
     print(f"  按 Ctrl+C 停止服务器")
     print(f"{'='*50}\n")
 
@@ -4071,6 +4080,7 @@ if __name__ == "__main__":
 
     if args.model_dir:
         os.environ["VOXCPM_MODEL_DIR"] = args.model_dir
+        os.environ["VOXCPM_MODELS_DIR"] = args.model_dir
     if args.output_dir:
         os.environ["VOXCPM_OUTPUT_DIR"] = args.output_dir
 

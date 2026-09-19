@@ -37,7 +37,8 @@ except Exception:
 
 # ── 配置 ─────────────────────────────────────────────────
 MODEL_ID = "openbmb/VoxCPM2"
-LOCAL_MODEL_PATH = os.environ.get("VOXCPM_MODEL_DIR", "")
+# 模型目录：优先新标准环境变量 VOXCPM_MODELS_DIR，兼容旧键 VOXCPM_MODEL_DIR
+LOCAL_MODEL_PATH = os.environ.get("VOXCPM_MODELS_DIR") or os.environ.get("VOXCPM_MODEL_DIR", "")
 DEVICE = "cuda" if os.environ.get("VOXCPM_DEVICE", "") else "auto"
 DEFAULT_OUTPUT_DIR = Path(os.environ.get("VOXCPM_OUTPUT_DIR", str(Path.home() / "Desktop")))
 # 多音字修正 LoRA 权重路径（训练产出的 step_XXXXXXX 目录，或 lora_weights.safetensors/.ckpt 文件）。
@@ -624,7 +625,9 @@ def main():
     if args.show_config:
         print(f"\n[配置]")
         print(f"  DEVICE:          {DEVICE}")
-        print(f"  MODEL_ID:        {LOCAL_MODEL_PATH or MODEL_ID}")
+        print(f"  模型目录:        {LOCAL_MODEL_PATH or MODEL_ID}")
+        print(f"    (VOXCPM_MODELS_DIR={os.environ.get('VOXCPM_MODELS_DIR', '') or '(未设置)'}, "
+              f"VOXCPM_MODEL_DIR={os.environ.get('VOXCPM_MODEL_DIR', '') or '(未设置)'})")
         print(f"  OUTPUT_DIR:      {DEFAULT_OUTPUT_DIR}")
         print(f"  CHUNK_SIZE:      {MAX_CHUNK_SIZE}")
         print(f"  CFG:             {args.cfg}")
