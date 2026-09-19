@@ -45,6 +45,14 @@ from typing import Optional
 
 import numpy as np
 
+# 公共后端函数层（Web UI 与 CLI 共用；含语料/profile 管理，模型目录解析见 commit2）
+try:
+    import voxcpm_api
+    HAS_API = True
+except Exception as _e_api:
+    HAS_API = False
+    print("[VoxCPM2] 公共后端函数层不可用: %s" % _e_api)
+
 # ── 依赖检查 ─────────────────────────────────────────────
 try:
     import soundfile as sf
@@ -2203,7 +2211,9 @@ HTML_CONTENT = r"""
 
     <!-- 参考音频 -->
     <div class="ref-card">
-      <h3>音色统一模式（可选）</h3>
+      <h3 style="display:flex;align-items:center;gap:10px;">音色统一模式（可选）
+        <button class="mode-btn" id="profileBtn" onclick="openProfileManager()" style="padding:4px 10px;font-size:11px;cursor:pointer;" title="保存 / 应用 / 管理音色档案（voice + 音色描述 + 模式 + 参考音频）">🎚️ 音色档案</button>
+      </h3>
       <div class="ref-modes">
         <button class="mode-btn ref-mode-btn active" data-mode="voice_design" onclick="setMode('voice_design', this)">
           <span class="mode-title">音色设计</span>
@@ -2340,11 +2350,33 @@ HTML_CONTENT = r"""
   </div>
 </div>
 
+<!-- 音色档案管理弹窗（REST 标准化：/api/profiles） -->
+<div class="modal-mask" id="profileModal">
+  <div class="modal" style="width:720px;max-width:92vw">
+    <div class="modal-head">
+      <h3>音色档案管理</h3>
+      <button class="btn-secondary" style="height:32px;padding:0 12px" onclick="closeProfileManager()">✕</button>
+    </div>
+    <div class="param-desc" id="profilePathHint" style="margin-bottom:8px">加载中...</div>
+    <div class="param-desc" style="margin-bottom:8px">音色档案 = 当前界面音色设置的快照（预设 voice + 音色描述 + 模式 + 参考音频路径 + 提示文本）。保存后可随时一键应用。</div>
+    <div style="display:flex;gap:8px;margin-bottom:10px;">
+      <input type="text" id="profileNameInput" placeholder="新档案名称，如：深宫太后 / 新闻男主播" style="flex:1;height:36px;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--text);padding:0 12px;box-sizing:border-box;">
+      <button class="btn-primary" style="flex:0 0 auto;padding:0 18px;height:36px" onclick="saveProfileFromCurrent()">保存当前音色</button>
+    </div>
+    <div id="profileList" style="max-height:300px;overflow-y:auto;display:flex;flex-direction:column;gap:6px;"></div>
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeProfileManager()">关闭</button>
+      <button class="btn-secondary" onclick="refreshProfileList()">刷新列表</button>
+    </div>
+  </div>
+</div>
+
 <script>
 // ── 全局状态 ─────────────────────────────────────
 let selectedVoice = 'default';
 let currentMode = 'voice_design';
 let refFile = null;
+let currentRefPath = '';   // 音色档案中的参考音频路径（fixed_clone 未重新上传时传给 /api/tts reference_path）
 let recState = null;
 let pollingInterval = null;
 let currentJobId = null;
@@ -3141,6 +3173,8 @@ async function doSynthesize() {
   if (pt) formData.append('prompt_text', pt);
   if (refFile && currentMode === 'fixed_clone') {
     formData.append('reference_wav', refFile);
+  } else if (currentRefPath && currentMode === 'fixed_clone') {
+    formData.append('reference_path', currentRefPath);
   }
 
   try {
@@ -3376,6 +3410,129 @@ async function saveCorpus() {
   } finally {
     btn.disabled = false;
     btn.textContent = '保存语料';
+  }
+}
+
+// ── 音色档案管理（REST 标准化：/api/profiles）──
+async function openProfileManager() {
+  document.getElementById('profileModal').style.display = 'flex';
+  await refreshProfileList();
+}
+function closeProfileManager() {
+  document.getElementById('profileModal').style.display = 'none';
+}
+async function refreshProfileList() {
+  const list = document.getElementById('profileList');
+  const hint = document.getElementById('profilePathHint');
+  list.innerHTML = '<div style="color:var(--muted)">加载中...</div>';
+  try {
+    const r = await fetch('/api/profiles');
+    const d = await r.json();
+    hint.textContent = '档案文件：' + (d.file || '');
+    const ps = d.profiles || [];
+    if (!ps.length) {
+      list.innerHTML = '<div style="color:var(--muted);padding:8px 0">暂无音色档案。先在下方命名并点击「保存当前音色」。</div>';
+      return;
+    }
+    list.innerHTML = '';
+    ps.forEach(p => {
+      const modeLabel = { voice_design: '音色设计', fixed_clone: '固定参考克隆', self_seeding: '自播种' }[p.mode] || p.mode || '音色设计';
+      const desc = (p.control_text || '').slice(0, 40) || (p.voice || '');
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;';
+      const info = document.createElement('div');
+      info.style.cssText = 'flex:1;min-width:0;';
+      info.innerHTML = '<div style="font-weight:600;font-size:13px;">' + esc(p.name) + '</div>' +
+        '<div style="font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">[' + modeLabel + '] ' + esc(desc) + '</div>';
+      const btnApply = document.createElement('button');
+      btnApply.className = 'mode-btn';
+      btnApply.textContent = '应用';
+      btnApply.onclick = () => applyProfile(p.name);
+      const btnDel = document.createElement('button');
+      btnDel.className = 'mode-btn';
+      btnDel.textContent = '删除';
+      btnDel.onclick = () => deleteProfile(p.name);
+      row.appendChild(info);
+      row.appendChild(btnApply);
+      row.appendChild(btnDel);
+      list.appendChild(row);
+    });
+  } catch (e) {
+    list.innerHTML = '<div style="color:var(--danger)">读取失败: ' + esc(e.message || e) + '</div>';
+  }
+}
+function esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+async function saveProfileFromCurrent() {
+  const name = document.getElementById('profileNameInput').value.trim();
+  if (!name) { showToast('请输入档案名称', 'error'); return; }
+  const payload = {
+    name: name,
+    voice: selectedVoice || 'default',
+    control_text: document.getElementById('controlText').value.trim(),
+    mode: currentMode,
+    prompt_text: document.getElementById('promptText').value.trim(),
+  };
+  try {
+    const r = await fetch('/api/profiles', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const d = await r.json();
+    if (d.ok) {
+      showToast(d.message || '已保存', 'success');
+      document.getElementById('profileNameInput').value = '';
+      await refreshProfileList();
+    } else {
+      showToast(d.error || '保存失败', 'error');
+    }
+  } catch (e) {
+    showToast('保存失败: ' + (e.message || e), 'error');
+  }
+}
+async function applyProfile(name) {
+  try {
+    const r = await fetch('/api/profiles');
+    const d = await r.json();
+    const p = (d.profiles || []).find(x => x.name === name);
+    if (!p) { showToast('档案不存在', 'error'); return; }
+    // 应用：模式 / 预设 / 音色描述 / 提示文本
+    const modeBtn = document.querySelector('.ref-mode-btn[data-mode="' + (p.mode || 'voice_design') + '"]');
+    if (modeBtn) setMode(p.mode || 'voice_design', modeBtn);
+    if (p.voice && VOICE_LIST[p.voice]) {
+      const voiceBtn = document.querySelector('.voice-btn[data-id="' + p.voice + '"]');
+      if (voiceBtn) selectVoice(p.voice, voiceBtn);
+      else selectedVoice = p.voice;
+    }
+    if (p.control_text) document.getElementById('controlText').value = p.control_text;
+    document.getElementById('promptText').value = p.prompt_text || '';
+    if (p.reference_wav_path) {
+      currentRefPath = p.reference_wav_path;
+      showToast('已应用档案。参考音频：' + p.reference_wav_path + '（合成时自动使用，或重新上传覆盖）', 'success');
+    } else {
+      currentRefPath = '';
+      showToast('已应用音色档案「' + name + '」', 'success');
+    }
+    closeProfileManager();
+  } catch (e) {
+    showToast('应用失败: ' + (e.message || e), 'error');
+  }
+}
+async function deleteProfile(name) {
+  if (!confirm('确认删除音色档案「' + name + '」？')) return;
+  try {
+    const r = await fetch('/api/profiles/delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: name })
+    });
+    const d = await r.json();
+    if (d.ok) { showToast(d.message || '已删除', 'success'); await refreshProfileList(); }
+    else showToast(d.error || '删除失败', 'error');
+  } catch (e) {
+    showToast('删除失败: ' + (e.message || e), 'error');
   }
 }
 
@@ -3716,20 +3873,27 @@ if HAS_WEB:
         denoise: str = Form("false"),
         target_sr: str = Form("native"),
         prompt_text: str = Form(""),
+        reference_path: str = Form(""),
         reference_wav: UploadFile = File(None),
     ):
         if not text.strip():
             raise HTTPException(400, "文本不能为空")
 
-        # 保存上传的参考音频
+        # 保存上传的参考音频；若提供了服务器端已有音频路径（reference_path，
+        # 与 CLI --reference 对齐）则优先使用，避免重复上传
         ref_wav_path = None
-        if reference_wav and mode == "fixed_clone":
-            suffix = Path(reference_wav.filename).suffix or ".wav"
-            ref_wav_path = str(TEMP_DIR / f"ref_{uuid.uuid4().hex[:8]}{suffix}")
-            # 同上：写上传参考音频前确保 TEMP_DIR 仍存在
-            TEMP_DIR.mkdir(parents=True, exist_ok=True)
-            with open(ref_wav_path, "wb") as f:
-                shutil.copyfileobj(reference_wav.file, f)
+        if mode == "fixed_clone":
+            if reference_path and reference_path.strip():
+                ref_wav_path = reference_path.strip()
+                if not os.path.isfile(ref_wav_path):
+                    raise HTTPException(400, f"参考音频路径不存在: {ref_wav_path}")
+            elif reference_wav:
+                suffix = Path(reference_wav.filename).suffix or ".wav"
+                ref_wav_path = str(TEMP_DIR / f"ref_{uuid.uuid4().hex[:8]}{suffix}")
+                # 同上：写上传参考音频前确保 TEMP_DIR 仍存在
+                TEMP_DIR.mkdir(parents=True, exist_ok=True)
+                with open(ref_wav_path, "wb") as f:
+                    shutil.copyfileobj(reference_wav.file, f)
 
         job_id = submit_task({
             "text": text,
@@ -3764,36 +3928,41 @@ if HAS_WEB:
         except Exception as e:
             raise HTTPException(500, f"G2P 转换失败: {e}")
 
-    def _user_corpus_path() -> Path:
-        """用户多音字语料文件 overlay_user_override.txt（与 g2p_phoneme 热加载路径一致）"""
-        return Path(__file__).resolve().parent / "training" / "polyphone_corpus" / "data" / "overlay_user_override.txt"
-
     @app.get("/api/corpus")
     async def get_corpus():
-        """读取用户多音字语料文件内容（只读，不修改）"""
-        p = _user_corpus_path()
-        exists = p.exists()
-        content = p.read_text(encoding="utf-8") if exists else ""
-        return JSONResponse({
-            "path": str(p),
-            "exists": exists,
-            "content": content,
-            "mtime": p.stat().st_mtime if exists else None,
-        })
+        """读取用户多音字语料文件内容（只读，不修改）；统一走 voxcpm_api 公共后端。"""
+        return JSONResponse(voxcpm_api.read_corpus())
 
     @app.post("/api/corpus")
     async def save_corpus(payload: dict):
         """写回用户多音字语料文件（UTF-8）。保存即生效：g2p_phoneme 检测到 mtime 变化自动热加载，无需重启。"""
         content = (payload or {}).get("content", "")
-        p = _user_corpus_path()
-        p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(content, encoding="utf-8")
-        return JSONResponse({
-            "ok": True,
-            "path": str(p),
-            "mtime": p.stat().st_mtime,
-            "message": "已保存（保存即生效：g2p 检测到文件变化自动热加载，无需重启）",
-        })
+        return JSONResponse(voxcpm_api.write_corpus(content))
+
+    # ── 音色档案（profile）：列表 / 新增 / 删除（REST 标准化）──
+    @app.get("/api/profiles")
+    async def list_profiles():
+        """音色档案列表（用户保存的音色配置：voice/control_text/mode/参考音频等）。"""
+        return JSONResponse({"profiles": voxcpm_api.list_profiles(),
+                             "file": str(voxcpm_api.PROFILE_FILE)})
+
+    @app.post("/api/profiles")
+    async def add_profile(payload: dict):
+        """新增/覆盖音色档案。入参：{name, voice?, control_text?, mode?, reference_wav_path?, prompt_text?}"""
+        payload = payload or {}
+        name = payload.get("name", "")
+        if not HAS_API or not name.strip():
+            raise HTTPException(400, "档案名称不能为空")
+        return JSONResponse(voxcpm_api.save_profile(name, payload))
+
+    @app.post("/api/profiles/delete")
+    async def delete_profile(payload: dict):
+        """删除音色档案。入参：{name}"""
+        payload = payload or {}
+        name = payload.get("name", "")
+        if not name.strip():
+            raise HTTPException(400, "档案名称不能为空")
+        return JSONResponse(voxcpm_api.delete_profile(name))
 
     @app.get("/api/audio/{filename}")
     async def serve_audio(filename: str):

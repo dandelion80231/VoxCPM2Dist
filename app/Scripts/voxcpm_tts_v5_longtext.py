@@ -29,6 +29,12 @@ from pathlib import Path
 
 import numpy as np
 
+# 公共后端函数层（与 Web UI vox_web_ui.py 共用：语料读写 / 音色档案管理）
+try:
+    import voxcpm_api
+except Exception:
+    voxcpm_api = None
+
 # ── 配置 ─────────────────────────────────────────────────
 MODEL_ID = "openbmb/VoxCPM2"
 LOCAL_MODEL_PATH = os.environ.get("VOXCPM_MODEL_DIR", "")
@@ -560,6 +566,10 @@ def main():
     parser.add_argument("--no-cuda", action="store_true", help="强制使用 CPU")
     parser.add_argument("-i", "--interactive", action="store_true", help="交互模式")
     parser.add_argument("--list-voices", action="store_true", help="列出所有音色预设")
+    parser.add_argument("--list-profiles", action="store_true", help="列出所有音色档案（与 Web UI /api/profiles 共用后端）")
+    parser.add_argument("--profile-save", type=str, default=None, metavar="NAME[:voice[:control_text]]",
+                        help="保存当前 CLI 音色配置为档案（可带 --voice/--control/--reference/--prompt-text/--mode）")
+    parser.add_argument("--profile-delete", type=str, default=None, metavar="NAME", help="删除指定音色档案")
     parser.add_argument("--show-config", action="store_true", help="显示当前配置")
     parser.add_argument("-v", "--version", action="store_true", help="显示版本号")
 
@@ -569,6 +579,37 @@ def main():
     if args.lora:
         global LORA_WEIGHTS_PATH
         LORA_WEIGHTS_PATH = args.lora.strip()
+
+    # ── 音色档案：列表 / 保存 / 删除（与 Web UI voxcpm_api 共用）──
+    if voxcpm_api is None:
+        print("[错误] voxcpm_api 导入失败，无法使用音色档案/语料管理功能")
+        sys.exit(1)
+    if args.list_profiles:
+        profiles = voxcpm_api.list_profiles()
+        print(f"\n[音色档案列表] 文件: {voxcpm_api.PROFILE_FILE}")
+        if not profiles:
+            print("  （暂无档案）")
+        for p in profiles:
+            mode = p.get("mode", "voice_design")
+            print(f"  - {p.get('name', '?'):20s} [{mode}] voice={p.get('voice','')} desc={p.get('control_text','')[:24]}")
+        sys.exit(0)
+    if args.profile_save:
+        name = args.profile_save.split(":")[0] if ":" in args.profile_save else args.profile_save
+        payload = {
+            "name": name,
+            "voice": args.voice or "default",
+            "control_text": args.control or "",
+            "mode": "self_seeding" if args.self_seeding else "fixed_clone" if args.reference else "voice_design",
+            "prompt_text": args.prompt_text or "",
+            "reference_wav_path": args.reference or "",
+        }
+        r = voxcpm_api.save_profile(name, payload)
+        print(("[OK] " if r.get("ok") else "[失败] ") + r.get("message", str(r)))
+        sys.exit(0)
+    if args.profile_delete:
+        r = voxcpm_api.delete_profile(args.profile_delete)
+        print(("[OK] " if r.get("ok") else "[失败] ") + r.get("message", str(r)))
+        sys.exit(0)
 
     if args.version:
         print("VoxCPM TTS v5.2 CN — 音色统一版")
