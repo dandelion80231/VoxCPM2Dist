@@ -99,7 +99,7 @@ def text_to_phonemes(text: str, v_to_u: bool = True) -> str:
         return "".join(out_parts)
 
     overlays = _load_overlay_rules()
-    forced = {}  # token 索引 -> 强制读音（TONE3，v 风格）
+    forced = {}  # 字符偏移 -> 强制读音（TONE3，v 风格）
     if overlays:
         for word, char, forced_t3 in overlays:
             # 在文本中定位 word 出现的每个区间，仅对区间内的目标字生效（与 v19 force_pos 语义一致）
@@ -112,8 +112,8 @@ def text_to_phonemes(text: str, v_to_u: bool = True) -> str:
     for idx, item in enumerate(parts):
         syl = item[0] if item else ""
         tok = tokens[idx]
-        if tok["is_han"] and idx in forced:
-            fs = forced[idx]
+        if tok["is_han"] and tok["start"] in forced:
+            fs = forced[tok["start"]]
             if v_to_u:
                 fs = fs.replace("v", "ü")
             out_parts.append("{%s}" % fs)
