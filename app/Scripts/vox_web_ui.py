@@ -2184,6 +2184,7 @@ HTML_CONTENT = r"""
           <span class="char-count" id="charCount">0 字符</span>
           <button class="mode-btn" id="g2pBtn" onclick="g2pConvertText()" style="padding:4px 10px;font-size:11px;cursor:pointer;" title="将输入文本转换为 {ni3}{hao3} 音素串（需已下载 G2PW 离线模型）">🔤 转音素</button>
           <button class="mode-btn" id="txtUploadBtn" onclick="document.getElementById('txtFileInput').click()" style="padding:4px 10px;font-size:11px;cursor:pointer;">📄 上传TXT</button>
+          <button class="mode-btn" id="corpusEditBtn" onclick="openCorpusEditor()" style="padding:4px 10px;font-size:11px;cursor:pointer;" title="查看 / 编辑用户多音字语料 overlay_user_override.txt，保存即生效（热加载，无需重启）">✏️ 编辑语料</button>
           <input type="file" id="txtFileInput" accept=".txt,text/plain" style="display:none">
         </div>
       </div>
@@ -2318,6 +2319,23 @@ HTML_CONTENT = r"""
     <div class="modal-actions">
       <button class="btn-secondary" onclick="closeSettings()">取消</button>
       <button class="btn-primary" style="flex:0 0 auto; padding:0 22px; height:40px" onclick="savePaths()">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- 多音字语料编辑弹窗 -->
+<div class="modal-mask" id="corpusModal">
+  <div class="modal" style="width:720px;max-width:92vw">
+    <div class="modal-head">
+      <h3>编辑多音字语料</h3>
+      <button class="btn-secondary" style="height:32px;padding:0 12px" onclick="closeCorpusEditor()">✕</button>
+    </div>
+    <div class="param-desc" id="corpusPathHint" style="margin-bottom:8px">加载中...</div>
+    <textarea id="corpusContent" spellcheck="false" style="width:100%;height:340px;font-family:var(--font-mono);font-size:12px;line-height:1.6;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:10px;padding:10px;box-sizing:border-box;resize:vertical;white-space:pre" placeholder="（文件为空或不存在，保存时将新建）"></textarea>
+    <div class="param-desc" style="margin-top:8px">每行一条规则，格式：<code>上下文词 · 目标字: pypinyin默认=X → 强制=Y</code>（TONE3 数字声调，ü 写作 v，5 为轻声；以 # 开头的行为注释）。修改后点击「保存语料」即可，保存即生效（g2p 检测到文件变化自动热加载，无需重启）。</div>
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeCorpusEditor()">取消</button>
+      <button class="btn-primary" style="flex:0 0 auto; padding:0 22px; height:40px" onclick="saveCorpus()">保存语料</button>
     </div>
   </div>
 </div>
@@ -2493,21 +2511,35 @@ const EXAMPLES = [
 ];
 
 async function init() {
-  initTheme();
-  initConsole();
-  loadCustomVoices();
-  renderVoices();
-  renderExamples();
-  loadHistory();
-  bindSliders();
-  bindTextArea();
-  bindRefUpload();
-  bindModelStatus();
-  bindAudioPlayer();
-  loadPaths();
+  // 逐步骤隔离执行：任一步失败不阻断后续绑定，避免「部分按钮无反应」
+  const steps = [
+    ['initTheme', initTheme],
+    ['initConsole', initConsole],
+    ['loadCustomVoices', loadCustomVoices],
+    ['renderVoices', renderVoices],
+    ['renderExamples', renderExamples],
+    ['loadHistory', loadHistory],
+    ['bindSliders', bindSliders],
+    ['bindTextArea', bindTextArea],
+    ['bindRefUpload', bindRefUpload],
+    ['bindModelStatus', bindModelStatus],
+    ['bindAudioPlayer', bindAudioPlayer],
+    ['loadPaths', loadPaths],
+  ];
+  for (const [name, fn] of steps) {
+    try {
+      await fn();
+    } catch (e) {
+      console.warn('[init] 步骤失败(已隔离): ' + name, e);
+    }
+  }
   // 默认预设填入音色描述
-  const defBtn = document.querySelector('.voice-btn[data-id="default"]');
-  if (defBtn) selectVoice('default', defBtn);
+  try {
+    const defBtn = document.querySelector('.voice-btn[data-id="default"]');
+    if (defBtn) selectVoice('default', defBtn);
+  } catch (e) {
+    console.warn('[init] 默认音色选择失败: ', e);
+  }
   // 预热模型
   fetch('/api/ping').catch(() => {});
 }
@@ -3299,7 +3331,59 @@ function showToast(msg, type = '') {
   toastTimer = setTimeout(() => t.classList.remove('visible'), 3000);
 }
 
-init();
+// ── 多音字语料编辑（overlay_user_override.txt）──
+async function openCorpusEditor() {
+  const mask = document.getElementById('corpusModal');
+  const hint = document.getElementById('corpusPathHint');
+  const box = document.getElementById('corpusContent');
+  mask.style.display = 'flex';
+  hint.textContent = '加载中...';
+  box.value = '';
+  try {
+    const r = await fetch('/api/corpus');
+    const d = await r.json();
+    hint.textContent = d.exists
+      ? '文件：' + d.path + '（保存即生效，无需重启）'
+      : '用户语料文件不存在，保存时将新建：' + (d.path || '');
+    box.value = d.content || '';
+  } catch (e) {
+    hint.textContent = '读取失败: ' + (e.message || e);
+  }
+}
+function closeCorpusEditor() {
+  document.getElementById('corpusModal').style.display = 'none';
+}
+async function saveCorpus() {
+  const btn = document.querySelector('#corpusModal .btn-primary');
+  const content = document.getElementById('corpusContent').value;
+  btn.disabled = true;
+  btn.textContent = '保存中...';
+  try {
+    const r = await fetch('/api/corpus', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content: content })
+    });
+    const d = await r.json();
+    if (d.ok) {
+      showToast(d.message || '已保存（保存即生效，无需重启）', 'success');
+      closeCorpusEditor();
+    } else {
+      showToast(d.error || '保存失败', 'error');
+    }
+  } catch (e) {
+    showToast('保存失败: ' + (e.message || e), 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '保存语料';
+  }
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', init);
+} else {
+  init();
+}
 </script>
 </body>
 </html>
@@ -3314,7 +3398,11 @@ if HAS_WEB:
 
     @app.get("/")
     async def index():
-        return HTMLResponse(content=HTML_CONTENT.replace("{VERSION}", VERSION), media_type="text/html")
+        return HTMLResponse(
+            content=HTML_CONTENT.replace("{VERSION}", VERSION),
+            media_type="text/html",
+            headers={"Cache-Control": "no-store", "Pragma": "no-cache"},
+        )
 
     @app.get("/VoxCPM_App.ico")
     async def serve_icon():
@@ -3675,6 +3763,37 @@ if HAS_WEB:
             raise HTTPException(503, str(e))
         except Exception as e:
             raise HTTPException(500, f"G2P 转换失败: {e}")
+
+    def _user_corpus_path() -> Path:
+        """用户多音字语料文件 overlay_user_override.txt（与 g2p_phoneme 热加载路径一致）"""
+        return Path(__file__).resolve().parent / "training" / "polyphone_corpus" / "data" / "overlay_user_override.txt"
+
+    @app.get("/api/corpus")
+    async def get_corpus():
+        """读取用户多音字语料文件内容（只读，不修改）"""
+        p = _user_corpus_path()
+        exists = p.exists()
+        content = p.read_text(encoding="utf-8") if exists else ""
+        return JSONResponse({
+            "path": str(p),
+            "exists": exists,
+            "content": content,
+            "mtime": p.stat().st_mtime if exists else None,
+        })
+
+    @app.post("/api/corpus")
+    async def save_corpus(payload: dict):
+        """写回用户多音字语料文件（UTF-8）。保存即生效：g2p_phoneme 检测到 mtime 变化自动热加载，无需重启。"""
+        content = (payload or {}).get("content", "")
+        p = _user_corpus_path()
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(content, encoding="utf-8")
+        return JSONResponse({
+            "ok": True,
+            "path": str(p),
+            "mtime": p.stat().st_mtime,
+            "message": "已保存（保存即生效：g2p 检测到文件变化自动热加载，无需重启）",
+        })
 
     @app.get("/api/audio/{filename}")
     async def serve_audio(filename: str):
