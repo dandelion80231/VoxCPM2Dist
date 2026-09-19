@@ -7,6 +7,6 @@ set "VOXCPM_OUTPUT_DIR=%USERPROFILE%\Desktop"
 set PYTHONPATH=
 if not exist cache mkdir cache
 
-start "" "%~dp0python_cuda\python.exe" "%~dp0Scripts\vox_web_ui.py" --port 18978 --host 127.0.0.1
+start "" "%~dp0python_cuda\python.exe" "%~dp0Scripts\vox_web_ui.py" --port 19001 --host 127.0.0.1
 
 exit

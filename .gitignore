@@ -41,3 +41,11 @@ app/Scripts/voxcpm_web_config.json
 
 # ===== 离线 G2P 模型（pypinyin-g2pW，体积大不入库）=====
 models/
+
+# ===== 本地诊断/测试运行产物（wav/日志/临时脚本，不入版本库）=====
+temp/
+app/test_out/
+app/Scripts/verify_baseline/
+app/Scripts/verify_lora/
+app/Scripts/verify_xing_baseline/
+app/Scripts/verify_xing_lora/

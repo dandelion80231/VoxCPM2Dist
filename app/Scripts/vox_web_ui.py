@@ -1303,19 +1303,27 @@ HTML_CONTENT = r"""
     margin-left: auto;
     margin-right: 4px;
   }
+  .brand-stack {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    flex-shrink: 0;
+    margin-right: 2px;
+  }
   .app-icon {
-    width: 36px; height: 36px;
-    border-radius: 9px;
+    width: 26px; height: 26px;
+    border-radius: 7px;
     object-fit: contain;
     flex-shrink: 0;
   }
   .console-toggle {
-    width: 30px; height: 30px;
-    border-radius: 8px;
+    width: 24px; height: 24px;
+    border-radius: 7px;
     border: 1px solid var(--border);
     background: var(--surface2);
     color: var(--text);
-    font-size: 14px;
+    font-size: 12px;
     display: flex; align-items: center; justify-content: center;
     cursor: pointer;
     flex-shrink: 0;
@@ -1462,8 +1470,9 @@ HTML_CONTENT = r"""
     transition: transform 0.15s, border-color 0.15s, box-shadow 0.15s;
   }
   .param-card:hover { border-color: rgba(108,142,255,0.4); box-shadow: var(--shadow-md); transform: translateY(-2px); }
-  .param-header { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; min-height: 36px; }
+  .param-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; min-height: 36px; }
   .param-title { display: flex; align-items: baseline; gap: 10px; flex: 1; min-width: 0; }
+  .param-title .param-unit { align-self: baseline; padding-bottom: 0; margin-left: 0; font-size: 13px; color: var(--text2); }
   .param-label {
     font-size: 15px;
     font-weight: 700;
@@ -1478,7 +1487,7 @@ HTML_CONTENT = r"""
     color: var(--accent);
     line-height: 1;
   }
-  .param-desc { font-size: 12px; color: var(--text2); white-space: nowrap; text-align: right; }
+  .param-desc { font-size: 12px; color: var(--text2); white-space: normal; text-align: left; line-height: 1.5; overflow-wrap: break-word; word-break: break-word; }
   .param-desc-wrap { display: flex; flex-direction: column; align-items: flex-end; text-align: right; gap: 1px; }
   .param-desc-line { font-size: 12px; color: var(--text2); line-height: 1.35; }
   .param-unit {
@@ -1486,10 +1495,19 @@ HTML_CONTENT = r"""
     align-self: flex-end; padding-bottom: 3px; margin-left: 4px;
     white-space: nowrap;
   }
-  .param-desc-right { display: flex; align-items: flex-end; }
+  .param-slider-row { display: flex; align-items: center; gap: 10px; }
+  .param-slider-row input[type="range"] { flex: 1; }
+  .param-slider-row .param-unit { align-self: center; padding-bottom: 0; margin-left: 0; }
+  .param-desc-right { display: flex; flex-direction: column; align-items: flex-end; flex-shrink: 0; justify-content: flex-end; gap: 6px; margin-top: -4px; }
+
+  /* ── 高级参数卡片右上角开关（数字归一化 / 音素输入，垂直两行，紧凑） ── */
+  .param-toggles {
+    display: flex; flex-direction: column; align-items: flex-end;
+    gap: 4px; flex-shrink: 0; padding: 0;
+  }
   .param-toggle {
     display: flex; align-items: center; gap: 6px;
-    padding: 4px 10px; border-radius: 20px;
+    padding: 4px 8px; border-radius: 20px;
     background: var(--surface2); border: 1px solid var(--border);
     font-size: 12px; color: var(--text2); cursor: pointer;
     transition: all 0.15s; user-select: none;
@@ -2041,8 +2059,10 @@ HTML_CONTENT = r"""
 <body>
 
 <header>
-  <img src="/VoxCPM_App.ico" class="app-icon" alt="VoxCPM2">
-  <button class="console-toggle" id="consoleToggle" onclick="toggleConsole()" title="显示/隐藏命令行窗口">🖥️</button>
+  <div class="brand-stack">
+    <img src="/VoxCPM_App.ico" class="app-icon" alt="VoxCPM2">
+    <button class="console-toggle" id="consoleToggle" onclick="toggleConsole()" title="显示/隐藏命令行窗口">🖥️</button>
+  </div>
   <div class="header-left">
     <div class="logo">Vox<span>CPM2</span></div>
     <div style="font-size:13px;color:var(--text2);">语音合成工具 {VERSION}</div>
@@ -2172,7 +2192,7 @@ HTML_CONTENT = r"""
             <div class="param-value" id="chunkVal">180</div>
             <span class="param-unit">分段长度（字）</span>
           </div>
-          <div class="param-desc-right">
+          <div class="param-toggles">
             <label class="param-toggle" title="数字归一化">
               <input type="checkbox" id="normalizeToggle" checked>
               <span>数字归一化</span>
@@ -2183,7 +2203,9 @@ HTML_CONTENT = r"""
             </label>
           </div>
         </div>
-        <input type="range" id="chunkSlider" min="60" max="400" step="20" value="180">
+        <div class="param-slider-row">
+          <input type="range" id="chunkSlider" min="60" max="400" step="20" value="180">
+        </div>
       </div>
     </div>
 
@@ -2618,9 +2640,9 @@ function renderExamples() {
     chip.textContent = label;
     chip.title = desc;
     chip.onclick = () => {
-      document.getElementById('controlText').value = desc;
       selectVoice('default', document.querySelector('.voice-btn[data-id="default"]'));
       setMode('voice_design', document.querySelector('.mode-btn[data-mode="voice_design"]'));
+      document.getElementById('controlText').value = desc;
     };
     box.appendChild(chip);
   }
