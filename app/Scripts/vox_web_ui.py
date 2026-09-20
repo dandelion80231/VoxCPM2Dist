@@ -2867,16 +2867,19 @@ async function init() {
 function renderVoices() {
   const grid = document.getElementById('voiceGrid');
   grid.innerHTML = '';
-  const all = [...Object.entries(VOICE_LIST), ...CUSTOM_VOICES.map(v => [v.id, v])];
+  // 锁定预设替换了哪些内置预设
+  const lockedReplacements = CUSTOM_VOICES.filter(v => v.replacesPreset).map(v => v.replacesPreset);
+  // 合并：内置预设（被替换的隐藏）+ 自定义/锁定预设
+  const all = [...Object.entries(VOICE_LIST).filter(([id]) => !lockedReplacements.includes(id)), ...CUSTOM_VOICES.map(v => [v.id, v])];
   for (const [id, v] of all) {
     const isCustom = typeof id === 'string' && id.startsWith('custom_');
     const isLocked = typeof id === 'string' && id.startsWith('locked_');
     const btn = document.createElement('button');
     btn.className = 'voice-btn' + (id === selectedVoice ? ' active' : '') + (isCustom ? ' custom-preset' : '') + (isLocked ? ' locked-preset' : '');
     btn.dataset.id = id;
+    btn.style.position = 'relative';
     btn.onclick = () => selectVoice(id, btn);
     if (isLocked) {
-      // 锁定音色：右上角🔒 + 填充色背景
       btn.innerHTML = `<div class="voice-icon">${v.icon || '🔒'}</div>
       <div style="flex:1;min-width:0">
         <div class="voice-name">${esc(v.name)} <span style="font-size:9px;vertical-align:top;">🔒</span></div>
@@ -2891,6 +2894,15 @@ function renderVoices() {
         <div class="voice-name">${v.name}${isCustom ? ' <span style="font-size:10px;color:var(--text2)">★</span>' : ''}</div>
         <div class="voice-desc">${v.desc}</div>
       </div>`;
+    }
+    // 自定义/锁定预设右上角 × 删除按钮
+    if (isCustom || isLocked) {
+      const delX = document.createElement('span');
+      delX.textContent = '×';
+      delX.style.cssText = 'position:absolute;top:2px;right:4px;font-size:12px;color:var(--text2);cursor:pointer;line-height:1;padding:1px 3px;';
+      delX.title = '删除此预设';
+      delX.onclick = (e) => { e.stopPropagation(); deleteVoiceById(id); };
+      btn.appendChild(delX);
     }
     // 拖拽目标：档案 chip 拖到预设上 → 替换为锁定音色
     btn.addEventListener('dragover', e => {
@@ -2909,23 +2921,31 @@ function renderVoices() {
       btn.style.borderWidth = '';
       const profileName = e.dataTransfer.getData('text/plain');
       if (!profileName) return;
-      // 将档案绑定为锁定预设
       const lockedId = 'locked_' + Date.now();
       const lockedVoice = {
         id: lockedId,
-        name: profileName + ' 🔒',
-        desc: '(固定克隆) ' + (v.desc || '').slice(0, 20),
+        name: profileName,
+        desc: '(固定克隆)',
         icon: '🔒',
-        profileName: profileName,  // 关联档案名
+        profileName: profileName,
+        replacesPreset: null,  // 不替换任何内置预设，而是作为新预设追加
       };
-      // 替换当前预设位置
+      // 替换当前预设位
       const idx = CUSTOM_VOICES.findIndex(cv => cv.id === id);
-      if (idx >= 0) CUSTOM_VOICES[idx] = lockedVoice;
-      else CUSTOM_VOICES.push(lockedVoice);
+      if (idx >= 0) {
+        // 替换已有自定义/锁定预设
+        CUSTOM_VOICES[idx] = { ...lockedVoice, replacesPreset: CUSTOM_VOICES[idx].replacesPreset };
+      } else if (VOICE_LIST[id]) {
+        // 替换内置预设：标记 hides
+        lockedVoice.replacesPreset = id;
+        CUSTOM_VOICES.push(lockedVoice);
+      } else {
+        CUSTOM_VOICES.push(lockedVoice);
+      }
       try { localStorage.setItem('voxcpm_custom_voices', JSON.stringify(CUSTOM_VOICES)); } catch {}
       renderVoices();
-      selectVoice(lockedId, document.querySelector('.voice-btn[data-id="' + lockedId + '"]'));
-      // 应用档案设置
+      const newBtn = document.querySelector('.voice-btn[data-id="' + lockedId + '"]');
+      if (newBtn) selectVoice(lockedId, newBtn);
       applyProfile(profileName);
       showToast('已将档案「' + profileName + '」锁定到预设位', 'success');
     });
@@ -3408,19 +3428,30 @@ function saveCustomVoice() {
   showToast('已保存自定义音色：' + name, 'success');
 }
 
-function deleteCustomPreset() {
-  // 删除当前选中的自定义/锁定预设
-  const idx = CUSTOM_VOICES.findIndex(v => v.id === selectedVoice);
-  if (idx < 0) { showToast('请先选中一个自定义预设再删除', 'info'); return; }
+function deleteVoiceById(id) {
+  const idx = CUSTOM_VOICES.findIndex(v => v.id === id);
+  if (idx < 0) { showToast('预设不存在', 'error'); return; }
   const removed = CUSTOM_VOICES[idx];
   if (!confirm('确认删除预设「' + removed.name + '」？')) return;
   CUSTOM_VOICES.splice(idx, 1);
   try { localStorage.setItem('voxcpm_custom_voices', JSON.stringify(CUSTOM_VOICES)); } catch {}
-  selectedVoice = 'default';
+  if (selectedVoice === id) {
+    selectedVoice = 'default';
+  }
   renderVoices();
-  const btn = document.querySelector('.voice-btn[data-id="default"]');
-  if (btn) selectVoice('default', btn);
+  const btn = document.querySelector('.voice-btn[data-id="' + selectedVoice + '"]');
+  if (btn) btn.classList.add('active');
   showToast('已删除预设「' + removed.name + '」', 'success');
+}
+
+function deleteCustomPreset() {
+  // 删除当前选中的自定义/锁定预设；若未选中则删除最后一个自定义预设
+  let idx = CUSTOM_VOICES.findIndex(v => v.id === selectedVoice);
+  if (idx < 0 && CUSTOM_VOICES.length > 0) {
+    idx = CUSTOM_VOICES.length - 1;  // 兖底：删最后一个
+  }
+  if (idx < 0) { showToast('没有可删除的自定义预设', 'info'); return; }
+  deleteVoiceById(CUSTOM_VOICES[idx].id);
 }
 
 // ── 顶部环境栏（横向）──
