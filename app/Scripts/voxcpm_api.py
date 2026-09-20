@@ -22,6 +22,7 @@ REST 映射（由 vox_web_ui.py 路由调用）：
   POST /api/profiles/import   -> import_profiles_text(content)
   POST /api/profiles/export   -> export_profiles_to_file()
 """
+
 import json
 import os
 import re
@@ -45,7 +46,13 @@ def user_corpus_path() -> Path:
     env = os.environ.get("VOXCPM_OVERLAY_USER_PATH", "").strip()
     if env:
         return Path(env)
-    return SCRIPT_DIR / "training" / "polyphone_corpus" / "data" / "overlay_user_override.txt"
+    return (
+        SCRIPT_DIR
+        / "training"
+        / "polyphone_corpus"
+        / "data"
+        / "overlay_user_override.txt"
+    )
 
 
 def read_corpus() -> dict:
@@ -84,27 +91,36 @@ def norm_rules_path() -> Path:
     """用户归一化规则文件（与 text_norm_cn._USER_RULES_FILE 同一路径口径）。"""
     try:
         from text_norm_cn import _USER_RULES_FILE
+
         return Path(_USER_RULES_FILE)
     except Exception:
         return SCRIPT_DIR / "num_norm_extra.txt"
 
 
 def read_norm_rules() -> dict:
-    """读取用户归一化规则（只读，不修改）。返回 path/exists/content/rule_count。"""
+    """读取用户归一化规则（只读，不修改）。返回 path/exists/content/rule_count/builtin。
+
+    builtin：内置归一化规则只读速览（多行文本），供 Web UI 展示“已有哪些规则”，
+    便于用户判断在 num_norm_extra.txt 里要补什么。取不到时返回空字符串（不报错）。"""
     p = norm_rules_path()
     exists = p.exists()
     rule_count = 0
+    builtin = ""
     try:
-        from text_norm_cn import user_rule_count
+        from text_norm_cn import builtin_rule_summary, user_rule_count
+
         rule_count = user_rule_count()
+        builtin = builtin_rule_summary()
     except Exception:
-        # text_norm_cn 不可用（极端缺路径场景）：规则条数记 0，不影响规则文件的读写本身
+        # text_norm_cn 不可用（极端缺路径场景）：规则条数记 0、内置速览置空，不影响规则文件的读写本身
         rule_count = 0
+        builtin = ""
     return {
         "path": str(p),
         "exists": exists,
         "content": p.read_text(encoding="utf-8") if exists else "",
         "rule_count": rule_count,
+        "builtin": builtin,
     }
 
 
@@ -151,7 +167,14 @@ def validate_corpus_text(text: str) -> dict:
 PROFILE_FILE = SCRIPT_DIR / "voxcpm_profiles.json"
 _profile_lock = threading.Lock()
 # 允许持久化的 profile 字段（导入时清洗，避免夹带无关字段）
-_PROFILE_FIELDS = ("voice", "control_text", "mode", "reference_wav_path", "prompt_text", "created_at")
+_PROFILE_FIELDS = (
+    "voice",
+    "control_text",
+    "mode",
+    "reference_wav_path",
+    "prompt_text",
+    "created_at",
+)
 
 
 def _load_profiles() -> list:
@@ -167,7 +190,9 @@ def _load_profiles() -> list:
 
 def _save_profiles(profiles: list) -> None:
     with _profile_lock:
-        PROFILE_FILE.write_text(json.dumps(profiles, ensure_ascii=False, indent=2), encoding="utf-8")
+        PROFILE_FILE.write_text(
+            json.dumps(profiles, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
 
 
 def list_profiles() -> list:

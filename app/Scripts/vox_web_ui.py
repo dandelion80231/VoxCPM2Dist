@@ -1,4 +1,4 @@
-﻿"""
+"""
 VoxCPM2 Web UI — 一体化界面（版本号见 app/version.txt）
 ================================
 本地 Web 服务器 + 浏览器 UI，无需安装任何依赖（除了 voxcpm 自带的）。
@@ -19,7 +19,6 @@ import queue
 import re
 import shutil
 import sys
-import tempfile
 
 # 内嵌版 Python(python_cuda)不会把脚本所在目录加入 sys.path，
 # 手动加入以便导入同级模块（text_norm_cn 等），否则双击 .bat 会因
@@ -28,46 +27,50 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 # 允许从 app/ 根导入 download_model（与 Scripts/ 同级的下载脚本）
 _APP_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _APP_ROOT not in sys.path:
-    sys.path.insert(0, _APP_ROOT)
+  sys.path.insert(0, _APP_ROOT)
 try:
-    import download_model as _dlmod
-    HAS_DL = True
+  import download_model as _dlmod
+
+  HAS_DL = True
 except Exception as _e_dl:  # 极端情况（如缺 urllib），仍保证 UI 可启动
-    _dlmod = None
-    HAS_DL = False
-    print("[VoxCPM2] 模型下载模块不可用: %s" % _e_dl)
+  _dlmod = None
+  HAS_DL = False
+  print("[VoxCPM2] 模型下载模块不可用: %s" % _e_dl)
 import threading
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Optional
 
 import numpy as np
 
 # 公共后端函数层（Web UI 与 CLI 共用；含语料/profile 管理，模型目录解析见 commit2）
 try:
-    import voxcpm_api
-    HAS_API = True
+  import voxcpm_api
+
+  HAS_API = True
 except Exception as _e_api:
-    HAS_API = False
-    print("[VoxCPM2] 公共后端函数层不可用: %s" % _e_api)
+  HAS_API = False
+  print("[VoxCPM2] 公共后端函数层不可用: %s" % _e_api)
 
 # ── 依赖检查 ─────────────────────────────────────────────
 try:
-    import soundfile as sf
-    HAS_SF = True
+  import soundfile as sf
+
+  HAS_SF = True
 except ImportError:
-    HAS_SF = False
+  HAS_SF = False
 
 try:
-    import uvicorn
-    from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request
-    from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
-    import webbrowser
-    HAS_WEB = True
+  import webbrowser
+
+  import uvicorn
+  from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+  from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+
+  HAS_WEB = True
 except ImportError:
-    HAS_WEB = False
+  HAS_WEB = False
 
 # ── 引擎核心（内嵌，避免导入整个 v5 脚本的环境问题）─────────
 MODEL_ID = "openbmb/VoxCPM2"
@@ -76,29 +79,29 @@ executor = ThreadPoolExecutor(max_workers=2)
 
 # ── 音色预设 ─────────────────────────────────────────────
 VOICE_PRESETS = {
-    "sweet_girl": "25岁年轻温柔甜美女声，带一点播音腔，语速稍平缓",
-    "warm_woman": "年轻女性，温柔甜美，语速适中",
-    "gentleman": "中年男性，温润儒雅，播音腔，语速平缓",
-    "energetic_broadcaster": "热情洋溢的中年男性播音员，声音低沉富有磁性",
-    "elder_woman": "老年女性，声音温和慈祥，语速缓慢",
-    "cool_guy": "年轻男性，声音低沉冷静，略带磁性",
-    "cheerful_girl": "年轻女性，活泼开朗，语速偏快",
-    "storyteller": "中年男性，深沉有磁性，适合讲故事，节奏平缓",
-    "calm_male": "年轻男性，声音沉稳，语速平缓，适合新闻播报",
-    "teacher": "中年女性，声音清晰有力，语速适中，适合教学讲解",
-    "default": "25岁年轻温柔甜美女声，带一点播音腔，语速稍平缓",
+  "sweet_girl": "25岁年轻温柔甜美女声，带一点播音腔，语速稍平缓",
+  "warm_woman": "年轻女性，温柔甜美，语速适中",
+  "gentleman": "中年男性，温润儒雅，播音腔，语速平缓",
+  "energetic_broadcaster": "热情洋溢的中年男性播音员，声音低沉富有磁性",
+  "elder_woman": "老年女性，声音温和慈祥，语速缓慢",
+  "cool_guy": "年轻男性，声音低沉冷静，略带磁性",
+  "cheerful_girl": "年轻女性，活泼开朗，语速偏快",
+  "storyteller": "中年男性，深沉有磁性，适合讲故事，节奏平缓",
+  "calm_male": "年轻男性，声音沉稳，语速平缓，适合新闻播报",
+  "teacher": "中年女性，声音清晰有力，语速适中，适合教学讲解",
+  "default": "25岁年轻温柔甜美女声，带一点播音腔，语速稍平缓",
 }
 
 # 示例 / 方言音色芯片（点击填入音色描述，便于新手）
 EXAMPLE_VOICES = [
-    ("温柔忧郁女孩", "温柔忧郁的女孩，声音轻柔带一丝哀伤"),
-    ("深宫太后", "威严的古代太后，庄重缓慢，自带威压"),
-    ("暴躁驾校教练", "暴躁的驾校教练，语速快、语气冲、爱吐槽"),
-    ("阳光少年", "阳光开朗的少年，活力十足，语速轻快"),
-    ("新闻男主播", "沉稳的新闻男主播，字正腔圆，语速平缓"),
-    ("睡前故事姐姐", "温柔的睡前故事姐姐，舒缓轻柔，令人放松"),
-    ("粤语少女", "自然亲切的粤语年轻女性"),
-    ("河南大叔", "朴实憨厚的河南方言大叔"),
+  ("温柔忧郁女孩", "温柔忧郁的女孩，声音轻柔带一丝哀伤"),
+  ("深宫太后", "威严的古代太后，庄重缓慢，自带威压"),
+  ("暴躁驾校教练", "暴躁的驾校教练，语速快、语气冲、爱吐槽"),
+  ("阳光少年", "阳光开朗的少年，活力十足，语速轻快"),
+  ("新闻男主播", "沉稳的新闻男主播，字正腔圆，语速平缓"),
+  ("睡前故事姐姐", "温柔的睡前故事姐姐，舒缓轻柔，令人放松"),
+  ("粤语少女", "自然亲切的粤语年轻女性"),
+  ("河南大叔", "朴实憨厚的河南方言大叔"),
 ]
 
 # ── 状态 ─────────────────────────────────────────────────
@@ -107,8 +110,8 @@ _cached_model = None
 _model_loading = False
 _model_loaded = False
 _denoiser_available = False
-_model_error: Optional[str] = None
-_device_pref: Optional[str] = None  # None=自动检测; 'cuda'/'cpu'=用户指定
+_model_error: str | None = None
+_device_pref: str | None = None  # None=自动检测; 'cuda'/'cpu'=用户指定
 CONFIG_PATH = Path(__file__).resolve().parent / "voxcpm_web_config.json"
 
 # 全局合成速度统计（用于更准确地预估剩余时间）
@@ -120,38 +123,45 @@ _output_dir = Path(os.environ.get("VOXCPM_OUTPUT_DIR", str(Path.home() / "Deskto
 # 留空 = 不挂载 LoRA，使用原版模型；设置后下次合成将重载模型并挂载 LoRA。
 _lora_weights_path: str = ""
 # LoRA 实际加载结果（模型加载后填充），供状态面板如实显示，避免「假成功」。
-_lora_load_info: tuple = None   # (loaded_count, skipped_count) 或 None（尚未加载/未配置）
-_lora_resolve_error: str = ""   # resolve_lora 失败原因（路径错/配置坏等），空=未失败
+_lora_load_info: tuple = (
+  None  # (loaded_count, skipped_count) 或 None（尚未加载/未配置）
+)
+_lora_resolve_error: str = ""  # resolve_lora 失败原因（路径错/配置坏等），空=未失败
 
 
 # 启动时从配置文件恢复路径
 def _load_config():
-    global _output_dir, _lora_weights_path
-    try:
-        if CONFIG_PATH.exists():
-            with open(CONFIG_PATH, "r", encoding="utf-8") as f:
-                cfg = json.load(f)
-            if cfg.get("output_dir"):
-                _output_dir = Path(cfg["output_dir"])
-            if cfg.get("model_dir"):
-                os.environ["VOXCPM_MODEL_DIR"] = cfg["model_dir"]
-            if cfg.get("lora_weights_path"):
-                _lora_weights_path = cfg["lora_weights_path"]
-    except Exception:
-        pass
+  global _output_dir, _lora_weights_path
+  try:
+    if CONFIG_PATH.exists():
+      with open(CONFIG_PATH, encoding="utf-8") as f:
+        cfg = json.load(f)
+      if cfg.get("output_dir"):
+        _output_dir = Path(cfg["output_dir"])
+      if cfg.get("model_dir"):
+        os.environ["VOXCPM_MODEL_DIR"] = cfg["model_dir"]
+      if cfg.get("lora_weights_path"):
+        _lora_weights_path = cfg["lora_weights_path"]
+  except Exception:
+    pass
 
 
 def _save_config():
-    try:
-        model_dir = os.environ.get("VOXCPM_MODEL_DIR", "")
-        with open(CONFIG_PATH, "w", encoding="utf-8") as f:
-            json.dump({
-                "output_dir": str(_output_dir),
-                "model_dir": model_dir,
-                "lora_weights_path": _lora_weights_path,
-            }, f, ensure_ascii=False, indent=2)
-    except Exception as e:
-        print(f"[VoxCPM2] 配置保存失败: {e}")
+  try:
+    model_dir = os.environ.get("VOXCPM_MODEL_DIR", "")
+    with open(CONFIG_PATH, "w", encoding="utf-8") as f:
+      json.dump(
+        {
+          "output_dir": str(_output_dir),
+          "model_dir": model_dir,
+          "lora_weights_path": _lora_weights_path,
+        },
+        f,
+        ensure_ascii=False,
+        indent=2,
+      )
+  except Exception as e:
+    print(f"[VoxCPM2] 配置保存失败: {e}")
 
 
 # ── 控制台显示/隐藏（Windows）────────────────────────────────
@@ -159,154 +169,171 @@ def _save_config():
 # 因此会先尝试隐藏；若仍可见则回退到最小化，至少把窗口移出屏幕。
 _console_visible: bool = True
 
-def _get_console_hwnd() -> Optional[int]:
-    if sys.platform != "win32":
-        return None
-    try:
-        import ctypes
-        return ctypes.windll.kernel32.GetConsoleWindow()
-    except Exception:
-        return None
+
+def _get_console_hwnd() -> int | None:
+  if sys.platform != "win32":
+    return None
+  try:
+    import ctypes
+
+    return ctypes.windll.kernel32.GetConsoleWindow()
+  except Exception:
+    return None
+
 
 def _is_console_visible() -> bool:
-    """返回命令行窗口的真实可见状态（最小化也视为不可见）。"""
-    if sys.platform != "win32":
-        return False
-    try:
-        import ctypes
-        hwnd = _get_console_hwnd()
-        if not hwnd:
-            return False
-        visible = ctypes.windll.user32.IsWindowVisible(hwnd)
-        minimized = ctypes.windll.user32.IsIconic(hwnd)
-        return bool(visible) and not bool(minimized)
-    except Exception:
-        return False
+  """返回命令行窗口的真实可见状态（最小化也视为不可见）。"""
+  if sys.platform != "win32":
+    return False
+  try:
+    import ctypes
+
+    hwnd = _get_console_hwnd()
+    if not hwnd:
+      return False
+    visible = ctypes.windll.user32.IsWindowVisible(hwnd)
+    minimized = ctypes.windll.user32.IsIconic(hwnd)
+    return bool(visible) and not bool(minimized)
+  except Exception:
+    return False
+
 
 def _set_console_visible(visible: bool) -> bool:
-    global _console_visible
-    if sys.platform != "win32":
-        return False
-    try:
-        import ctypes
-        import threading
-        hwnd = _get_console_hwnd()
-        if not hwnd:
-            return False
-        # 在主线程里用同步 ShowWindow 更可靠；后台线程用 ShowWindowAsync
-        if threading.current_thread() is threading.main_thread():
-            show = ctypes.windll.user32.ShowWindow
-        else:
-            show = ctypes.windll.user32.ShowWindowAsync
-        SW_HIDE = 0
-        SW_SHOW = 5
-        SW_MINIMIZE = 6
-        SW_RESTORE = 9
-        if visible:
-            show(hwnd, SW_RESTORE)
-            show(hwnd, SW_SHOW)
-        else:
-            show(hwnd, SW_HIDE)
-            # 部分终端（Windows Terminal）会忽略 SW_HIDE，此时回退为最小化
-            if threading.current_thread() is threading.main_thread():
-                if ctypes.windll.user32.IsWindowVisible(hwnd):
-                    show(hwnd, SW_MINIMIZE)
-            else:
-                # 后台线程用异步 API，需等消息队列处理后再检查
-                time.sleep(0.15)
-                if ctypes.windll.user32.IsWindowVisible(hwnd):
-                    show(hwnd, SW_MINIMIZE)
-        _console_visible = _is_console_visible()
-        return True
-    except Exception as e:
-        print(f"[VoxCPM2] 控制台显示/隐藏失败: {e}")
-        return False
+  global _console_visible
+  if sys.platform != "win32":
+    return False
+  try:
+    import ctypes
+    import threading
+
+    hwnd = _get_console_hwnd()
+    if not hwnd:
+      return False
+    # 在主线程里用同步 ShowWindow 更可靠；后台线程用 ShowWindowAsync
+    if threading.current_thread() is threading.main_thread():
+      show = ctypes.windll.user32.ShowWindow
+    else:
+      show = ctypes.windll.user32.ShowWindowAsync
+    SW_HIDE = 0
+    SW_SHOW = 5
+    SW_MINIMIZE = 6
+    SW_RESTORE = 9
+    if visible:
+      show(hwnd, SW_RESTORE)
+      show(hwnd, SW_SHOW)
+    else:
+      show(hwnd, SW_HIDE)
+      # 部分终端（Windows Terminal）会忽略 SW_HIDE，此时回退为最小化
+      if threading.current_thread() is threading.main_thread():
+        if ctypes.windll.user32.IsWindowVisible(hwnd):
+          show(hwnd, SW_MINIMIZE)
+      else:
+        # 后台线程用异步 API，需等消息队列处理后再检查
+        time.sleep(0.15)
+        if ctypes.windll.user32.IsWindowVisible(hwnd):
+          show(hwnd, SW_MINIMIZE)
+    _console_visible = _is_console_visible()
+    return True
+  except Exception as e:
+    print(f"[VoxCPM2] 控制台显示/隐藏失败: {e}")
+    return False
+
 
 def _toggle_console() -> bool:
-    # 以真实窗口状态为准，避免内部状态与实际窗口不同步
-    return _set_console_visible(not _is_console_visible())
+  # 以真实窗口状态为准，避免内部状态与实际窗口不同步
+  return _set_console_visible(not _is_console_visible())
+
 
 # ── 全局日志落盘 + 异常兜底 ──────────────────────────────
 # 让进程无论以何种方式启动（bat / 快捷方式 / 直接运行）、无论控制台是否隐藏，
 # 都保留最后的输出与崩溃堆栈，便于排查「点击下载后直接退出」这类无痕迹问题。
 def _install_diagnostics():
-    import traceback as _tb
-    try:
-        _log_dir = Path(__file__).resolve().parent.parent / "cache"
-        _log_dir.mkdir(parents=True, exist_ok=True)
-        _logf = open(_log_dir / "web_ui.log", "a", encoding="utf-8", buffering=1)
+  import traceback as _tb
 
-        class _Tee:
-            def __init__(self, *streams):
-                self._streams = streams
-            def write(self, s):
-                for o in self._streams:
-                    try:
-                        o.write(s)
-                    except Exception:
-                        pass
-            def flush(self):
-                for o in self._streams:
-                    try:
-                        o.flush()
-                    except Exception:
-                        pass
-            def isatty(self):
-                for o in self._streams:
-                    try:
-                        if o.isatty():
-                            return True
-                    except Exception:
-                        pass
-                return False
-            def fileno(self):
-                for o in self._streams:
-                    try:
-                        return o.fileno()
-                    except Exception:
-                        pass
-                raise OSError("no fileno")
+  try:
+    _log_dir = Path(__file__).resolve().parent.parent / "cache"
+    _log_dir.mkdir(parents=True, exist_ok=True)
+    _logf = open(_log_dir / "web_ui.log", "a", encoding="utf-8", buffering=1)
 
-        if sys.stdout is not None:
-            sys.stdout = _Tee(sys.stdout, _logf)
-        if sys.stderr is not None:
-            sys.stderr = _Tee(sys.stderr, _logf)
-    except Exception:
-        _logf = None
+    class _Tee:
+      def __init__(self, *streams):
+        self._streams = streams
 
-    def _write_crash(tag, et, ev, tb):
-        try:
-            with open(Path(__file__).resolve().parent.parent / "cache" / "web_ui_crash.log",
-                      "a", encoding="utf-8") as f:
-                f.write("\n=== %s @ %s ===\n" % (tag, time.strftime("%Y-%m-%d %H:%M:%S")))
-                _tb.print_exception(et, ev, tb, file=f)
-        except Exception:
+      def write(self, s):
+        for o in self._streams:
+          try:
+            o.write(s)
+          except Exception:
             pass
 
-    def _main_hook(et, ev, tb):
-        _write_crash("未捕获异常(主线程)", et, ev, tb)
-        _tb.print_exception(et, ev, tb)
-
-    try:
-        sys.excepthook = _main_hook
-    except Exception:
-        pass
-
-    def _thread_hook(args):
-        _write_crash("线程未捕获异常", args.exc_type, args.exc_value, args.exc_traceback)
-        # 若崩溃发生在下载线程，把前端状态标记为错误，避免一直转圈
-        try:
-            with _dl_lock:
-                if _dl_state.get("status") in ("scanning", "downloading"):
-                    _dl_state["status"] = "error"
-                    _dl_state["message"] = "下载线程异常: %s" % args.exc_value
-        except Exception:
+      def flush(self):
+        for o in self._streams:
+          try:
+            o.flush()
+          except Exception:
             pass
 
+      def isatty(self):
+        for o in self._streams:
+          try:
+            if o.isatty():
+              return True
+          except Exception:
+            pass
+        return False
+
+      def fileno(self):
+        for o in self._streams:
+          try:
+            return o.fileno()
+          except Exception:
+            pass
+        raise OSError("no fileno")
+
+    if sys.stdout is not None:
+      sys.stdout = _Tee(sys.stdout, _logf)
+    if sys.stderr is not None:
+      sys.stderr = _Tee(sys.stderr, _logf)
+  except Exception:
+    _logf = None
+
+  def _write_crash(tag, et, ev, tb):
     try:
-        threading.excepthook = _thread_hook
+      with open(
+        Path(__file__).resolve().parent.parent / "cache" / "web_ui_crash.log",
+        "a",
+        encoding="utf-8",
+      ) as f:
+        f.write("\n=== %s @ %s ===\n" % (tag, time.strftime("%Y-%m-%d %H:%M:%S")))
+        _tb.print_exception(et, ev, tb, file=f)
     except Exception:
-        pass
+      pass
+
+  def _main_hook(et, ev, tb):
+    _write_crash("未捕获异常(主线程)", et, ev, tb)
+    _tb.print_exception(et, ev, tb)
+
+  try:
+    sys.excepthook = _main_hook
+  except Exception:
+    pass
+
+  def _thread_hook(args):
+    _write_crash("线程未捕获异常", args.exc_type, args.exc_value, args.exc_traceback)
+    # 若崩溃发生在下载线程，把前端状态标记为错误，避免一直转圈
+    try:
+      with _dl_lock:
+        if _dl_state.get("status") in ("scanning", "downloading"):
+          _dl_state["status"] = "error"
+          _dl_state["message"] = "下载线程异常: %s" % args.exc_value
+    except Exception:
+      pass
+
+  try:
+    threading.excepthook = _thread_hook
+  except Exception:
+    pass
+
 
 _install_diagnostics()
 
@@ -329,314 +356,342 @@ TEMP_DIR.mkdir(parents=True, exist_ok=True)
 #  引擎核心
 # ══════════════════════════════════════════════════════════
 
+
 def _resolve_zipenhancer_dir():
-    """定位随包发布的 ZipEnhancer 降噪模型目录（离线，纯本地，不联网）。"""
-    import sys
-    anchors = []
+  """定位随包发布的 ZipEnhancer 降噪模型目录（离线，纯本地，不联网）。"""
+  import sys
+
+  anchors = []
+  try:
+    anchors.append(os.path.dirname(os.path.abspath(__file__)))
+  except Exception:
+    pass
+  if getattr(sys, "frozen", False):
+    # PyInstaller 冻结后，模型随 exe 目录或 _MEIPASS 解包
     try:
-        anchors.append(os.path.dirname(os.path.abspath(__file__)))
+      anchors.append(os.path.dirname(os.path.abspath(sys.executable)))
     except Exception:
-        pass
-    if getattr(sys, "frozen", False):
-        # PyInstaller 冻结后，模型随 exe 目录或 _MEIPASS 解包
-        try:
-            anchors.append(os.path.dirname(os.path.abspath(sys.executable)))
-        except Exception:
-            pass
-        if hasattr(sys, "_MEIPASS"):
-            anchors.append(sys._MEIPASS)
-    seen = set()
-    for a in anchors:
-        if a in seen:
-            continue
-        seen.add(a)
-        cand = os.path.join(a, "models", "zipenhancer")
-        if os.path.isdir(cand) and os.path.isfile(os.path.join(cand, "configuration.json")):
-            return cand
-        parent = os.path.dirname(a)
-        cand2 = os.path.join(parent, "models", "zipenhancer")
-        if os.path.isdir(cand2) and os.path.isfile(os.path.join(cand2, "configuration.json")):
-            return cand2
-    return None
+      pass
+    if hasattr(sys, "_MEIPASS"):
+      anchors.append(sys._MEIPASS)
+  seen = set()
+  for a in anchors:
+    if a in seen:
+      continue
+    seen.add(a)
+    cand = os.path.join(a, "models", "zipenhancer")
+    if os.path.isdir(cand) and os.path.isfile(os.path.join(cand, "configuration.json")):
+      return cand
+    parent = os.path.dirname(a)
+    cand2 = os.path.join(parent, "models", "zipenhancer")
+    if os.path.isdir(cand2) and os.path.isfile(
+      os.path.join(cand2, "configuration.json")
+    ):
+      return cand2
+  return None
 
 
 def resolve_model_dir(local_path: str = "") -> str:
-    """解析模型目录：优先环境变量 VOXCPM_MODELS_DIR（新标准）→ VOXCPM_MODEL_DIR（兼容旧键）
-    → 分发版自带本地权重 → 回退 MODEL_ID。"""
-    local_path = (local_path
-                  or os.environ.get("VOXCPM_MODELS_DIR", "")
-                  or os.environ.get("VOXCPM_MODEL_DIR", "")).strip()
-    base = Path(__file__).resolve().parent
+  """解析模型目录：优先环境变量 VOXCPM_MODELS_DIR（新标准）→ VOXCPM_MODEL_DIR（兼容旧键）
+  → 分发版自带本地权重 → 回退 MODEL_ID。"""
+  local_path = (
+    local_path
+    or os.environ.get("VOXCPM_MODELS_DIR", "")
+    or os.environ.get("VOXCPM_MODEL_DIR", "")
+  ).strip()
+  base = Path(__file__).resolve().parent
 
-    user_candidates = []
-    if local_path:
-        user_candidates.append(local_path)
-        user_candidates.append(os.path.join(local_path, "openbmb", "VoxCPM2"))
+  user_candidates = []
+  if local_path:
+    user_candidates.append(local_path)
+    user_candidates.append(os.path.join(local_path, "openbmb", "VoxCPM2"))
 
-    default_candidates = [
-        str(base.parent / "model" / "openbmb" / "VoxCPM2"),
-        str(base / "model" / "openbmb" / "VoxCPM2"),
-    ]
+  default_candidates = [
+    str(base.parent / "model" / "openbmb" / "VoxCPM2"),
+    str(base / "model" / "openbmb" / "VoxCPM2"),
+  ]
 
-    # 1. 优先使用包含 config.json 的有效路径
-    for p in user_candidates + default_candidates:
-        if os.path.isfile(os.path.join(p, "config.json")):
-            return p
+  # 1. 优先使用包含 config.json 的有效路径
+  for p in user_candidates + default_candidates:
+    if os.path.isfile(os.path.join(p, "config.json")):
+      return p
 
-    # 2. 没有有效 config.json 时回退到存在的目录（优先分发版默认路径，避免用户误选错误目录导致报错）
-    for p in default_candidates + user_candidates:
-        if os.path.isdir(p):
-            return p
+  # 2. 没有有效 config.json 时回退到存在的目录（优先分发版默认路径，避免用户误选错误目录导致报错）
+  for p in default_candidates + user_candidates:
+    if os.path.isdir(p):
+      return p
 
-    # 3. 全都不存在：回退到 HF repo id（离线环境会失败，但报错路径明确）
-    return MODEL_ID
+  # 3. 全都不存在：回退到 HF repo id（离线环境会失败，但报错路径明确）
+  return MODEL_ID
 
 
 def model_present() -> bool:
-    """判断必需的 VoxCPM2 主模型权重是否存在（无模型版安装包需用户自行下载）。"""
-    mp = resolve_model_dir()
-    if not os.path.isdir(mp):
-        return False
-    return (os.path.isfile(os.path.join(mp, "model.safetensors"))
-            and os.path.isfile(os.path.join(mp, "config.json")))
+  """判断必需的 VoxCPM2 主模型权重是否存在（无模型版安装包需用户自行下载）。"""
+  mp = resolve_model_dir()
+  if not os.path.isdir(mp):
+    return False
+  return os.path.isfile(os.path.join(mp, "model.safetensors")) and os.path.isfile(
+    os.path.join(mp, "config.json")
+  )
 
 
 # 关键模型文件的「合理最小体积」下限（字节），用于检出下载不完整/损坏。
 _MODEL_MIN_SIZE = {
-    "model.safetensors": 1_000_000_000,   # 真实约 4.6GB
-    "audiovae.pth": 100_000_000,          # 真实约 0.6GB
-    "tokenizer.json": 1_000_000,          # 真实数 MB~数十 MB
+  "model.safetensors": 1_000_000_000,  # 真实约 4.6GB
+  "audiovae.pth": 100_000_000,  # 真实约 0.6GB
+  "tokenizer.json": 1_000_000,  # 真实数 MB~数十 MB
 }
 
 
 def verify_model_files():
-    """逐项校验必需模型文件：是否存在、体积是否合理（可检出缺失/下载不全/损坏）。"""
-    mp = resolve_model_dir()
-    fnames = (_dlmod.FILES if (HAS_DL and _dlmod is not None) else
-              ["model.safetensors", "audiovae.pth", "config.json",
-               "special_tokens_map.json", "tokenizer.json",
-               "tokenizer_config.json", "tokenization_voxcpm2.py"])
-    files, missing = [], []
-    for f in fnames:
-        p = os.path.join(mp, f)
-        if os.path.isfile(p):
-            sz = os.path.getsize(p)
-            ok = sz > 0 and sz >= _MODEL_MIN_SIZE.get(f, 1)
-            issue = "" if ok else ("文件为空" if sz == 0 else "体积异常偏小，可能下载不完整")
-            files.append({"name": f, "ok": bool(ok), "size": int(sz), "issue": issue})
-        else:
-            missing.append(f)
-            files.append({"name": f, "ok": False, "size": 0, "issue": "文件缺失"})
-    all_ok = (not missing) and all(x["ok"] for x in files)
-    return files, missing, all_ok
+  """逐项校验必需模型文件：是否存在、体积是否合理（可检出缺失/下载不全/损坏）。"""
+  mp = resolve_model_dir()
+  fnames = (
+    _dlmod.FILES
+    if (HAS_DL and _dlmod is not None)
+    else [
+      "model.safetensors",
+      "audiovae.pth",
+      "config.json",
+      "special_tokens_map.json",
+      "tokenizer.json",
+      "tokenizer_config.json",
+      "tokenization_voxcpm2.py",
+    ]
+  )
+  files, missing = [], []
+  for f in fnames:
+    p = os.path.join(mp, f)
+    if os.path.isfile(p):
+      sz = os.path.getsize(p)
+      ok = sz > 0 and sz >= _MODEL_MIN_SIZE.get(f, 1)
+      issue = "" if ok else ("文件为空" if sz == 0 else "体积异常偏小，可能下载不完整")
+      files.append({"name": f, "ok": bool(ok), "size": int(sz), "issue": issue})
+    else:
+      missing.append(f)
+      files.append({"name": f, "ok": False, "size": 0, "issue": "文件缺失"})
+  all_ok = (not missing) and all(x["ok"] for x in files)
+  return files, missing, all_ok
 
 
 # ── 网页内模型下载（后台线程 + 进度）─────────────
 _dl_lock = threading.Lock()
 _dl_state = {
-    "status": "idle",        # idle | scanning | downloading | done | error | cancelled
-    "phase": None,
-    "file": None,
-    "file_index": 0,
-    "file_count": 0,
-    "downloaded": 0,
-    "total": None,
-    "percent": None,
-    "overall_percent": None,
-    "message": "",
-    "started_at": None,
-    "finished_at": None,
+  "status": "idle",  # idle | scanning | downloading | done | error | cancelled
+  "phase": None,
+  "file": None,
+  "file_index": 0,
+  "file_count": 0,
+  "downloaded": 0,
+  "total": None,
+  "percent": None,
+  "overall_percent": None,
+  "message": "",
+  "started_at": None,
+  "finished_at": None,
 }
 _dl_thread = [None]  # 用列表存线程引用，便于在函数内修改
 
 
 def _dl_progress(p: dict):
-    with _dl_lock:
-        for k, v in p.items():
-            if v is not None:
-                _dl_state[k] = v
+  with _dl_lock:
+    for k, v in p.items():
+      if v is not None:
+        _dl_state[k] = v
 
 
 def _dl_run():
-    try:
-        if HAS_DL and _dlmod is not None:
-            ok_main, ok_zip = _dlmod.download_models(
-                progress_cb=_dl_progress,
-                should_stop=lambda: _dl_state.get("status") == "cancelled")
-        else:
-            ok_main, ok_zip = (False, False)
-        with _dl_lock:
-            if _dl_state.get("status") == "cancelled":
-                pass  # 已在 cancel 接口标记
-            elif not ok_main:
-                _dl_state["status"] = "error"
-                _dl_state["message"] = "主模型下载未完成，请检查网络后重试，或双击「下载模型.bat」手动下载。"
-                _dl_state["finished_at"] = time.time()
-            else:
-                _dl_state["status"] = "done"
-                _dl_state["phase"] = "done"
-                _dl_state["percent"] = 100
-                _dl_state["overall_percent"] = 100
-                _dl_state["message"] = "模型下载完成。可前往右上角「模型状态 → 加载模型」开始使用。"
-                _dl_state["finished_at"] = time.time()
-    except Exception as _e_cancel:
-        if _dlmod is not None and isinstance(_e_cancel, _dlmod._DownloadCancelled):
-            with _dl_lock:
-                _dl_state["status"] = "cancelled"
-                _dl_state["message"] = "已取消下载。可重新点击下载，已下载部分将自动续传。"
-                _dl_state["finished_at"] = time.time()
-        else:
-            with _dl_lock:
-                _dl_state["status"] = "error"
-                _dl_state["message"] = "下载失败: %s" % _e_cancel
-                _dl_state["finished_at"] = time.time()
-    finally:
-        _dl_thread[0] = None
+  try:
+    if HAS_DL and _dlmod is not None:
+      ok_main, ok_zip = _dlmod.download_models(
+        progress_cb=_dl_progress,
+        should_stop=lambda: _dl_state.get("status") == "cancelled",
+      )
+    else:
+      ok_main, ok_zip = (False, False)
+    with _dl_lock:
+      if _dl_state.get("status") == "cancelled":
+        pass  # 已在 cancel 接口标记
+      elif not ok_main:
+        _dl_state["status"] = "error"
+        _dl_state["message"] = (
+          "主模型下载未完成，请检查网络后重试，或双击「下载模型.bat」手动下载。"
+        )
+        _dl_state["finished_at"] = time.time()
+      else:
+        _dl_state["status"] = "done"
+        _dl_state["phase"] = "done"
+        _dl_state["percent"] = 100
+        _dl_state["overall_percent"] = 100
+        _dl_state["message"] = (
+          "模型下载完成。可前往右上角「模型状态 → 加载模型」开始使用。"
+        )
+        _dl_state["finished_at"] = time.time()
+  except Exception as _e_cancel:
+    if _dlmod is not None and isinstance(_e_cancel, _dlmod._DownloadCancelled):
+      with _dl_lock:
+        _dl_state["status"] = "cancelled"
+        _dl_state["message"] = "已取消下载。可重新点击下载，已下载部分将自动续传。"
+        _dl_state["finished_at"] = time.time()
+    else:
+      with _dl_lock:
+        _dl_state["status"] = "error"
+        _dl_state["message"] = "下载失败: %s" % _e_cancel
+        _dl_state["finished_at"] = time.time()
+  finally:
+    _dl_thread[0] = None
 
 
 def _model_missing_detail() -> str:
-    """生成「模型缺失」的友好指引文本（控制台 / 异常信息通用）。"""
-    mp = resolve_model_dir()
-    return (
-        "未找到 VoxCPM2 主模型权重（model.safetensors）。\n"
-        "期望模型目录: " + mp + "\n"
-        "获取方式（任选其一）:\n"
-        "  1) 双击运行安装目录下的「下载模型.bat」一键下载（需联网，支持断点续传）；\n"
-        "  2) 从网盘下载模型专用包，解压到上述 model\\openbmb\\VoxCPM2 目录；\n"
-        "  3) 手动从 HuggingFace(openbmb/VoxCPM2) 或 ModelScope(OpenBMB/VoxCPM2) 下载后放入该目录。\n"
-        "放置完成后重新启动本程序即可。"
-    )
+  """生成「模型缺失」的友好指引文本（控制台 / 异常信息通用）。"""
+  mp = resolve_model_dir()
+  return (
+    "未找到 VoxCPM2 主模型权重（model.safetensors）。\n"
+    "期望模型目录: " + mp + "\n"
+    "获取方式（任选其一）:\n"
+    "  1) 双击运行安装目录下的「下载模型.bat」一键下载（需联网，支持断点续传）；\n"
+    "  2) 从网盘下载模型专用包，解压到上述 model\\openbmb\\VoxCPM2 目录；\n"
+    "  3) 手动从 HuggingFace(openbmb/VoxCPM2) 或 ModelScope(OpenBMB/VoxCPM2) 下载后放入该目录。\n"
+    "放置完成后重新启动本程序即可。"
+  )
 
 
 def _build_lora_kwargs():
-    """构建传给 VoxCPM.from_pretrained 的 LoRA 参数字典，并返回解析状态。
+  """构建传给 VoxCPM.from_pretrained 的 LoRA 参数字典，并返回解析状态。
 
-    返回 (kwargs, info)：
-    - kwargs：含 lora_config / lora_weights_path（失败时为 {}）。
-    - info：resolve_lora 的结构化状态（ok / reason / r / alpha …），供状态面板如实显示，
-      杜绝「路径填错却谎称已挂载」的静默失败。
+  返回 (kwargs, info)：
+  - kwargs：含 lora_config / lora_weights_path（失败时为 {}）。
+  - info：resolve_lora 的结构化状态（ok / reason / r / alpha …），供状态面板如实显示，
+    杜绝「路径填错却谎称已挂载」的静默失败。
 
-    使用 lora_helper.resolve_lora 从训练产物的 lora_config.json 重建与训练一致的
-    LoRAConfig（关键是 r / alpha），规避「只给权重路径→自动建默认 r=8→与训练 r 形状
-    不匹配→加载失败」的隐藏坑。
-    """
-    global _lora_resolve_error
-    if not _lora_weights_path:
-        return {}, {"ok": False, "reason": "未配置 LoRA 权重路径"}
-    try:
-        from lora_helper import resolve_lora
-    except Exception as e:
-        print(f"[LoRA] lora_helper 导入失败，忽略 LoRA：{e}")
-        return {}, {"ok": False, "reason": f"lora_helper 导入失败：{e}"}
-    kwargs: dict = {}
-    kwargs, info = resolve_lora(kwargs, _lora_weights_path)
-    _lora_resolve_error = "" if info.get("ok") else info.get("reason", "未知原因")
-    return kwargs, info
+  使用 lora_helper.resolve_lora 从训练产物的 lora_config.json 重建与训练一致的
+  LoRAConfig（关键是 r / alpha），规避「只给权重路径→自动建默认 r=8→与训练 r 形状
+  不匹配→加载失败」的隐藏坑。
+  """
+  global _lora_resolve_error
+  if not _lora_weights_path:
+    return {}, {"ok": False, "reason": "未配置 LoRA 权重路径"}
+  try:
+    from lora_helper import resolve_lora
+  except Exception as e:
+    print(f"[LoRA] lora_helper 导入失败，忽略 LoRA：{e}")
+    return {}, {"ok": False, "reason": f"lora_helper 导入失败：{e}"}
+  kwargs: dict = {}
+  kwargs, info = resolve_lora(kwargs, _lora_weights_path)
+  _lora_resolve_error = "" if info.get("ok") else info.get("reason", "未知原因")
+  return kwargs, info
 
 
 def load_model(force_reload: bool = False):
-    global _cached_model, _model_loading, _model_loaded, _model_error, _denoiser_available
+  global _cached_model, _model_loading, _model_loaded, _model_error, _denoiser_available
+  with state_lock:
+    if _model_loaded and _cached_model is not None and not force_reload:
+      return _cached_model
+    if _model_loading:
+      return None
+    _model_loading = True
+    _model_error = None
+
+  model_path = resolve_model_dir()
+
+  if not model_present():
+    msg = _model_missing_detail()
+    _model_error = msg
     with state_lock:
-        if _model_loaded and _cached_model is not None and not force_reload:
-            return _cached_model
-        if _model_loading:
-            return None
-        _model_loading = True
-        _model_error = None
+      _model_loading = False
+    print("[VoxCPM2] " + msg)
+    raise RuntimeError(msg)
 
-    model_path = resolve_model_dir()
+  try:
+    from voxcpm import VoxCPM
 
-    if not model_present():
-        msg = _model_missing_detail()
-        _model_error = msg
-        with state_lock:
-            _model_loading = False
-        print("[VoxCPM2] " + msg)
-        raise RuntimeError(msg)
+    # 离线降噪：若随包发布 zipenhancer 模型则启用，否则降级为空操作（保持离线安全）
+    use_denoiser = False
+    zpath = _resolve_zipenhancer_dir()
+    if zpath:
+      try:
+        from voxcpm.zipenhancer import ZipEnhancer
 
-    try:
-        from voxcpm import VoxCPM
-        # 离线降噪：若随包发布 zipenhancer 模型则启用，否则降级为空操作（保持离线安全）
+        ZipEnhancer(zpath)  # 预加载验证（纯本地，不联网）
+        use_denoiser = True
+        print(f"[VoxCPM2] 离线降噪模型已启用: {zpath}")
+      except Exception as e:
+        print(f"[VoxCPM2] 降噪模型加载失败，降噪将不可用: {e}")
         use_denoiser = False
-        zpath = _resolve_zipenhancer_dir()
-        if zpath:
-            try:
-                from voxcpm.zipenhancer import ZipEnhancer
-                ZipEnhancer(zpath)  # 预加载验证（纯本地，不联网）
-                use_denoiser = True
-                print(f"[VoxCPM2] 离线降噪模型已启用: {zpath}")
-            except Exception as e:
-                print(f"[VoxCPM2] 降噪模型加载失败，降噪将不可用: {e}")
-                use_denoiser = False
-        _denoiser_available = use_denoiser
-        # 运行设备：用户指定优先，否则自动检测
-        import torch
-        device = _device_pref if _device_pref else ("cuda" if torch.cuda.is_available() else "cpu")
-        print(f"[VoxCPM2] 正在加载模型: {model_path} (device={device})")
-        # 清掉上一次加载遗留的 LoRA 状态，避免陈旧信息误导状态面板
-        global _lora_load_info
-        _lora_load_info = None
-        lora_kwargs, _lora_info = _build_lora_kwargs()
-        model = VoxCPM.from_pretrained(
-            model_path,
-            load_denoiser=use_denoiser,
-            zipenhancer_model_id=zpath if use_denoiser else None,
-            optimize=False,
-            device=device,
-            **lora_kwargs
-        )
-        # 捕获 LoRA 实际加载结果，供状态面板如实显示（不再谎称「已挂载」）
-        if getattr(model, "_lora_attempted", False):
-            lk = getattr(model, "_lora_loaded_keys", None)
-            sk = getattr(model, "_lora_skipped_keys", None)
-            _lora_load_info = (
-                len(lk) if lk is not None else None,
-                len(sk) if sk is not None else None,
-            )
-        else:
-            _lora_load_info = None
-        _cached_model = model
-        with state_lock:
-            _model_loaded = True
-            _model_loading = False
-        print("[VoxCPM2] 模型加载完成")
-        return model
-    except Exception as e:
-        _model_error = str(e)
-        with state_lock:
-            _model_loading = False
-        print(f"[VoxCPM2] 模型加载失败: {e}")
-        raise
+    _denoiser_available = use_denoiser
+    # 运行设备：用户指定优先，否则自动检测
+    import torch
+
+    device = (
+      _device_pref if _device_pref else ("cuda" if torch.cuda.is_available() else "cpu")
+    )
+    print(f"[VoxCPM2] 正在加载模型: {model_path} (device={device})")
+    # 清掉上一次加载遗留的 LoRA 状态，避免陈旧信息误导状态面板
+    global _lora_load_info
+    _lora_load_info = None
+    lora_kwargs, _lora_info = _build_lora_kwargs()
+    model = VoxCPM.from_pretrained(
+      model_path,
+      load_denoiser=use_denoiser,
+      zipenhancer_model_id=zpath if use_denoiser else None,
+      optimize=False,
+      device=device,
+      **lora_kwargs,
+    )
+    # 捕获 LoRA 实际加载结果，供状态面板如实显示（不再谎称「已挂载」）
+    if getattr(model, "_lora_attempted", False):
+      lk = getattr(model, "_lora_loaded_keys", None)
+      sk = getattr(model, "_lora_skipped_keys", None)
+      _lora_load_info = (
+        len(lk) if lk is not None else None,
+        len(sk) if sk is not None else None,
+      )
+    else:
+      _lora_load_info = None
+    _cached_model = model
+    with state_lock:
+      _model_loaded = True
+      _model_loading = False
+    print("[VoxCPM2] 模型加载完成")
+    return model
+  except Exception as e:
+    _model_error = str(e)
+    with state_lock:
+      _model_loading = False
+    print(f"[VoxCPM2] 模型加载失败: {e}")
+    raise
 
 
 def unload_model():
-    """手动卸载模型，释放显存/内存。"""
-    global _cached_model, _model_loaded, _model_loading, _model_error
-    with state_lock:
-        _cached_model = None
-        _model_loaded = False
-        _model_loading = False
-        _model_error = None
-    try:
-        import gc
-        gc.collect()
-    except Exception:
-        pass
-    try:
-        import torch
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-    except Exception:
-        pass
-    print("[VoxCPM2] 模型已卸载")
+  """手动卸载模型，释放显存/内存。"""
+  global _cached_model, _model_loaded, _model_loading, _model_error
+  with state_lock:
+    _cached_model = None
+    _model_loaded = False
+    _model_loading = False
+    _model_error = None
+  try:
+    import gc
+
+    gc.collect()
+  except Exception:
+    pass
+  try:
+    import torch
+
+    if torch.cuda.is_available():
+      torch.cuda.empty_cache()
+  except Exception:
+    pass
+  print("[VoxCPM2] 模型已卸载")
 
 
 def _load_model_background(force: bool = False):
-    """在后台线程中执行模型加载，供手动触发使用。"""
-    try:
-        load_model(force_reload=force)
-    except Exception as e:
-        print(f"[VoxCPM2] 手动加载模型失败: {e}")
+  """在后台线程中执行模型加载，供手动触发使用。"""
+  try:
+    load_model(force_reload=force)
+  except Exception as e:
+    print(f"[VoxCPM2] 手动加载模型失败: {e}")
 
 
 # 合法 VoxCPM 音素块（模块级，供 split_text / _is_phoneme_text 共用）：
@@ -646,474 +701,529 @@ _PHONEME_BLOCK_RE = re.compile(r"\{[a-zA-ZüÜ0-9\s\-'\.]+\}")
 
 
 def split_text(text: str, chunk_size: int = MAX_CHUNK_SIZE) -> list:
-    if len(text) <= chunk_size:
-        return [text]
-    # 音素/混合模式：按 } 边界切分，绝不切断 {ni3} / {hang2} 音素块
-    if _PHONEME_BLOCK_RE.search(text):
-        blocks = re.findall(r'\{[^{}]*\}\s*', text) or [text]
-        rest = re.sub(r'\{[^{}]*\}\s*', '', text)
-        if rest:
-            blocks.append(rest)
-        chunks, current = [], ""
-        for b in blocks:
-            if len(current) + len(b) <= chunk_size:
-                current += b
-            else:
-                if current:
-                    chunks.append(current)
-                current = b
+  if len(text) <= chunk_size:
+    return [text]
+  # 音素/混合模式：按 } 边界切分，绝不切断 {ni3} / {hang2} 音素块
+  if _PHONEME_BLOCK_RE.search(text):
+    blocks = re.findall(r"\{[^{}]*\}\s*", text) or [text]
+    rest = re.sub(r"\{[^{}]*\}\s*", "", text)
+    if rest:
+      blocks.append(rest)
+    chunks, current = [], ""
+    for b in blocks:
+      if len(current) + len(b) <= chunk_size:
+        current += b
+      else:
         if current:
-            chunks.append(current)
-        return chunks
-    chunks = []
-    sentences = re.split(r'([。！？；\.\!\?\;，,])', text)
-    current = ""
-    for i in range(0, len(sentences) - 1, 2):
-        s = (sentences[i] or "") + (sentences[i + 1] if i + 1 < len(sentences) else "")
-        if len(current) + len(s) <= chunk_size:
-            current += s
-        else:
-            if current:
-                chunks.append(current)
-            current = s
+          chunks.append(current)
+        current = b
     if current:
-        chunks.append(current)
+      chunks.append(current)
     return chunks
+  chunks = []
+  sentences = re.split(r"([。！？；\.\!\?\;，,])", text)
+  current = ""
+  for i in range(0, len(sentences) - 1, 2):
+    s = (sentences[i] or "") + (sentences[i + 1] if i + 1 < len(sentences) else "")
+    if len(current) + len(s) <= chunk_size:
+      current += s
+    else:
+      if current:
+        chunks.append(current)
+      current = s
+  if current:
+    chunks.append(current)
+  return chunks
 
 
 from text_norm_cn import normalize_text
 
+
 def resample_audio(audio: np.ndarray, sr_in: int, sr_out: int) -> np.ndarray:
-    """音频重采样（优先 librosa，回退 scipy/numpy 线性插值）。"""
-    try:
-        import librosa
-        return librosa.resample(audio.astype(np.float32), orig_sr=sr_in, target_sr=sr_out)
-    except Exception:
-        pass
-    try:
-        from scipy.signal import resample as sp_resample
-        n = int(round(len(audio) * sr_out / sr_in))
-        return sp_resample(audio, n)
-    except Exception:
-        pass
-    # 简单线性插值回退
+  """音频重采样（优先 librosa，回退 scipy/numpy 线性插值）。"""
+  try:
+    import librosa
+
+    return librosa.resample(audio.astype(np.float32), orig_sr=sr_in, target_sr=sr_out)
+  except Exception:
+    pass
+  try:
+    from scipy.signal import resample as sp_resample
+
     n = int(round(len(audio) * sr_out / sr_in))
+    return sp_resample(audio, n)
+  except Exception:
+    pass
+  # 简单线性插值回退
+  n = int(round(len(audio) * sr_out / sr_in))
+  if n <= 1:
+    return audio
+  xp = np.linspace(0, len(audio) - 1, len(audio))
+  x = np.linspace(0, len(audio) - 1, n)
+  return np.interp(x, xp, audio).astype(audio.dtype)
+
+
+def crossfade_concat(
+  audio_list: list, sample_rate: int, fade_ms: int = 80
+) -> np.ndarray:
+  """多段音频等功率交叉淡入淡出拼接（消除段间断裂/爆音）。
+
+  规则：首段不淡入（result 初始即第一段、头部不动），末段不淡出（仅头部与前段尾交叉
+  淡化，尾部完整保留）。重叠段使用等功率曲线 cos/sin，感知响度恒定，避免线性淡变中段的下凹。
+  """
+  if not audio_list:
+    return np.array([], dtype=np.float32)
+  if len(audio_list) == 1:
+    return np.asarray(audio_list[0], dtype=np.float32)
+  fade_n = max(1, int(sample_rate * fade_ms / 1000))
+  result = np.asarray(audio_list[0], dtype=np.float32).copy()
+  for seg in audio_list[1:]:
+    seg = np.asarray(seg, dtype=np.float32)
+    n = min(fade_n, len(result), len(seg))
     if n <= 1:
-        return audio
-    xp = np.linspace(0, len(audio) - 1, len(audio))
-    x = np.linspace(0, len(audio) - 1, n)
-    return np.interp(x, xp, audio).astype(audio.dtype)
-
-
-def crossfade_concat(audio_list: list, sample_rate: int, fade_ms: int = 80) -> np.ndarray:
-    """多段音频等功率交叉淡入淡出拼接（消除段间断裂/爆音）。
-
-    规则：首段不淡入（result 初始即第一段、头部不动），末段不淡出（仅头部与前段尾交叉
-    淡化，尾部完整保留）。重叠段使用等功率曲线 cos/sin，感知响度恒定，避免线性淡变中段的下凹。
-    """
-    if not audio_list:
-        return np.array([], dtype=np.float32)
-    if len(audio_list) == 1:
-        return np.asarray(audio_list[0], dtype=np.float32)
-    fade_n = max(1, int(sample_rate * fade_ms / 1000))
-    result = np.asarray(audio_list[0], dtype=np.float32).copy()
-    for seg in audio_list[1:]:
-        seg = np.asarray(seg, dtype=np.float32)
-        n = min(fade_n, len(result), len(seg))
-        if n <= 1:
-            # 段过短无法交叠，直接拼接
-            result = np.concatenate([result, seg])
-            continue
-        tail = result[-n:]
-        head = seg[:n]
-        t = np.linspace(0.0, 1.0, n, dtype=np.float32)
-        # 等功率交叉淡化：尾段渐弱、头段渐强
-        result[-n:] = tail * np.cos(t * np.pi / 2) + head * np.sin(t * np.pi / 2)
-        result = np.concatenate([result, seg[n:]])
-    return result
+      # 段过短无法交叠，直接拼接
+      result = np.concatenate([result, seg])
+      continue
+    tail = result[-n:]
+    head = seg[:n]
+    t = np.linspace(0.0, 1.0, n, dtype=np.float32)
+    # 等功率交叉淡化：尾段渐弱、头段渐强
+    result[-n:] = tail * np.cos(t * np.pi / 2) + head * np.sin(t * np.pi / 2)
+    result = np.concatenate([result, seg[n:]])
+  return result
 
 
 def _segment_rms(audio: np.ndarray) -> float:
-    """计算音频段 RMS（有效值）。"""
-    arr = np.asarray(audio, dtype=np.float64)
-    if len(arr) == 0:
-        return 0.0
-    return float(np.sqrt(np.mean(arr * arr)))
+  """计算音频段 RMS（有效值）。"""
+  arr = np.asarray(audio, dtype=np.float64)
+  if len(arr) == 0:
+    return 0.0
+  return float(np.sqrt(np.mean(arr * arr)))
 
 
 def normalize_segments(audio_segments: list, target_mode: str = "mean") -> list:
-    """对多段音频做 RMS 音量归一化，使各段感知响度一致。
+  """对多段音频做 RMS 音量归一化，使各段感知响度一致。
 
-    target_mode:
-      - "mean": 使用所有非静音段的平均 RMS 作为目标（默认，最稳）。
-      - "first": 使用第一段的 RMS 作为目标。
-    为避免削波，单段缩放后若峰值超过 0.99，会限制增益。
-    """
-    if not audio_segments or len(audio_segments) < 2:
-        return audio_segments
-    rms_values = [_segment_rms(seg) for seg in audio_segments]
-    valid_rms = [r for r in rms_values if r > 1e-9]
-    if not valid_rms:
-        return audio_segments
-    target_rms = rms_values[0] if target_mode == "first" else float(np.mean(valid_rms))
-    if target_rms < 1e-9:
-        return audio_segments
+  target_mode:
+    - "mean": 使用所有非静音段的平均 RMS 作为目标（默认，最稳）。
+    - "first": 使用第一段的 RMS 作为目标。
+  为避免削波，单段缩放后若峰值超过 0.99，会限制增益。
+  """
+  if not audio_segments or len(audio_segments) < 2:
+    return audio_segments
+  rms_values = [_segment_rms(seg) for seg in audio_segments]
+  valid_rms = [r for r in rms_values if r > 1e-9]
+  if not valid_rms:
+    return audio_segments
+  target_rms = rms_values[0] if target_mode == "first" else float(np.mean(valid_rms))
+  if target_rms < 1e-9:
+    return audio_segments
 
-    normalized = []
-    for seg, rms in zip(audio_segments, rms_values):
-        seg_arr = np.asarray(seg, dtype=np.float32)
-        if rms < 1e-9:
-            normalized.append(seg_arr)
-            continue
-        scaled = seg_arr * (target_rms / rms)
-        peak = np.max(np.abs(scaled)) if len(scaled) else 0.0
-        if peak > 0.99:
-            scaled = scaled * (0.99 / peak)
-        normalized.append(scaled)
-    return normalized
+  normalized = []
+  for seg, rms in zip(audio_segments, rms_values):
+    seg_arr = np.asarray(seg, dtype=np.float32)
+    if rms < 1e-9:
+      normalized.append(seg_arr)
+      continue
+    scaled = seg_arr * (target_rms / rms)
+    peak = np.max(np.abs(scaled)) if len(scaled) else 0.0
+    if peak > 0.99:
+      scaled = scaled * (0.99 / peak)
+    normalized.append(scaled)
+  return normalized
 
 
 def peak_normalize(audio: np.ndarray, peak: float = 0.95) -> np.ndarray:
-    """最终峰值限制：把整体峰值拉到目标值，避免输出过小或削波。"""
-    arr = np.asarray(audio, dtype=np.float32)
-    if len(arr) == 0:
-        return arr
-    max_amp = float(np.max(np.abs(arr)))
-    if max_amp < 1e-9:
-        return arr
-    return arr * (peak / max_amp)
+  """最终峰值限制：把整体峰值拉到目标值，避免输出过小或削波。"""
+  arr = np.asarray(audio, dtype=np.float32)
+  if len(arr) == 0:
+    return arr
+  max_amp = float(np.max(np.abs(arr)))
+  if max_amp < 1e-9:
+    return arr
+  return arr * (peak / max_amp)
 
 
 def synthesize(args: dict) -> dict:
+  """
+  后台 TTS 任务函数。
+  args: {
+      job_id, text, voice, control, mode, reference_wav,
+      prompt_wav, prompt_text, cfg, steps, normalize, crossfade, chunk_size
+  }
+  返回: {job_id, status, message, output_files, output_wav, duration, error}
+  """
+  global _output_dir, _global_avg_seconds_per_char
+  job_id = args["job_id"]
+  text = args["text"]
+  voice = args.get("voice", "default")
+  # 自定义音色描述优先；否则回退到左侧预设
+  control_text = args.get("control_text")
+  control = control_text or VOICE_PRESETS.get(voice, VOICE_PRESETS["default"])
+  mode = args.get("mode", "voice_design")  # voice_design | fixed_clone | self_seeding
+  reference_wav = args.get("reference_wav")
+  prompt_wav = args.get("prompt_wav")
+  prompt_text = args.get("prompt_text")
+  cfg = float(args.get("cfg", 2.5))
+  steps = int(args.get("steps", 15))
+  # normalize：用户显式开关（默认开）。若检测到音素串 {ni3}，自动强制切音素模式
+  # （官方要求音素输入必须 normalize=False，且不能把 {} 块交给归一化/模型二次归一化）。
+  requested_normalize = str(args.get("normalize", "true")).lower() in (
+    "true",
+    "1",
+    "yes",
+    True,
+  )
+  requested_phoneme_mode = str(args.get("phoneme_mode", "false")).lower() in (
+    "true",
+    "1",
+    "yes",
+    True,
+  )
+
+  # 合法 VoxCPM 音素块判定见模块级 _PHONEME_BLOCK_RE（split_text 共用）。
+  def _is_phoneme_text(s: str) -> bool:
+    """检测文本是否含 VoxCPM 音素块：任意合法 {} 块即进入音素/混合模式。
+
+    支持纯音素串（{ni3}{hao3}）、单块（{hang2}）以及「普通文本 + 局部音素标注」
+    混合输入（如"今天一行{hang2}代码写完了"）。合法块由 _PHONEME_BLOCK_RE
+    限定（仅字母/ü/数字/空格等），避免把普通中文花括号误判为音素。
     """
-    后台 TTS 任务函数。
-    args: {
-        job_id, text, voice, control, mode, reference_wav,
-        prompt_wav, prompt_text, cfg, steps, normalize, crossfade, chunk_size
+    return bool(_PHONEME_BLOCK_RE.search(s or ""))
+
+  # 音素模式 = 前端显式开关 OR 文本自动检测兜底（官方要求音素输入必须 normalize=False）
+  phoneme_mode = requested_phoneme_mode or _is_phoneme_text(text)
+  # 默认链路（无音素标注）自动纠错：98 条多音字语料命中词自动注入 {音素} 标注，
+  # 使"一行"等默认链路也读对（hang2）。注入后强制进入混合模式（normalize 自动关闭）。
+  if not phoneme_mode:
+    try:
+      from g2p_phoneme import apply_overlay_auto
+
+      auto_text, applied = apply_overlay_auto(text)
+      if applied:
+        text = auto_text
+        phoneme_mode = True
+    except Exception:
+      pass  # 自动纠错失败不阻塞，退回默认链路（多音字可能读错，可手动标注兜底）
+  normalize = requested_normalize and not phoneme_mode
+  denoise = str(args.get("denoise", "false")).lower() in ("true", "1", "yes", True)
+  prompt_text = args.get("prompt_text") or None  # 终极克隆：参考音频的转录文本
+  crossfade = int(args.get("crossfade", 80))
+  chunk_size = int(args.get("chunk_size", 180))
+  target_sr = args.get("target_sr", "native")
+
+  with task_lock:
+    start_ts = task_results[job_id].get("start_time", time.time())
+    est_total = task_results[job_id].get("estimated_total_seconds", 5.0)
+    task_results[job_id] = {
+      "status": "loading_model",
+      "progress": 0,
+      "display_progress": 0,
+      "message": "正在加载模型...",
+      "start_time": start_ts,
+      "estimated_total_seconds": est_total,
+      "elapsed_seconds": 0,
+      "remaining_seconds": est_total,
     }
-    返回: {job_id, status, message, output_files, output_wav, duration, error}
-    """
-    global _output_dir, _global_avg_seconds_per_char
-    job_id = args["job_id"]
-    text = args["text"]
-    voice = args.get("voice", "default")
-    # 自定义音色描述优先；否则回退到左侧预设
-    control_text = args.get("control_text")
-    control = control_text or VOICE_PRESETS.get(voice, VOICE_PRESETS["default"])
-    mode = args.get("mode", "voice_design")  # voice_design | fixed_clone | self_seeding
-    reference_wav = args.get("reference_wav")
-    prompt_wav = args.get("prompt_wav")
-    prompt_text = args.get("prompt_text")
-    cfg = float(args.get("cfg", 2.5))
-    steps = int(args.get("steps", 15))
-    # normalize：用户显式开关（默认开）。若检测到音素串 {ni3}，自动强制切音素模式
-    #（官方要求音素输入必须 normalize=False，且不能把 {} 块交给归一化/模型二次归一化）。
-    requested_normalize = str(args.get("normalize", "true")).lower() in ("true", "1", "yes", True)
-    requested_phoneme_mode = str(args.get("phoneme_mode", "false")).lower() in ("true", "1", "yes", True)
-    # 合法 VoxCPM 音素块判定见模块级 _PHONEME_BLOCK_RE（split_text 共用）。
-    def _is_phoneme_text(s: str) -> bool:
-        """检测文本是否含 VoxCPM 音素块：任意合法 {} 块即进入音素/混合模式。
 
-        支持纯音素串（{ni3}{hao3}）、单块（{hang2}）以及「普通文本 + 局部音素标注」
-        混合输入（如"今天一行{hang2}代码写完了"）。合法块由 _PHONEME_BLOCK_RE
-        限定（仅字母/ü/数字/空格等），避免把普通中文花括号误判为音素。
-        """
-        return bool(_PHONEME_BLOCK_RE.search(s or ""))
-    # 音素模式 = 前端显式开关 OR 文本自动检测兜底（官方要求音素输入必须 normalize=False）
-    phoneme_mode = requested_phoneme_mode or _is_phoneme_text(text)
-    # 默认链路（无音素标注）自动纠错：98 条多音字语料命中词自动注入 {音素} 标注，
-    # 使"一行"等默认链路也读对（hang2）。注入后强制进入混合模式（normalize 自动关闭）。
-    if not phoneme_mode:
-        try:
-            from g2p_phoneme import apply_overlay_auto
-            auto_text, applied = apply_overlay_auto(text)
-            if applied:
-                text = auto_text
-                phoneme_mode = True
-        except Exception:
-            pass  # 自动纠错失败不阻塞，退回默认链路（多音字可能读错，可手动标注兜底）
-    normalize = requested_normalize and not phoneme_mode
-    denoise = str(args.get("denoise", "false")).lower() in ("true", "1", "yes", True)
-    prompt_text = args.get("prompt_text") or None  # 终极克隆：参考音频的转录文本
-    crossfade = int(args.get("crossfade", 80))
-    chunk_size = int(args.get("chunk_size", 180))
-    target_sr = args.get("target_sr", "native")
-
+  try:
+    model = load_model()
+    if model is None:
+      raise RuntimeError("模型加载失败")
+  except Exception as e:
     with task_lock:
-        start_ts = task_results[job_id].get("start_time", time.time())
-        est_total = task_results[job_id].get("estimated_total_seconds", 5.0)
-        task_results[job_id] = {
-            "status": "loading_model",
-            "progress": 0,
-            "display_progress": 0,
-            "message": "正在加载模型...",
-            "start_time": start_ts,
-            "estimated_total_seconds": est_total,
-            "elapsed_seconds": 0,
-            "remaining_seconds": est_total,
-        }
-
-    try:
-        model = load_model()
-        if model is None:
-            raise RuntimeError("模型加载失败")
-    except Exception as e:
-        with task_lock:
-            task_results[job_id] = {"status": "error", "message": f"模型加载失败: {e}"}
-        return task_results[job_id]
-
-    # control 前缀在分段循环内按 chunk 拼接
-
-    with task_lock:
-        start_ts = task_results[job_id].get("start_time", time.time())
-        est_total = task_results[job_id].get("estimated_total_seconds", 5.0)
-        task_results[job_id] = {
-            "status": "synthesizing",
-            "progress": 5,
-            "display_progress": 5,
-            "message": "正在切分文本...",
-            "start_time": start_ts,
-            "estimated_total_seconds": est_total,
-            "elapsed_seconds": time.time() - start_ts,
-            "remaining_seconds": max(0, est_total - (time.time() - start_ts)),
-        }
-
-    # 混合模式去重读：{音素块} 紧跟标注的是其前面的那个汉字，读音由音素块接管，
-    # 送入模型前舍去该字（"今天一行{hang2}代码" -> "今天一{hang2}代码"），
-    # UI 输入框仍保留原字供对照。纯音素串（块前无汉字）不受影响。
-    if phoneme_mode:
-        try:
-            from g2p_phoneme import strip_annotated_hanzi
-            text = strip_annotated_hanzi(text)
-        except Exception:
-            pass  # 剥离失败不阻塞合成，退回原文本（可能重复读但保证能出结果）
-
-    chunks = split_text(text, chunk_size=chunk_size)
-    total_chunks = len(chunks)
-
-    # 多段 voice_design 自动走 self-seeding：用第一段固定音色作为后续段的参考，
-    # 避免长文本每段都重新按 control 描述采样导致音色不一致。
-    use_self_seeding = (mode == "self_seeding") or (mode == "voice_design" and total_chunks > 1)
-
-    # 统一走分段循环（单段也走这里，确保 fixed_clone / self_seeding 对短文本同样生效）
-    audio_segments = []
-    current_ref = reference_wav if (reference_wav and os.path.exists(reference_wav)) else None
-    seed_prompt_text = None
-    seed_ref_path = None
-    synthesis_elapsed_total = 0.0
-    synthesis_chars_total = 0
-
-    for i, chunk in enumerate(chunks, 1):
-        # 进度按「已完成段数」计算：第一段开始前应为 5%，避免一起步就 50%+
-        progress = int(5 + 80 * (i - 1) / total_chunks)
-        with task_lock:
-            now = time.time()
-            r = task_results[job_id]
-            start_ts = r.get("start_time", now)
-            elapsed = now - start_ts
-            estimated_total = r.get("estimated_total_seconds", max(5.0, len(text) * 0.12))
-            # 根据实际耗时动态修正剩余时间
-            if i > 1 and elapsed > 0:
-                estimated_total = max(estimated_total, elapsed * total_chunks / (i - 1))
-            r.update({
-                "status": "synthesizing",
-                "progress": progress,
-                "display_progress": progress,
-                "message": (f"正在合成第 {i}/{total_chunks} 段..." if total_chunks > 1 else "正在合成..."),
-                "start_time": start_ts,
-                "estimated_total_seconds": estimated_total,
-                "elapsed_seconds": elapsed,
-                "remaining_seconds": max(0, estimated_total - elapsed),
-            })
-            task_results[job_id] = r
-
-        # 音素/混合模式处理：
-        # - 纯音素串（{ni3}{hao3}）与「普通文本 + 局部 {音素} 标注」（如"今天一行{hang2}代码"）
-        #   统一走混合处理：normalize_text 已对 {..} 音素块做占位保护（问题1修复），
-        #   普通段的数字/符号转中文读法后保留中文原文交给模型自读（默认正常链路），
-        #   {hang2} 等标注块保留并强制按音素读音；模型侧 normalize 强制 False，
-        #   防止模型自带归一化二次破坏 {} 块（问题2双保险）。
-        # - 非音素模式：维持原有 normalize 行为。
-        if phoneme_mode:
-            processed_chunk = normalize_text(chunk)
-            normalize = False
-        else:
-            processed_chunk = normalize_text(chunk) if normalize else chunk
-        chunk_text = f"({control}){processed_chunk}" if control else processed_chunk
-        chunk_start = time.time()
-        try:
-            if mode == "fixed_clone" and current_ref:
-                # 固定参考克隆 / 终极克隆（参考音频 + 转录文本）
-                kwargs = {
-                    "text": processed_chunk,
-                    "cfg_value": cfg,
-                    "inference_timesteps": steps,
-                    "reference_wav_path": current_ref,
-                    "normalize": normalize,
-                    "denoise": denoise,
-                }
-                if prompt_text and i == 1:
-                    # 终极克隆：参考音频即 prompt，配用户提供的转录文本
-                    kwargs["prompt_wav_path"] = current_ref
-                    kwargs["prompt_text"] = prompt_text
-                elif seed_prompt_text:
-                    kwargs["prompt_wav_path"] = seed_ref_path
-                    kwargs["prompt_text"] = seed_prompt_text
-                wav = model.generate(**kwargs)
-            elif use_self_seeding and i == 1:
-                # 第一段 Voice Design
-                wav = model.generate(text=chunk_text, cfg_value=cfg, inference_timesteps=steps, normalize=normalize, denoise=denoise)
-                seed_prompt_text = chunk_text
-                seed_ref_path = os.path.join(TEMP_DIR, f"seed_{job_id}.wav")
-                # Windows 可能在运行期间清理 AppData\Local\Temp，导致 TEMP_DIR 消失；
-                # 写种子前确保目录存在，避免 sf.write 报 "Error opening ...: System error"
-                TEMP_DIR.mkdir(parents=True, exist_ok=True)
-                sf.write(seed_ref_path, wav, model.tts_model.sample_rate)
-                current_ref = seed_ref_path
-            elif use_self_seeding and current_ref and seed_prompt_text:
-                # 后续段：ref_continuation
-                wav = model.generate(
-                    text=processed_chunk,
-                    cfg_value=cfg,
-                    inference_timesteps=steps,
-                    reference_wav_path=current_ref,
-                    prompt_wav_path=seed_ref_path,
-                    prompt_text=seed_prompt_text,
-                    normalize=normalize,
-                    denoise=denoise,
-                )
-            else:
-                wav = model.generate(text=chunk_text, cfg_value=cfg, inference_timesteps=steps, normalize=normalize, denoise=denoise)
-
-            chunk_elapsed = time.time() - chunk_start
-            chunk_chars = len(processed_chunk)
-            synthesis_elapsed_total += chunk_elapsed
-            synthesis_chars_total += chunk_chars
-            with _avg_lock:
-                if synthesis_chars_total > 0:
-                    avg = synthesis_elapsed_total / synthesis_chars_total
-                    if _global_avg_seconds_per_char > 0:
-                        _global_avg_seconds_per_char = _global_avg_seconds_per_char * 0.7 + avg * 0.3
-                    else:
-                        _global_avg_seconds_per_char = avg
-
-            sr = model.tts_model.sample_rate
-            audio_segments.append(wav)
-        except Exception as e:
-            with task_lock:
-                task_results[job_id] = {"status": "error", "message": f"第 {i} 段合成失败: {e}"}
-            return task_results[job_id]
-
-    # 拼接
-    if len(audio_segments) > 1:
-        with task_lock:
-            r = task_results[job_id]
-            now = time.time()
-            r.update({
-                "status": "synthesizing",
-                "progress": 90,
-                "display_progress": 90,
-                "message": "正在拼接音频...",
-                "elapsed_seconds": now - r.get("start_time", now),
-                "remaining_seconds": 0,
-            })
-            task_results[job_id] = r
-        audio_segments = normalize_segments(audio_segments, target_mode="mean")
-        merged = crossfade_concat(audio_segments, sr, fade_ms=crossfade)
-        merged = peak_normalize(merged, peak=0.95)
-    else:
-        merged = audio_segments[0] if audio_segments else np.array([])
-
-    # 输出采样率重采样（可选）
-    out_sr = sr
-    if target_sr and str(target_sr).lower() not in ("native", "none", ""):
-        try:
-            tgt = int(target_sr)
-            if tgt > 0 and tgt != sr:
-                merged = resample_audio(merged, sr, tgt)
-                out_sr = tgt
-        except Exception as e:
-            print(f"[VoxCPM2] 重采样失败，使用原生采样率: {e}")
-
-    duration = len(merged) / out_sr if len(merged) else 0
-
-    # 保存（文件名使用 ASCII，避免中文名导致 FileResponse 头编码失败）
-    safe_name = "voxcpm_" + datetime.datetime.now().strftime("%Y%m%d_%H%M%S") + "_" + uuid.uuid4().hex[:6]
-    out_dir = _output_dir / "VoxCPM_Outputs"
-    out_dir.mkdir(parents=True, exist_ok=True)
-    out_wav = out_dir / f"{safe_name}.wav"
-    try:
-        sf.write(str(out_wav), merged, out_sr)
-    except Exception as e:
-        # soundfile 不可用时的降级
-        try:
-            import wave
-            with wave.open(str(out_wav), 'wb') as wf:
-                wf.setnchannels(1)
-                wf.setsampwidth(2)
-                wf.setframerate(sr)
-                wf.writeframes((merged * 32767).astype(np.int16).tobytes())
-        except Exception as ew:
-            with task_lock:
-                task_results[job_id] = {"status": "error", "message": f"保存音频失败: {ew}"}
-            return task_results[job_id]
-
-    with task_lock:
-        r = task_results[job_id]
-        now = time.time()
-        r.update({
-            "status": "done",
-            "progress": 100,
-            "display_progress": 100,
-            "message": f"合成完成！时长 {duration:.1f}s",
-            "output_wav": out_wav.name,
-            "duration": duration,
-            "sample_rate": out_sr,
-            "num_chunks": total_chunks,
-            "elapsed_seconds": now - r.get("start_time", now),
-            "remaining_seconds": 0,
-        })
-        task_results[job_id] = r
-
+      task_results[job_id] = {"status": "error", "message": f"模型加载失败: {e}"}
     return task_results[job_id]
+
+  # control 前缀在分段循环内按 chunk 拼接
+
+  with task_lock:
+    start_ts = task_results[job_id].get("start_time", time.time())
+    est_total = task_results[job_id].get("estimated_total_seconds", 5.0)
+    task_results[job_id] = {
+      "status": "synthesizing",
+      "progress": 5,
+      "display_progress": 5,
+      "message": "正在切分文本...",
+      "start_time": start_ts,
+      "estimated_total_seconds": est_total,
+      "elapsed_seconds": time.time() - start_ts,
+      "remaining_seconds": max(0, est_total - (time.time() - start_ts)),
+    }
+
+  # 混合模式去重读：{音素块} 紧跟标注的是其前面的那个汉字，读音由音素块接管，
+  # 送入模型前舍去该字（"今天一行{hang2}代码" -> "今天一{hang2}代码"），
+  # UI 输入框仍保留原字供对照。纯音素串（块前无汉字）不受影响。
+  if phoneme_mode:
+    try:
+      from g2p_phoneme import strip_annotated_hanzi
+
+      text = strip_annotated_hanzi(text)
+    except Exception:
+      pass  # 剥离失败不阻塞合成，退回原文本（可能重复读但保证能出结果）
+
+  chunks = split_text(text, chunk_size=chunk_size)
+  total_chunks = len(chunks)
+
+  # 多段 voice_design 自动走 self-seeding：用第一段固定音色作为后续段的参考，
+  # 避免长文本每段都重新按 control 描述采样导致音色不一致。
+  use_self_seeding = (mode == "self_seeding") or (
+    mode == "voice_design" and total_chunks > 1
+  )
+
+  # 统一走分段循环（单段也走这里，确保 fixed_clone / self_seeding 对短文本同样生效）
+  audio_segments = []
+  current_ref = (
+    reference_wav if (reference_wav and os.path.exists(reference_wav)) else None
+  )
+  seed_prompt_text = None
+  seed_ref_path = None
+  synthesis_elapsed_total = 0.0
+  synthesis_chars_total = 0
+
+  for i, chunk in enumerate(chunks, 1):
+    # 进度按「已完成段数」计算：第一段开始前应为 5%，避免一起步就 50%+
+    progress = int(5 + 80 * (i - 1) / total_chunks)
+    with task_lock:
+      now = time.time()
+      r = task_results[job_id]
+      start_ts = r.get("start_time", now)
+      elapsed = now - start_ts
+      estimated_total = r.get("estimated_total_seconds", max(5.0, len(text) * 0.12))
+      # 根据实际耗时动态修正剩余时间
+      if i > 1 and elapsed > 0:
+        estimated_total = max(estimated_total, elapsed * total_chunks / (i - 1))
+      r.update(
+        {
+          "status": "synthesizing",
+          "progress": progress,
+          "display_progress": progress,
+          "message": (
+            f"正在合成第 {i}/{total_chunks} 段..."
+            if total_chunks > 1
+            else "正在合成..."
+          ),
+          "start_time": start_ts,
+          "estimated_total_seconds": estimated_total,
+          "elapsed_seconds": elapsed,
+          "remaining_seconds": max(0, estimated_total - elapsed),
+        }
+      )
+      task_results[job_id] = r
+
+    # 音素/混合模式处理：
+    # - 纯音素串（{ni3}{hao3}）与「普通文本 + 局部 {音素} 标注」（如"今天一行{hang2}代码"）
+    #   统一走混合处理：normalize_text 已对 {..} 音素块做占位保护（问题1修复），
+    #   普通段的数字/符号转中文读法后保留中文原文交给模型自读（默认正常链路），
+    #   {hang2} 等标注块保留并强制按音素读音；模型侧 normalize 强制 False，
+    #   防止模型自带归一化二次破坏 {} 块（问题2双保险）。
+    # - 非音素模式：维持原有 normalize 行为。
+    if phoneme_mode:
+      processed_chunk = normalize_text(chunk)
+      normalize = False
+    else:
+      processed_chunk = normalize_text(chunk) if normalize else chunk
+    chunk_text = f"({control}){processed_chunk}" if control else processed_chunk
+    chunk_start = time.time()
+    try:
+      if mode == "fixed_clone" and current_ref:
+        # 固定参考克隆 / 终极克隆（参考音频 + 转录文本）
+        kwargs = {
+          "text": processed_chunk,
+          "cfg_value": cfg,
+          "inference_timesteps": steps,
+          "reference_wav_path": current_ref,
+          "normalize": normalize,
+          "denoise": denoise,
+        }
+        if prompt_text and i == 1:
+          # 终极克隆：参考音频即 prompt，配用户提供的转录文本
+          kwargs["prompt_wav_path"] = current_ref
+          kwargs["prompt_text"] = prompt_text
+        elif seed_prompt_text:
+          kwargs["prompt_wav_path"] = seed_ref_path
+          kwargs["prompt_text"] = seed_prompt_text
+        wav = model.generate(**kwargs)
+      elif use_self_seeding and i == 1:
+        # 第一段 Voice Design
+        wav = model.generate(
+          text=chunk_text,
+          cfg_value=cfg,
+          inference_timesteps=steps,
+          normalize=normalize,
+          denoise=denoise,
+        )
+        seed_prompt_text = chunk_text
+        seed_ref_path = os.path.join(TEMP_DIR, f"seed_{job_id}.wav")
+        # Windows 可能在运行期间清理 AppData\Local\Temp，导致 TEMP_DIR 消失；
+        # 写种子前确保目录存在，避免 sf.write 报 "Error opening ...: System error"
+        TEMP_DIR.mkdir(parents=True, exist_ok=True)
+        sf.write(seed_ref_path, wav, model.tts_model.sample_rate)
+        current_ref = seed_ref_path
+      elif use_self_seeding and current_ref and seed_prompt_text:
+        # 后续段：ref_continuation
+        wav = model.generate(
+          text=processed_chunk,
+          cfg_value=cfg,
+          inference_timesteps=steps,
+          reference_wav_path=current_ref,
+          prompt_wav_path=seed_ref_path,
+          prompt_text=seed_prompt_text,
+          normalize=normalize,
+          denoise=denoise,
+        )
+      else:
+        wav = model.generate(
+          text=chunk_text,
+          cfg_value=cfg,
+          inference_timesteps=steps,
+          normalize=normalize,
+          denoise=denoise,
+        )
+
+      chunk_elapsed = time.time() - chunk_start
+      chunk_chars = len(processed_chunk)
+      synthesis_elapsed_total += chunk_elapsed
+      synthesis_chars_total += chunk_chars
+      with _avg_lock:
+        if synthesis_chars_total > 0:
+          avg = synthesis_elapsed_total / synthesis_chars_total
+          if _global_avg_seconds_per_char > 0:
+            _global_avg_seconds_per_char = (
+              _global_avg_seconds_per_char * 0.7 + avg * 0.3
+            )
+          else:
+            _global_avg_seconds_per_char = avg
+
+      sr = model.tts_model.sample_rate
+      audio_segments.append(wav)
+    except Exception as e:
+      with task_lock:
+        task_results[job_id] = {"status": "error", "message": f"第 {i} 段合成失败: {e}"}
+      return task_results[job_id]
+
+  # 拼接
+  if len(audio_segments) > 1:
+    with task_lock:
+      r = task_results[job_id]
+      now = time.time()
+      r.update(
+        {
+          "status": "synthesizing",
+          "progress": 90,
+          "display_progress": 90,
+          "message": "正在拼接音频...",
+          "elapsed_seconds": now - r.get("start_time", now),
+          "remaining_seconds": 0,
+        }
+      )
+      task_results[job_id] = r
+    audio_segments = normalize_segments(audio_segments, target_mode="mean")
+    merged = crossfade_concat(audio_segments, sr, fade_ms=crossfade)
+    merged = peak_normalize(merged, peak=0.95)
+  else:
+    merged = audio_segments[0] if audio_segments else np.array([])
+
+  # 输出采样率重采样（可选）
+  out_sr = sr
+  if target_sr and str(target_sr).lower() not in ("native", "none", ""):
+    try:
+      tgt = int(target_sr)
+      if tgt > 0 and tgt != sr:
+        merged = resample_audio(merged, sr, tgt)
+        out_sr = tgt
+    except Exception as e:
+      print(f"[VoxCPM2] 重采样失败，使用原生采样率: {e}")
+
+  duration = len(merged) / out_sr if len(merged) else 0
+
+  # 保存（文件名使用 ASCII，避免中文名导致 FileResponse 头编码失败）
+  safe_name = (
+    "voxcpm_"
+    + datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    + "_"
+    + uuid.uuid4().hex[:6]
+  )
+  out_dir = _output_dir / "VoxCPM_Outputs"
+  out_dir.mkdir(parents=True, exist_ok=True)
+  out_wav = out_dir / f"{safe_name}.wav"
+  try:
+    sf.write(str(out_wav), merged, out_sr)
+  except Exception:
+    # soundfile 不可用时的降级
+    try:
+      import wave
+
+      with wave.open(str(out_wav), "wb") as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(2)
+        wf.setframerate(sr)
+        wf.writeframes((merged * 32767).astype(np.int16).tobytes())
+    except Exception as ew:
+      with task_lock:
+        task_results[job_id] = {"status": "error", "message": f"保存音频失败: {ew}"}
+      return task_results[job_id]
+
+  with task_lock:
+    r = task_results[job_id]
+    now = time.time()
+    r.update(
+      {
+        "status": "done",
+        "progress": 100,
+        "display_progress": 100,
+        "message": f"合成完成！时长 {duration:.1f}s",
+        "output_wav": out_wav.name,
+        "duration": duration,
+        "sample_rate": out_sr,
+        "num_chunks": total_chunks,
+        "elapsed_seconds": now - r.get("start_time", now),
+        "remaining_seconds": 0,
+      }
+    )
+    task_results[job_id] = r
+
+  return task_results[job_id]
 
 
 def submit_task(args: dict) -> str:
-    job_id = str(uuid.uuid4())[:8]
-    args["job_id"] = job_id
-    text = args.get("text", "")
-    # 用历史每字符耗时预估，无历史则用保守默认值；未加载模型时预留加载时间
-    with _avg_lock:
-        per_char = _global_avg_seconds_per_char if _global_avg_seconds_per_char > 0 else 0.35
-    base_load = 25.0 if not _model_loaded else 0.0
-    estimated = max(10.0, base_load + len(text) * per_char)
-    task_queue.put(args)
-    with task_lock:
-        task_results[job_id] = {
-            "status": "queued",
-            "progress": 0,
-            "display_progress": 0,
-            "message": "任务已排队",
-            "start_time": time.time(),
-            "estimated_total_seconds": estimated,
-            "elapsed_seconds": 0,
-            "remaining_seconds": estimated,
-        }
-    return job_id
+  job_id = str(uuid.uuid4())[:8]
+  args["job_id"] = job_id
+  text = args.get("text", "")
+  # 用历史每字符耗时预估，无历史则用保守默认值；未加载模型时预留加载时间
+  with _avg_lock:
+    per_char = (
+      _global_avg_seconds_per_char if _global_avg_seconds_per_char > 0 else 0.35
+    )
+  base_load = 25.0 if not _model_loaded else 0.0
+  estimated = max(10.0, base_load + len(text) * per_char)
+  task_queue.put(args)
+  with task_lock:
+    task_results[job_id] = {
+      "status": "queued",
+      "progress": 0,
+      "display_progress": 0,
+      "message": "任务已排队",
+      "start_time": time.time(),
+      "estimated_total_seconds": estimated,
+      "elapsed_seconds": 0,
+      "remaining_seconds": estimated,
+    }
+  return job_id
 
 
 # ── 后台工作线程 ──────────────────────────────────────────
 def worker_loop():
-    while True:
-        args = task_queue.get()
-        if args is None:
-            break
-        try:
-            synthesize(args)
-        except Exception as e:
-            with task_lock:
-                jid = args.get("job_id", "unknown")
-                task_results[jid] = {"status": "error", "message": str(e)}
+  while True:
+    args = task_queue.get()
+    if args is None:
+      break
+    try:
+      synthesize(args)
+    except Exception as e:
+      with task_lock:
+        jid = args.get("job_id", "unknown")
+        task_results[jid] = {"status": "error", "message": str(e)}
 
 
 worker_thread = threading.Thread(target=worker_loop, daemon=True)
@@ -1124,18 +1234,19 @@ worker_thread.start()
 #  Web UI（嵌入 HTML）
 # ══════════════════════════════════════════════════════════
 
+
 def get_app_version(fallback="5.3"):
-    """读取 app/version.txt 作为统一版本号数据源（单一可信来源）；
-    缺失或损坏时回退 fallback，保证程序仍可启动。"""
-    try:
-        p = Path(__file__).resolve().parent.parent / "version.txt"
-        if p.exists():
-            v = p.read_text(encoding="utf-8-sig").strip()
-            if v:
-                return v
-    except Exception:
-        pass
-    return fallback
+  """读取 app/version.txt 作为统一版本号数据源（单一可信来源）；
+  缺失或损坏时回退 fallback，保证程序仍可启动。"""
+  try:
+    p = Path(__file__).resolve().parent.parent / "version.txt"
+    if p.exists():
+      v = p.read_text(encoding="utf-8-sig").strip()
+      if v:
+        return v
+  except Exception:
+    pass
+  return fallback
 
 
 VERSION = get_app_version()
@@ -2228,11 +2339,22 @@ HTML_CONTENT = r"""
       </div>
     </div>
 
-    <!-- 音色描述 + 示例 -->
+    <!-- 音色描述 + 示例 + 音色试听（右下红框区：按钮 + 波形 + 试听播放器） -->
     <div class="control-card">
       <h3>音色描述（可选，留空使用左侧预设；也可写方言/角色）</h3>
-      <textarea id="controlText" class="prompt-text-input" placeholder="例如：25岁温柔甜美女声，带一点播音腔。或『深宫太后，威严庄重』『河南方言大叔』"></textarea>
-      <div class="example-chips" id="exampleChips"></div>
+      <div style="display:flex;gap:12px;align-items:stretch;flex-wrap:wrap;">
+        <div style="flex:1;min-width:0;">
+          <textarea id="controlText" class="prompt-text-input" placeholder="例如：25岁温柔甜美女声，带一点播音腔。或『深宫太后，威严庄重』『河南方言大叔』"></textarea>
+          <div class="example-chips" id="exampleChips"></div>
+        </div>
+        <div style="flex:0 0 230px;display:flex;flex-direction:column;gap:8px;padding:10px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;box-sizing:border-box;">
+          <div style="font-size:12px;font-weight:600;">🎧 音色试听</div>
+          <button id="voicePreviewBtn" class="mode-btn" style="width:100%" onclick="runVoicePreview()" title="以当前音色设置（预设/描述/参考音频/模式）生成一段短句，试听效果">▶ 试听当前音色</button>
+          <canvas id="voicePreviewWave" width="206" height="48" style="width:100%;height:48px;background:var(--surface);border-radius:6px;"></canvas>
+          <audio id="voicePreviewAudio" controls preload="none" style="width:100%;display:none"></audio>
+          <div id="voicePreviewStatus" class="param-desc" style="min-height:16px">点试听生成一段短句，预览当前音色效果</div>
+        </div>
+      </div>
     </div>
 
     <!-- 参考音频 -->
@@ -2391,7 +2513,13 @@ HTML_CONTENT = r"""
       </div>
     </div>
     <div class="param-desc" id="normRulesPathHint" style="margin-bottom:8px">加载中...</div>
-    <textarea id="normRulesContent" spellcheck="false" style="width:100%;height:340px;font-family:var(--font-mono);font-size:12px;line-height:1.6;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:10px;padding:10px;box-sizing:border-box;resize:vertical;white-space:pre" placeholder="（文件为空或不存在，保存时将新建）"></textarea>
+    <!-- 内置规则只读速览（来自 text_norm_cn.builtin_rule_summary；让用户知道已覆盖哪些场景，便于在下方补充） -->
+    <details id="normRulesBuiltinDetails" style="margin-bottom:10px;border:1px solid var(--border);border-radius:8px;background:var(--surface2);">
+      <summary style="padding:8px 12px;font-size:12px;font-weight:600;cursor:pointer;user-select:none;">📖 内置规则速览（只读，先看已覆盖哪些场景，再在下方用户规则里补空白）</summary>
+      <pre id="normRulesBuiltin" style="margin:0;padding:10px 12px;font-size:11px;line-height:1.8;white-space:pre-wrap;word-break:break-all;font-family:var(--font-mono);max-height:240px;overflow:auto;color:var(--text);opacity:.85;">加载中...</pre>
+    </details>
+    <div class="param-desc" style="margin-bottom:6px;font-weight:600">用户规则（num_norm_extra.txt，可编辑；先于内置数字规则执行）</div>
+    <textarea id="normRulesContent" spellcheck="false" style="width:100%;height:260px;font-family:var(--font-mono);font-size:12px;line-height:1.6;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:10px;padding:10px;box-sizing:border-box;resize:vertical;white-space:pre" placeholder="（文件为空或不存在，保存时将新建）"></textarea>
     <div class="param-desc" style="margin-top:8px">每行一条规则，# 开头为注释。两种类型：<code>原文 =&gt; 读法</code>（如 <code>3.14 =&gt; 三点一四</code>）；<code>?正则 =&gt; 替换</code>（如 <code>?0+(\d) =&gt; \1</code>，支持 \1 反向引用）。建议把读法直接写成中文，内置数字规则就不会再处理它；坏行会被自动跳过并警告，不会崩合成。保存即生效（自动热加载，无需重启）。</div>
     <div class="modal-actions">
       <button class="btn-secondary" onclick="closeNormRulesEditor()">取消</button>
@@ -2698,6 +2826,56 @@ function onPromptInput() {
   const ultimate = v.length > 0 && currentMode === 'fixed_clone';
   document.getElementById('voiceGrid').style.opacity = ultimate ? '0.4' : '1';
   document.getElementById('ultimateHint').style.display = ultimate ? 'block' : 'none';
+}
+
+// ── 音色试听：以当前音色设置生成一段短句 + 波形显示（/api/voice-preview）──
+async function runVoicePreview() {
+  const btn = document.getElementById('voicePreviewBtn');
+  const status = document.getElementById('voicePreviewStatus');
+  const audio = document.getElementById('voicePreviewAudio');
+  btn.disabled = true;
+  status.textContent = '正在生成试听样本...';
+  const fd = new FormData();
+  fd.append('voice', selectedVoice);
+  fd.append('control_text', document.getElementById('controlText').value.trim());
+  fd.append('mode', currentMode);
+  fd.append('cfg', document.getElementById('cfgSlider').value);
+  fd.append('steps', document.getElementById('stepsSlider').value);
+  fd.append('denoise', document.getElementById('denoiseToggle').checked ? 'true' : 'false');
+  if (currentMode === 'fixed_clone') {
+    if (refFile) fd.append('reference_wav', refFile);
+    else if (currentRefPath) fd.append('reference_path', currentRefPath);
+  }
+  try {
+    const r = await fetch('/api/voice-preview', { method: 'POST', body: fd });
+    const d = await r.json();
+    if (!d.ok) { status.textContent = d.error || '试听失败'; return; }
+    drawPreviewWave(d.peaks || []);
+    audio.src = d.wav_url;
+    audio.style.display = 'block';
+    try { await audio.play(); } catch (e) { status.textContent = '（浏览器限制自动播放，请点下方 ▶ 按钮）'; }
+    status.textContent = '已生成试听样本（约 ' + d.duration + ' 秒），波形见上；点 ▶ 可回放';
+  } catch (e) {
+    status.textContent = '试听失败: ' + (e.message || e);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function drawPreviewWave(peaks) {
+  const c = document.getElementById('voicePreviewWave');
+  if (!c) return;
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, c.width, c.height);
+  const n = peaks.length;
+  if (!n) return;
+  const cw = c.width / n;
+  ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--accent') || '#6c8eff';
+  for (let i = 0; i < n; i++) {
+    const p = peaks[i] || 0;
+    const h = Math.max(2, p * (c.height - 4));
+    ctx.fillRect(i * cw + 1, (c.height - h) / 2, Math.max(1, cw - 2), h);
+  }
 }
 
 function bindSliders() {
@@ -3473,9 +3651,11 @@ async function openNormRulesEditor() {
   const mask = document.getElementById('normRulesModal');
   const hint = document.getElementById('normRulesPathHint');
   const box = document.getElementById('normRulesContent');
+  const builtin = document.getElementById('normRulesBuiltin');
   mask.style.display = 'flex';
   hint.textContent = '加载中...';
   box.value = '';
+  if (builtin) builtin.textContent = '加载中...';
   try {
     const r = await fetch('/api/norm-rules');
     const d = await r.json();
@@ -3483,6 +3663,11 @@ async function openNormRulesEditor() {
       ? '文件：' + d.path + '（' + (d.rule_count || 0) + ' 条生效，保存即热加载，无需重启）'
       : '规则文件不存在，保存时将新建：' + (d.path || '');
     box.value = d.content || '';
+    if (builtin) {
+      builtin.textContent = d.builtin || '（内置规则速览暂不可用）';
+      const det = document.getElementById('normRulesBuiltinDetails');
+      if (det) det.open = false; // 每次打开弹窗默认收起内置速览，避免遮住用户规则编辑区
+    }
   } catch (e) {
     hint.textContent = '读取失败: ' + (e.message || e);
   }
@@ -3744,577 +3929,768 @@ if (document.readyState === 'loading') {
 #  FastAPI 路由
 # ══════════════════════════════════════════════════════════
 if HAS_WEB:
-    app = FastAPI(title="VoxCPM2 Web UI")
+  app = FastAPI(title="VoxCPM2 Web UI")
 
-    @app.get("/")
-    async def index():
-        return HTMLResponse(
-            content=HTML_CONTENT.replace("{VERSION}", VERSION),
-            media_type="text/html",
-            headers={"Cache-Control": "no-store", "Pragma": "no-cache"},
+  @app.get("/")
+  async def index():
+    return HTMLResponse(
+      content=HTML_CONTENT.replace("{VERSION}", VERSION),
+      media_type="text/html",
+      headers={"Cache-Control": "no-store", "Pragma": "no-cache"},
+    )
+
+  @app.get("/VoxCPM_App.ico")
+  async def serve_icon():
+    base = Path(__file__).resolve().parent
+    for cand in [
+      base.parent / "VoxCPM_App.ico",
+      base.parent.parent / "installer" / "assets" / "VoxCPM_App.ico",
+    ]:
+      if cand.exists():
+        return FileResponse(str(cand))
+    raise HTTPException(404, "icon not found")
+
+  @app.get("/api/ping")
+  async def ping():
+    return {"ok": True}
+
+  @app.get("/api/voices")
+  async def list_voices():
+    return JSONResponse({"voices": VOICE_PRESETS})
+
+  def _build_lora_status() -> dict:
+    """汇总 LoRA 的真实挂载状态，供前端状态面板如实展示（不再谎称「已挂载」）。
+
+    状态机：
+      not_configured  未填写 LoRA 路径
+      pending         已配置，但模型尚未（重新）加载 → 下次合成/点「加载模型」时挂载
+      ok              已加载且 Loaded N>0 个参数 → 真正生效
+      failed          resolve 失败（路径错/配置坏）或 Loaded 0（rank/形状不匹配）
+    """
+    global _lora_load_info, _lora_resolve_error
+    if not _lora_weights_path:
+      return {
+        "configured": False,
+        "status": "not_configured",
+        "path": "",
+        "loaded": None,
+        "skipped": None,
+        "resolve_error": "",
+      }
+    if _lora_resolve_error:
+      return {
+        "configured": True,
+        "status": "failed",
+        "path": _lora_weights_path,
+        "loaded": None,
+        "skipped": None,
+        "resolve_error": _lora_resolve_error,
+      }
+    if _lora_load_info is None:
+      return {
+        "configured": True,
+        "status": "pending",
+        "path": _lora_weights_path,
+        "loaded": None,
+        "skipped": None,
+        "resolve_error": "",
+      }
+    loaded, skipped = _lora_load_info
+    if loaded and loaded > 0:
+      return {
+        "configured": True,
+        "status": "ok",
+        "path": _lora_weights_path,
+        "loaded": loaded,
+        "skipped": skipped,
+        "resolve_error": "",
+      }
+    return {
+      "configured": True,
+      "status": "failed",
+      "path": _lora_weights_path,
+      "loaded": loaded,
+      "skipped": skipped,
+      "resolve_error": "LoRA 权重已解析但加载了 0 个参数（rank/形状不匹配？）",
+    }
+
+  @app.get("/api/paths")
+  async def get_paths():
+    import torch
+
+    with state_lock:
+      state = "loading" if _model_loading else ("ready" if _model_loaded else "idle")
+      sr = (
+        _cached_model.tts_model.sample_rate
+        if (_model_loaded and _cached_model)
+        else None
+      )
+      denoiser = _denoiser_available
+    model_dir = resolve_model_dir()
+    out_sub = _output_dir / "VoxCPM_Outputs"
+    return JSONResponse(
+      {
+        "app_dir": str(Path(__file__).resolve().parent),
+        "model_dir": model_dir,
+        "output_dir": str(_output_dir),
+        "output_subdir": str(out_sub),
+        "lora_weights_path": _lora_weights_path,
+        "lora": _build_lora_status(),
+        "python_version": ".".join(map(str, sys.version_info[:3])),
+        "cuda_available": torch.cuda.is_available(),
+        "device": _device_pref
+        if _device_pref
+        else ("cuda" if torch.cuda.is_available() else "cpu"),
+        "sample_rate": sr,
+        "model_loaded": _model_loaded,
+        "model_state": state,
+        "denoiser_available": denoiser,
+      }
+    )
+
+  @app.get("/api/status")
+  async def status():
+    with state_lock:
+      state = "loading" if _model_loading else ("ready" if _model_loaded else "idle")
+      err = _model_error
+    with _dl_lock:
+      dl = dict(_dl_state)
+    return JSONResponse(
+      {
+        "state": state,
+        "error": err,
+        "model_present": model_present(),
+        "download_available": HAS_DL,
+        "download": dl,
+        "lora": _build_lora_status(),
+        "model_dir": resolve_model_dir(),
+        "models_dir_env": os.environ.get("VOXCPM_MODELS_DIR", ""),
+      }
+    )
+
+  @app.post("/api/download-model")
+  async def api_download_model_start():
+    global _dl_thread
+    with _dl_lock:
+      st = _dl_state.get("status")
+      if st in ("scanning", "downloading"):
+        return JSONResponse({"ok": False, "message": "正在下载中，请稍候。"})
+      if model_present():
+        # 模型已存在：执行真实校验，返回每个文件的状态，而不是一句空话
+        if HAS_DL and _dlmod is not None:
+          files, missing, all_ok = verify_model_files()
+          problems = len(missing) + sum(1 for x in files if not x["ok"])
+          msg = (
+            f"模型文件完整 ✓（共 {len(files)} 个，校验通过）"
+            if all_ok
+            else f"校验发现 {problems} 处异常，建议重新下载模型"
+          )
+          return JSONResponse(
+            {
+              "ok": True,
+              "verified": True,
+              "all_ok": all_ok,
+              "message": msg,
+              "files": files,
+              "missing": missing,
+            }
+          )
+        return JSONResponse({"ok": False, "message": "模型已存在，无需下载。"})
+      _dl_state.update(
+        {
+          "status": "scanning",
+          "phase": "scan",
+          "file": None,
+          "file_index": 0,
+          "file_count": 0,
+          "downloaded": 0,
+          "total": None,
+          "percent": None,
+          "overall_percent": 0,
+          "message": "正在检测模型文件…",
+          "started_at": time.time(),
+          "finished_at": None,
+        }
+      )
+    t = threading.Thread(target=_dl_run, daemon=True)
+    t.start()
+    with _dl_lock:
+      _dl_thread[0] = t
+    return JSONResponse({"ok": True, "message": "已开始下载。"})
+
+  @app.get("/api/download-model/status")
+  async def api_download_model_status():
+    with _dl_lock:
+      return JSONResponse(dict(_dl_state))
+
+  @app.post("/api/download-model/cancel")
+  async def api_download_model_cancel():
+    with _dl_lock:
+      st = _dl_state.get("status")
+      if st not in ("scanning", "downloading"):
+        return JSONResponse({"ok": False, "message": "当前没有进行中的下载。"})
+      _dl_state["status"] = "cancelled"
+      _dl_state["message"] = "已取消下载。可重新点击下载，已下载部分将自动续传。"
+      _dl_state["finished_at"] = time.time()
+    return JSONResponse(
+      {"ok": True, "message": "已请求取消；下载线程会在当前文件后停止。"}
+    )
+
+  @app.post("/api/load_model")
+  async def load_model_endpoint():
+    with state_lock:
+      if _model_loading:
+        return JSONResponse({"ok": False, "error": "模型正在加载中，请稍候"})
+      if _model_loaded and _cached_model is not None:
+        return JSONResponse({"ok": True, "message": "模型已加载"})
+    threading.Thread(
+      target=lambda: _load_model_background(force=True), daemon=True
+    ).start()
+    return JSONResponse({"ok": True, "message": "模型加载任务已启动"})
+
+  @app.post("/api/unload_model")
+  async def unload_model_endpoint():
+    unload_model()
+    return JSONResponse({"ok": True, "message": "模型已卸载"})
+
+  @app.get("/api/console_status")
+  async def console_status():
+    return JSONResponse(
+      {"visible": _is_console_visible(), "supported": sys.platform == "win32"}
+    )
+
+  @app.post("/api/toggle_console")
+  async def toggle_console():
+    ok = _toggle_console()
+    visible = _is_console_visible()
+    return JSONResponse(
+      {
+        "ok": ok,
+        "visible": visible,
+        "message": "命令行窗口已显示" if visible else "命令行窗口已收起",
+      }
+    )
+
+  @app.get("/api/status/{job_id}")
+  async def job_status(job_id: str):
+    with task_lock:
+      result = task_results.get(
+        job_id, {"status": "not_found", "message": "任务不存在"}
+      )
+      result = dict(result)
+    status = result.get("status")
+    if status in ("queued", "loading_model", "synthesizing"):
+      now = time.time()
+      start = result.get("start_time", now)
+      elapsed = now - start
+      estimated = result.get("estimated_total_seconds", elapsed + 1)
+      # 如果实际耗时已接近或超过预估，动态放宽
+      if estimated <= elapsed * 0.95:
+        estimated = elapsed * 1.2
+      actual = result.get("progress", 0)
+      # 基于时间平滑模拟当前进度，让进度条每 1-5% 跳动
+      simulated = min(89, 5 + 80 * elapsed / estimated) if estimated > 0 else actual
+      display = min(89, max(actual, simulated))
+      # 至少比上次显示多 1%，保证肉眼可见跳动
+      last_display = result.get("display_progress", 0)
+      display = min(89, max(int(display), last_display + 1))
+      result["display_progress"] = display
+      result["elapsed_seconds"] = elapsed
+      result["remaining_seconds"] = max(0, estimated - elapsed)
+    return JSONResponse(result)
+
+  @app.post("/api/set_config")
+  async def set_config(req: Request):
+    global _output_dir, _lora_weights_path
+    try:
+      data = await req.json()
+    except Exception:
+      data = {}
+    model_dir = (data.get("model_dir") or "").strip()
+    output_dir = (data.get("output_dir") or "").strip()
+    lora_weights_path = (data.get("lora_weights_path") or "").strip()
+    if output_dir:
+      try:
+        p = Path(output_dir)
+        p.mkdir(parents=True, exist_ok=True)
+        _output_dir = p
+      except Exception as e:
+        return JSONResponse({"ok": False, "error": f"输出目录无效: {e}"})
+    if model_dir:
+      # 自动修正到包含 config.json 的有效路径；若用户选错目录，会回退到分发版默认路径
+      resolved = resolve_model_dir(model_dir)
+      os.environ["VOXCPM_MODEL_DIR"] = resolved
+      os.environ["VOXCPM_MODELS_DIR"] = resolved
+      # 触发下次合成重载模型
+      with state_lock:
+        _model_loaded = False
+        _cached_model = None
+        _model_loading = False
+    if lora_weights_path != _lora_weights_path:
+      _lora_weights_path = lora_weights_path
+      # LoRA 权重变化必然需要重载模型（挂载/卸载 LoRA 都改模型结构）
+      with state_lock:
+        _model_loaded = False
+        _cached_model = None
+        _model_loading = False
+    _save_config()
+    return JSONResponse(
+      {
+        "ok": True,
+        "model_dir": resolve_model_dir(),
+        "output_dir": str(_output_dir),
+        "lora_weights_path": _lora_weights_path,
+      }
+    )
+
+  @app.post("/api/set_device")
+  async def set_device(req: Request):
+    global _device_pref
+    try:
+      data = await req.json()
+    except Exception:
+      data = {}
+    dev = (data.get("device") or "").strip().lower()
+    if dev not in ("cuda", "cpu"):
+      return JSONResponse({"ok": False, "error": "device 必须是 cuda 或 cpu"})
+    _device_pref = dev
+    # 触发下次合成在指定设备上重载模型
+    with state_lock:
+      _model_loaded = False
+      _cached_model = None
+      _model_loading = False
+    return JSONResponse({"ok": True, "device": _device_pref})
+
+  def _win_select_folder(title: str = "选择文件夹") -> str | None:
+    """Windows 原生文件夹选择对话框（ctypes，无需 tkinter）。"""
+    if sys.platform != "win32":
+      return None
+    import ctypes
+    from ctypes import wintypes
+
+    BIF_RETURNONLYFSDIRS = 0x00000001
+    BIF_NEWDIALOGSTYLE = 0x00000040
+
+    class BROWSEINFO(ctypes.Structure):
+      _fields_ = [
+        ("hwndOwner", wintypes.HWND),
+        ("pidlRoot", wintypes.LPCVOID),
+        ("pszDisplayName", wintypes.LPWSTR),
+        ("lpszTitle", wintypes.LPCWSTR),
+        ("ulFlags", wintypes.UINT),
+        ("lpfn", wintypes.LPCVOID),
+        ("lParam", wintypes.LPARAM),
+        ("iImage", wintypes.INT),
+      ]
+
+    Ole32 = ctypes.OleDLL("ole32")
+    Shell32 = ctypes.windll.shell32
+    User32 = ctypes.windll.user32
+    Ole32.CoInitialize(None)
+    try:
+      bi = BROWSEINFO()
+      display_name = ctypes.create_unicode_buffer(260)
+      # 以当前前台窗口作为父窗口，避免文件夹选择对话框被全屏浏览器压在底部
+      owner = User32.GetForegroundWindow()
+      bi.hwndOwner = owner
+      bi.pidlRoot = None
+      bi.pszDisplayName = ctypes.cast(ctypes.addressof(display_name), wintypes.LPWSTR)
+      bi.lpszTitle = title
+      bi.ulFlags = BIF_RETURNONLYFSDIRS | BIF_NEWDIALOGSTYLE
+      bi.lpfn = None
+      bi.lParam = 0
+      bi.iImage = 0
+      # 弹出前强制父窗口置前，进一步保证选择框位于最顶层
+      if owner:
+        User32.SetForegroundWindow(owner)
+      pidl = Shell32.SHBrowseForFolderW(ctypes.byref(bi))
+      if not pidl:
+        return None
+      path = ctypes.create_unicode_buffer(260)
+      if Shell32.SHGetPathFromIDListW(pidl, path):
+        Ole32.CoTaskMemFree(pidl)
+        return path.value
+      Ole32.CoTaskMemFree(pidl)
+      return None
+    finally:
+      Ole32.CoUninitialize()
+
+  @app.get("/api/select_folder")
+  async def select_folder(title: str = "选择文件夹"):
+    if sys.platform != "win32":
+      return JSONResponse({"ok": False, "error": "本地目录选择仅支持 Windows"})
+    loop = asyncio.get_event_loop()
+    path = await loop.run_in_executor(None, _win_select_folder, title)
+    return JSONResponse(
+      {"ok": bool(path), "path": path, "error": None if path else "未选择目录"}
+    )
+
+  @app.post("/api/tts")
+  async def tts_request(
+    text: str = Form(...),
+    voice: str = Form("default"),
+    control_text: str = Form(""),
+    mode: str = Form("voice_design"),
+    cfg: float = Form(2.5),
+    steps: int = Form(15),
+    crossfade: int = Form(80),
+    chunk_size: int = Form(180),
+    normalize: str = Form("true"),
+    phoneme_mode: str = Form("false"),
+    denoise: str = Form("false"),
+    target_sr: str = Form("native"),
+    prompt_text: str = Form(""),
+    reference_path: str = Form(""),
+    reference_wav: UploadFile = File(None),
+  ):
+    if not text.strip():
+      raise HTTPException(400, "文本不能为空")
+
+    # 保存上传的参考音频；若提供了服务器端已有音频路径（reference_path，
+    # 与 CLI --reference 对齐）则优先使用，避免重复上传
+    ref_wav_path = None
+    if mode == "fixed_clone":
+      if reference_path and reference_path.strip():
+        ref_wav_path = reference_path.strip()
+        if not os.path.isfile(ref_wav_path):
+          raise HTTPException(400, f"参考音频路径不存在: {ref_wav_path}")
+      elif reference_wav:
+        suffix = Path(reference_wav.filename).suffix or ".wav"
+        ref_wav_path = str(TEMP_DIR / f"ref_{uuid.uuid4().hex[:8]}{suffix}")
+        # 同上：写上传参考音频前确保 TEMP_DIR 仍存在
+        TEMP_DIR.mkdir(parents=True, exist_ok=True)
+        with open(ref_wav_path, "wb") as f:
+          shutil.copyfileobj(reference_wav.file, f)
+
+    job_id = submit_task(
+      {
+        "text": text,
+        "voice": voice,
+        "control_text": control_text,
+        "mode": mode,
+        "cfg": cfg,
+        "steps": steps,
+        "crossfade": crossfade,
+        "chunk_size": chunk_size,
+        "normalize": normalize,
+        "phoneme_mode": phoneme_mode,
+        "denoise": denoise,
+        "target_sr": target_sr,
+        "prompt_text": prompt_text,
+        "reference_wav": ref_wav_path,
+      }
+    )
+    return JSONResponse({"job_id": job_id, "status": "queued"})
+
+  # ── 音色试听：以当前音色设置生成短样本（音频 + 波形峰值），与主任务同一音色口径 ──
+  _VOICE_PREVIEW_TEXT = "你好，这是一段当前音色的试听，希望你喜欢。"
+
+  @app.post("/api/voice-preview")
+  async def voice_preview(
+    voice: str = Form("default"),
+    control_text: str = Form(""),
+    mode: str = Form("voice_design"),
+    cfg: float = Form(2.5),
+    steps: int = Form(15),
+    denoise: str = Form("false"),
+    reference_path: str = Form(""),
+    reference_wav: UploadFile = File(None),
+  ):
+    """音色试听：用与主任务完全一致的音色解析（预设/描述/参考音频）合成一段固定短文本，
+    落盘 TEMP_DIR（经 /api/audio/<文件名> 取回），返回 64-bin 波形峰值供前端画简波形。
+    参考音频口径与 /api/tts 相同：优先服务器端路径，其次上传文件。
+    模型未加载时返回 ok=False + 明确错误（nomodel 版需先下载模型）。"""
+    use_denoise = denoise in ("true", "1", "yes")
+
+    def _gen():
+      model = load_model()
+      if model is None:
+        raise RuntimeError(
+            f"模型未加载：{_model_error or '请先点击右上角「加载模型」'}"
         )
-
-    @app.get("/VoxCPM_App.ico")
-    async def serve_icon():
-        base = Path(__file__).resolve().parent
-        for cand in [base.parent / "VoxCPM_App.ico",
-                     base.parent.parent / "installer" / "assets" / "VoxCPM_App.ico"]:
-            if cand.exists():
-                return FileResponse(str(cand))
-        raise HTTPException(404, "icon not found")
-
-    @app.get("/api/ping")
-    async def ping():
-        return {"ok": True}
-
-    @app.get("/api/voices")
-    async def list_voices():
-        return JSONResponse({"voices": VOICE_PRESETS})
-
-    def _build_lora_status() -> dict:
-        """汇总 LoRA 的真实挂载状态，供前端状态面板如实展示（不再谎称「已挂载」）。
-
-        状态机：
-          not_configured  未填写 LoRA 路径
-          pending         已配置，但模型尚未（重新）加载 → 下次合成/点「加载模型」时挂载
-          ok              已加载且 Loaded N>0 个参数 → 真正生效
-          failed          resolve 失败（路径错/配置坏）或 Loaded 0（rank/形状不匹配）
-        """
-        global _lora_load_info, _lora_resolve_error
-        if not _lora_weights_path:
-            return {"configured": False, "status": "not_configured",
-                    "path": "", "loaded": None, "skipped": None, "resolve_error": ""}
-        if _lora_resolve_error:
-            return {"configured": True, "status": "failed", "path": _lora_weights_path,
-                    "loaded": None, "skipped": None, "resolve_error": _lora_resolve_error}
-        if _lora_load_info is None:
-            return {"configured": True, "status": "pending", "path": _lora_weights_path,
-                    "loaded": None, "skipped": None, "resolve_error": ""}
-        loaded, skipped = _lora_load_info
-        if loaded and loaded > 0:
-            return {"configured": True, "status": "ok", "path": _lora_weights_path,
-                    "loaded": loaded, "skipped": skipped, "resolve_error": ""}
-        return {"configured": True, "status": "failed", "path": _lora_weights_path,
-                "loaded": loaded, "skipped": skipped,
-                "resolve_error": "LoRA 权重已解析但加载了 0 个参数（rank/形状不匹配？）"}
-
-    @app.get("/api/paths")
-    async def get_paths():
-        import torch
-        with state_lock:
-            state = "loading" if _model_loading else ("ready" if _model_loaded else "idle")
-            sr = _cached_model.tts_model.sample_rate if (_model_loaded and _cached_model) else None
-            denoiser = _denoiser_available
-        model_dir = resolve_model_dir()
-        out_sub = _output_dir / "VoxCPM_Outputs"
-        return JSONResponse({
-            "app_dir": str(Path(__file__).resolve().parent),
-            "model_dir": model_dir,
-            "output_dir": str(_output_dir),
-            "output_subdir": str(out_sub),
-            "lora_weights_path": _lora_weights_path,
-            "lora": _build_lora_status(),
-            "python_version": ".".join(map(str, sys.version_info[:3])),
-            "cuda_available": torch.cuda.is_available(),
-            "device": _device_pref if _device_pref else ("cuda" if torch.cuda.is_available() else "cpu"),
-            "sample_rate": sr,
-            "model_loaded": _model_loaded,
-            "model_state": state,
-            "denoiser_available": denoiser,
-        })
-
-    @app.get("/api/status")
-    async def status():
-        with state_lock:
-            state = "loading" if _model_loading else ("ready" if _model_loaded else "idle")
-            err = _model_error
-        with _dl_lock:
-            dl = dict(_dl_state)
-        return JSONResponse({"state": state, "error": err, "model_present": model_present(),
-                             "download_available": HAS_DL, "download": dl,
-                             "lora": _build_lora_status(),
-                             "model_dir": resolve_model_dir(),
-                             "models_dir_env": os.environ.get("VOXCPM_MODELS_DIR", "")})
-
-    @app.post("/api/download-model")
-    async def api_download_model_start():
-        global _dl_thread
-        with _dl_lock:
-            st = _dl_state.get("status")
-            if st in ("scanning", "downloading"):
-                return JSONResponse({"ok": False, "message": "正在下载中，请稍候。"})
-            if model_present():
-                # 模型已存在：执行真实校验，返回每个文件的状态，而不是一句空话
-                if HAS_DL and _dlmod is not None:
-                    files, missing, all_ok = verify_model_files()
-                    problems = len(missing) + sum(1 for x in files if not x["ok"])
-                    msg = ("模型文件完整 ✓（共 %d 个，校验通过）" % len(files)) if all_ok \
-                          else ("校验发现 %d 处异常，建议重新下载模型" % problems)
-                    return JSONResponse({"ok": True, "verified": True, "all_ok": all_ok,
-                                         "message": msg, "files": files, "missing": missing})
-                return JSONResponse({"ok": False, "message": "模型已存在，无需下载。"})
-            _dl_state.update({
-                "status": "scanning", "phase": "scan", "file": None,
-                "file_index": 0, "file_count": 0, "downloaded": 0, "total": None,
-                "percent": None, "overall_percent": 0,
-                "message": "正在检测模型文件…", "started_at": time.time(), "finished_at": None,
-            })
-        t = threading.Thread(target=_dl_run, daemon=True)
-        t.start()
-        with _dl_lock:
-            _dl_thread[0] = t
-        return JSONResponse({"ok": True, "message": "已开始下载。"})
-
-    @app.get("/api/download-model/status")
-    async def api_download_model_status():
-        with _dl_lock:
-            return JSONResponse(dict(_dl_state))
-
-    @app.post("/api/download-model/cancel")
-    async def api_download_model_cancel():
-        with _dl_lock:
-            st = _dl_state.get("status")
-            if st not in ("scanning", "downloading"):
-                return JSONResponse({"ok": False, "message": "当前没有进行中的下载。"})
-            _dl_state["status"] = "cancelled"
-            _dl_state["message"] = "已取消下载。可重新点击下载，已下载部分将自动续传。"
-            _dl_state["finished_at"] = time.time()
-        return JSONResponse({"ok": True, "message": "已请求取消；下载线程会在当前文件后停止。"})
-
-    @app.post("/api/load_model")
-    async def load_model_endpoint():
-        with state_lock:
-            if _model_loading:
-                return JSONResponse({"ok": False, "error": "模型正在加载中，请稍候"})
-            if _model_loaded and _cached_model is not None:
-                return JSONResponse({"ok": True, "message": "模型已加载"})
-        threading.Thread(target=lambda: _load_model_background(force=True), daemon=True).start()
-        return JSONResponse({"ok": True, "message": "模型加载任务已启动"})
-
-    @app.post("/api/unload_model")
-    async def unload_model_endpoint():
-        unload_model()
-        return JSONResponse({"ok": True, "message": "模型已卸载"})
-
-    @app.get("/api/console_status")
-    async def console_status():
-        return JSONResponse({"visible": _is_console_visible(), "supported": sys.platform == "win32"})
-
-    @app.post("/api/toggle_console")
-    async def toggle_console():
-        ok = _toggle_console()
-        visible = _is_console_visible()
-        return JSONResponse({"ok": ok, "visible": visible, "message": "命令行窗口已显示" if visible else "命令行窗口已收起"})
-
-    @app.get("/api/status/{job_id}")
-    async def job_status(job_id: str):
-        with task_lock:
-            result = task_results.get(job_id, {"status": "not_found", "message": "任务不存在"})
-            result = dict(result)
-        status = result.get("status")
-        if status in ("queued", "loading_model", "synthesizing"):
-            now = time.time()
-            start = result.get("start_time", now)
-            elapsed = now - start
-            estimated = result.get("estimated_total_seconds", elapsed + 1)
-            # 如果实际耗时已接近或超过预估，动态放宽
-            if estimated <= elapsed * 0.95:
-                estimated = elapsed * 1.2
-            actual = result.get("progress", 0)
-            # 基于时间平滑模拟当前进度，让进度条每 1-5% 跳动
-            simulated = min(89, 5 + 80 * elapsed / estimated) if estimated > 0 else actual
-            display = min(89, max(actual, simulated))
-            # 至少比上次显示多 1%，保证肉眼可见跳动
-            last_display = result.get("display_progress", 0)
-            display = min(89, max(int(display), last_display + 1))
-            result["display_progress"] = display
-            result["elapsed_seconds"] = elapsed
-            result["remaining_seconds"] = max(0, estimated - elapsed)
-        return JSONResponse(result)
-
-    @app.post("/api/set_config")
-    async def set_config(req: Request):
-        global _output_dir, _lora_weights_path
-        try:
-            data = await req.json()
-        except Exception:
-            data = {}
-        model_dir = (data.get("model_dir") or "").strip()
-        output_dir = (data.get("output_dir") or "").strip()
-        lora_weights_path = (data.get("lora_weights_path") or "").strip()
-        if output_dir:
-            try:
-                p = Path(output_dir)
-                p.mkdir(parents=True, exist_ok=True)
-                _output_dir = p
-            except Exception as e:
-                return JSONResponse({"ok": False, "error": f"输出目录无效: {e}"})
-        if model_dir:
-            # 自动修正到包含 config.json 的有效路径；若用户选错目录，会回退到分发版默认路径
-            resolved = resolve_model_dir(model_dir)
-            os.environ["VOXCPM_MODEL_DIR"] = resolved
-            os.environ["VOXCPM_MODELS_DIR"] = resolved
-            # 触发下次合成重载模型
-            with state_lock:
-                _model_loaded = False
-                _cached_model = None
-                _model_loading = False
-        if lora_weights_path != _lora_weights_path:
-            _lora_weights_path = lora_weights_path
-            # LoRA 权重变化必然需要重载模型（挂载/卸载 LoRA 都改模型结构）
-            with state_lock:
-                _model_loaded = False
-                _cached_model = None
-                _model_loading = False
-        _save_config()
-        return JSONResponse({
-            "ok": True,
-            "model_dir": resolve_model_dir(),
-            "output_dir": str(_output_dir),
-            "lora_weights_path": _lora_weights_path,
-        })
-
-    @app.post("/api/set_device")
-    async def set_device(req: Request):
-        global _device_pref
-        try:
-            data = await req.json()
-        except Exception:
-            data = {}
-        dev = (data.get("device") or "").strip().lower()
-        if dev not in ("cuda", "cpu"):
-            return JSONResponse({"ok": False, "error": "device 必须是 cuda 或 cpu"})
-        _device_pref = dev
-        # 触发下次合成在指定设备上重载模型
-        with state_lock:
-            _model_loaded = False
-            _cached_model = None
-            _model_loading = False
-        return JSONResponse({"ok": True, "device": _device_pref})
-
-    def _win_select_folder(title: str = "选择文件夹") -> Optional[str]:
-        """Windows 原生文件夹选择对话框（ctypes，无需 tkinter）。"""
-        if sys.platform != "win32":
-            return None
-        import ctypes
-        from ctypes import wintypes
-
-        BIF_RETURNONLYFSDIRS = 0x00000001
-        BIF_NEWDIALOGSTYLE = 0x00000040
-
-        class BROWSEINFO(ctypes.Structure):
-            _fields_ = [
-                ("hwndOwner", wintypes.HWND),
-                ("pidlRoot", wintypes.LPCVOID),
-                ("pszDisplayName", wintypes.LPWSTR),
-                ("lpszTitle", wintypes.LPCWSTR),
-                ("ulFlags", wintypes.UINT),
-                ("lpfn", wintypes.LPCVOID),
-                ("lParam", wintypes.LPARAM),
-                ("iImage", wintypes.INT),
-            ]
-
-        Ole32 = ctypes.OleDLL("ole32")
-        Shell32 = ctypes.windll.shell32
-        User32 = ctypes.windll.user32
-        Ole32.CoInitialize(None)
-        try:
-            bi = BROWSEINFO()
-            display_name = ctypes.create_unicode_buffer(260)
-            # 以当前前台窗口作为父窗口，避免文件夹选择对话框被全屏浏览器压在底部
-            owner = User32.GetForegroundWindow()
-            bi.hwndOwner = owner
-            bi.pidlRoot = None
-            bi.pszDisplayName = ctypes.cast(ctypes.addressof(display_name), wintypes.LPWSTR)
-            bi.lpszTitle = title
-            bi.ulFlags = BIF_RETURNONLYFSDIRS | BIF_NEWDIALOGSTYLE
-            bi.lpfn = None
-            bi.lParam = 0
-            bi.iImage = 0
-            # 弹出前强制父窗口置前，进一步保证选择框位于最顶层
-            if owner:
-                User32.SetForegroundWindow(owner)
-            pidl = Shell32.SHBrowseForFolderW(ctypes.byref(bi))
-            if not pidl:
-                return None
-            path = ctypes.create_unicode_buffer(260)
-            if Shell32.SHGetPathFromIDListW(pidl, path):
-                Ole32.CoTaskMemFree(pidl)
-                return path.value
-            Ole32.CoTaskMemFree(pidl)
-            return None
-        finally:
-            Ole32.CoUninitialize()
-
-    @app.get("/api/select_folder")
-    async def select_folder(title: str = "选择文件夹"):
-        if sys.platform != "win32":
-            return JSONResponse({"ok": False, "error": "本地目录选择仅支持 Windows"})
-        loop = asyncio.get_event_loop()
-        path = await loop.run_in_executor(None, _win_select_folder, title)
-        return JSONResponse({"ok": bool(path), "path": path, "error": None if path else "未选择目录"})
-
-    @app.post("/api/tts")
-    async def tts_request(
-        text: str = Form(...),
-        voice: str = Form("default"),
-        control_text: str = Form(""),
-        mode: str = Form("voice_design"),
-        cfg: float = Form(2.5),
-        steps: int = Form(15),
-        crossfade: int = Form(80),
-        chunk_size: int = Form(180),
-        normalize: str = Form("true"),
-        phoneme_mode: str = Form("false"),
-        denoise: str = Form("false"),
-        target_sr: str = Form("native"),
-        prompt_text: str = Form(""),
-        reference_path: str = Form(""),
-        reference_wav: UploadFile = File(None),
-    ):
-        if not text.strip():
-            raise HTTPException(400, "文本不能为空")
-
-        # 保存上传的参考音频；若提供了服务器端已有音频路径（reference_path，
-        # 与 CLI --reference 对齐）则优先使用，避免重复上传
-        ref_wav_path = None
-        if mode == "fixed_clone":
-            if reference_path and reference_path.strip():
-                ref_wav_path = reference_path.strip()
-                if not os.path.isfile(ref_wav_path):
-                    raise HTTPException(400, f"参考音频路径不存在: {ref_wav_path}")
-            elif reference_wav:
-                suffix = Path(reference_wav.filename).suffix or ".wav"
-                ref_wav_path = str(TEMP_DIR / f"ref_{uuid.uuid4().hex[:8]}{suffix}")
-                # 同上：写上传参考音频前确保 TEMP_DIR 仍存在
-                TEMP_DIR.mkdir(parents=True, exist_ok=True)
-                with open(ref_wav_path, "wb") as f:
-                    shutil.copyfileobj(reference_wav.file, f)
-
-        job_id = submit_task({
-            "text": text,
-            "voice": voice,
-            "control_text": control_text,
-            "mode": mode,
-            "cfg": cfg,
-            "steps": steps,
-            "crossfade": crossfade,
-            "chunk_size": chunk_size,
-            "normalize": normalize,
-            "phoneme_mode": phoneme_mode,
-            "denoise": denoise,
-            "target_sr": target_sr,
-            "prompt_text": prompt_text,
-            "reference_wav": ref_wav_path,
-        })
-        return JSONResponse({"job_id": job_id, "status": "queued"})
-
-    @app.post("/api/g2p")
-    async def g2p_convert(payload: dict):
-        """G2P 转换：汉字文本 -> VoxCPM2 音素串（{ni3}{hao3}）。需已下载 G2PW 离线模型。"""
-        text = (payload or {}).get("text", "")
-        if not text or not text.strip():
-            raise HTTPException(400, "文本不能为空")
-        try:
-            import g2p_phoneme
-            phonemes = g2p_phoneme.text_to_phonemes(text.strip())
-            return JSONResponse({"phonemes": phonemes})
-        except FileNotFoundError as e:
-            raise HTTPException(503, str(e))
-        except Exception as e:
-            raise HTTPException(500, f"G2P 转换失败: {e}")
-
-    @app.get("/api/corpus")
-    async def get_corpus():
-        """读取用户多音字语料文件内容（只读，不修改）；统一走 voxcpm_api 公共后端。"""
-        return JSONResponse(voxcpm_api.read_corpus())
-
-    @app.post("/api/corpus")
-    async def save_corpus(payload: dict):
-        """写回用户多音字语料文件（UTF-8）。保存即生效：g2p_phoneme 检测到 mtime 变化自动热加载，无需重启。"""
-        content = (payload or {}).get("content", "")
-        return JSONResponse(voxcpm_api.write_corpus(content))
-
-    # ── 数字归一化规则（num_norm_extra.txt）：保存即热加载，无需重启 ──
-    @app.get("/api/norm-rules")
-    async def get_norm_rules():
-        """读取用户归一化规则文件内容（只读，不修改）；统一走 voxcpm_api 公共后端。"""
-        return JSONResponse(voxcpm_api.read_norm_rules())
-
-    @app.post("/api/norm-rules")
-    async def save_norm_rules(payload: dict):
-        """写回用户归一化规则文件（UTF-8）。保存即生效：text_norm_cn 按 mtime 自动热加载，无需重启；
-        坏行由解析器单条跳过 + 警告，不会崩合成任务。"""
-        content = (payload or {}).get("content", "")
-        return JSONResponse(voxcpm_api.write_norm_rules(content))
-
-    # ── 音色档案（profile）：列表 / 新增 / 删除（REST 标准化）──
-    @app.get("/api/profiles")
-    async def list_profiles():
-        """音色档案列表（用户保存的音色配置：voice/control_text/mode/参考音频等）。"""
-        return JSONResponse({"profiles": voxcpm_api.list_profiles(),
-                             "file": str(voxcpm_api.PROFILE_FILE)})
-
-    @app.post("/api/profiles")
-    async def add_profile(payload: dict):
-        """新增/覆盖音色档案。入参：{name, voice?, control_text?, mode?, reference_wav_path?, prompt_text?}"""
-        payload = payload or {}
-        name = payload.get("name", "")
-        if not HAS_API or not name.strip():
-            raise HTTPException(400, "档案名称不能为空")
-        return JSONResponse(voxcpm_api.save_profile(name, payload))
-
-    @app.post("/api/profiles/delete")
-    async def delete_profile(payload: dict):
-        """删除音色档案。入参：{name}"""
-        payload = payload or {}
-        name = payload.get("name", "")
-        if not name.strip():
-            raise HTTPException(400, "档案名称不能为空")
-        return JSONResponse(voxcpm_api.delete_profile(name))
-
-    # ── 语料 / 音色档案：导入导出（REST 标准化）──
-    @app.post("/api/corpus/import")
-    async def import_corpus(payload: dict):
-        """导入语料文本：逐行校验（与 g2p_phoneme 同口径），坏行跳过并统计；
-        有效行合并写入现有语料（保留原内容，last-wins 语义一致）。入参：{content}"""
-        content = (payload or {}).get("content", "")
-        return JSONResponse(voxcpm_api.import_corpus_text(content))
-
-    @app.post("/api/corpus/export")
-    async def export_corpus():
-        """导出当前语料内容（UTF-8 文本）；同时落盘 exports/ 便于 CLI/分享。"""
-        r = voxcpm_api.export_corpus_text()
-        f = voxcpm_api.export_corpus_to_file()
-        r["file_path"] = f.get("path")
-        return JSONResponse(r)
-
-    @app.post("/api/profiles/import")
-    async def import_profiles(payload: dict):
-        """导入音色档案（JSON 数组文本）：坏项跳过，合法项合并写入（同名覆盖）。入参：{content}"""
-        content = (payload or {}).get("content", "")
-        return JSONResponse(voxcpm_api.import_profiles_text(content))
-
-    @app.post("/api/profiles/export")
-    async def export_profiles():
-        """导出全部音色档案为 JSON 文本；同时落盘 exports/ 便于 CLI/分享。"""
-        r = voxcpm_api.export_profiles_text()
-        f = voxcpm_api.export_profiles_to_file()
-        r["file_path"] = f.get("path")
-        return JSONResponse(r)
-
-    @app.get("/api/audio/{filename}")
-    async def serve_audio(filename: str):
-        # 安全检查：只允许 TEMP_DIR 下的文件
-        safe_name = os.path.basename(filename)
-        audio_path = TEMP_DIR / safe_name
-        if not audio_path.exists():
-            audio_path = _output_dir / "VoxCPM_Outputs" / safe_name
-        if not audio_path.exists():
-            raise HTTPException(404, "文件不存在")
-        return FileResponse(
-            path=str(audio_path),
-            media_type="audio/wav",
-            filename=safe_name,
-            headers={"Content-Disposition": f"attachment; filename*=UTF-8''{safe_name}"}
+      if not HAS_SF:
+        raise RuntimeError("缺少 soundfile 依赖，无法写出音频")
+      control = (
+          (control_text or "").strip()
+          or VOICE_PRESETS.get(voice, VOICE_PRESETS["default"])
+      )
+      ref_path = None
+      if mode == "fixed_clone":
+        if reference_path and reference_path.strip():
+          ref_path = reference_path.strip()
+          if not os.path.isfile(ref_path):
+            raise RuntimeError(f"参考音频路径不存在: {ref_path}")
+        elif reference_wav is not None:
+          suffix = Path(reference_wav.filename or "").suffix or ".wav"
+          ref_path = str(TEMP_DIR / f"ref_{uuid.uuid4().hex[:8]}{suffix}")
+          TEMP_DIR.mkdir(parents=True, exist_ok=True)
+          with open(ref_path, "wb") as f:
+            shutil.copyfileobj(reference_wav.file, f)
+      if ref_path:
+        wav = model.generate(
+          text=_VOICE_PREVIEW_TEXT,
+          cfg_value=cfg,
+          inference_timesteps=steps,
+          reference_wav_path=ref_path,
+          normalize=True,
+          denoise=use_denoise,
         )
+      else:
+        chunk_text = f"({control}){_VOICE_PREVIEW_TEXT}" if control else _VOICE_PREVIEW_TEXT
+        wav = model.generate(
+          text=chunk_text,
+          cfg_value=cfg,
+          inference_timesteps=steps,
+          normalize=True,
+          denoise=use_denoise,
+        )
+      sr = model.tts_model.sample_rate
+      arr = np.asarray(wav, dtype=np.float32).ravel()
+      TEMP_DIR.mkdir(parents=True, exist_ok=True)
+      fname = f"voice_preview_{int(time.time())}.wav"
+      sf.write(str(TEMP_DIR / fname), arr, sr)
+      # 64-bin 波形峰值（逐 bin 取绝对值最大，再按全局最大归一化）
+      n = len(arr)
+      peaks = []
+      for b in range(64):
+        seg = arr[(b * n) // 64 : ((b + 1) * n) // 64] if n else np.zeros(0)
+        peaks.append(float(np.max(np.abs(seg))) if len(seg) else 0.0)
+      m = max(peaks) or 1.0
+      return fname, [round(p / m, 4) for p in peaks], round(n / float(sr), 2)
+
+    loop = asyncio.get_running_loop()
+    try:
+      fname, peaks, dur = await loop.run_in_executor(executor, _gen)
+    except Exception as e:
+      return JSONResponse({"ok": False, "error": str(e)})
+    return JSONResponse(
+      {
+        "ok": True,
+        "wav_url": f"/api/audio/{fname}",
+        "filename": fname,
+        "duration": dur,
+        "peaks": peaks,
+        "message": f"试听已生成（约 {dur} 秒）",
+      }
+    )
+
+  @app.post("/api/g2p")
+  async def g2p_convert(payload: dict):
+    """G2P 转换：汉字文本 -> VoxCPM2 音素串（{ni3}{hao3}）。需已下载 G2PW 离线模型。"""
+    text = (payload or {}).get("text", "")
+    if not text or not text.strip():
+      raise HTTPException(400, "文本不能为空")
+    try:
+      import g2p_phoneme
+
+      phonemes = g2p_phoneme.text_to_phonemes(text.strip())
+      return JSONResponse({"phonemes": phonemes})
+    except FileNotFoundError as e:
+      raise HTTPException(503, str(e)) from e
+    except Exception as e:
+      raise HTTPException(500, f"G2P 转换失败: {e}") from e
+
+  @app.get("/api/corpus")
+  async def get_corpus():
+    """读取用户多音字语料文件内容（只读，不修改）；统一走 voxcpm_api 公共后端。"""
+    return JSONResponse(voxcpm_api.read_corpus())
+
+  @app.post("/api/corpus")
+  async def save_corpus(payload: dict):
+    """写回用户多音字语料文件（UTF-8）。保存即生效：g2p_phoneme 检测到 mtime 变化自动热加载，无需重启。"""
+    content = (payload or {}).get("content", "")
+    return JSONResponse(voxcpm_api.write_corpus(content))
+
+  # ── 数字归一化规则（num_norm_extra.txt）：保存即热加载，无需重启 ──
+  @app.get("/api/norm-rules")
+  async def get_norm_rules():
+    """读取用户归一化规则文件内容（只读，不修改）；统一走 voxcpm_api 公共后端。"""
+    return JSONResponse(voxcpm_api.read_norm_rules())
+
+  @app.post("/api/norm-rules")
+  async def save_norm_rules(payload: dict):
+    """写回用户归一化规则文件（UTF-8）。保存即生效：text_norm_cn 按 mtime 自动热加载，无需重启；
+    坏行由解析器单条跳过 + 警告，不会崩合成任务。"""
+    content = (payload or {}).get("content", "")
+    return JSONResponse(voxcpm_api.write_norm_rules(content))
+
+  # ── 音色档案（profile）：列表 / 新增 / 删除（REST 标准化）──
+  @app.get("/api/profiles")
+  async def list_profiles():
+    """音色档案列表（用户保存的音色配置：voice/control_text/mode/参考音频等）。"""
+    return JSONResponse(
+      {"profiles": voxcpm_api.list_profiles(), "file": str(voxcpm_api.PROFILE_FILE)}
+    )
+
+  @app.post("/api/profiles")
+  async def add_profile(payload: dict):
+    """新增/覆盖音色档案。入参：{name, voice?, control_text?, mode?, reference_wav_path?, prompt_text?}"""
+    payload = payload or {}
+    name = payload.get("name", "")
+    if not HAS_API or not name.strip():
+      raise HTTPException(400, "档案名称不能为空")
+    return JSONResponse(voxcpm_api.save_profile(name, payload))
+
+  @app.post("/api/profiles/delete")
+  async def delete_profile(payload: dict):
+    """删除音色档案。入参：{name}"""
+    payload = payload or {}
+    name = payload.get("name", "")
+    if not name.strip():
+      raise HTTPException(400, "档案名称不能为空")
+    return JSONResponse(voxcpm_api.delete_profile(name))
+
+  # ── 语料 / 音色档案：导入导出（REST 标准化）──
+  @app.post("/api/corpus/import")
+  async def import_corpus(payload: dict):
+    """导入语料文本：逐行校验（与 g2p_phoneme 同口径），坏行跳过并统计；
+    有效行合并写入现有语料（保留原内容，last-wins 语义一致）。入参：{content}"""
+    content = (payload or {}).get("content", "")
+    return JSONResponse(voxcpm_api.import_corpus_text(content))
+
+  @app.post("/api/corpus/export")
+  async def export_corpus():
+    """导出当前语料内容（UTF-8 文本）；同时落盘 exports/ 便于 CLI/分享。"""
+    r = voxcpm_api.export_corpus_text()
+    f = voxcpm_api.export_corpus_to_file()
+    r["file_path"] = f.get("path")
+    return JSONResponse(r)
+
+  @app.post("/api/profiles/import")
+  async def import_profiles(payload: dict):
+    """导入音色档案（JSON 数组文本）：坏项跳过，合法项合并写入（同名覆盖）。入参：{content}"""
+    content = (payload or {}).get("content", "")
+    return JSONResponse(voxcpm_api.import_profiles_text(content))
+
+  @app.post("/api/profiles/export")
+  async def export_profiles():
+    """导出全部音色档案为 JSON 文本；同时落盘 exports/ 便于 CLI/分享。"""
+    r = voxcpm_api.export_profiles_text()
+    f = voxcpm_api.export_profiles_to_file()
+    r["file_path"] = f.get("path")
+    return JSONResponse(r)
+
+  @app.get("/api/audio/{filename}")
+  async def serve_audio(filename: str):
+    # 安全检查：只允许 TEMP_DIR 下的文件
+    safe_name = os.path.basename(filename)
+    audio_path = TEMP_DIR / safe_name
+    if not audio_path.exists():
+      audio_path = _output_dir / "VoxCPM_Outputs" / safe_name
+    if not audio_path.exists():
+      raise HTTPException(404, "文件不存在")
+    return FileResponse(
+      path=str(audio_path),
+      media_type="audio/wav",
+      filename=safe_name,
+      headers={"Content-Disposition": f"attachment; filename*=UTF-8''{safe_name}"},
+    )
 
 
 def run_server(port: int = 18978, host: str = "127.0.0.1", hide_console: bool = True):
-    if not HAS_WEB:
-        print("[错误] 缺少依赖: uvicorn, fastapi, starlette")
-        print("请运行: pip install uvicorn fastapi")
-        return
+  if not HAS_WEB:
+    print("[错误] 缺少依赖: uvicorn, fastapi, starlette")
+    print("请运行: pip install uvicorn fastapi")
+    return
 
-    # 无模型版安装包：模型需用户自行下载。给出明确指引并保持命令行窗口可见，避免静默失败。
-    if not model_present():
-        print("\n" + "=" * 50)
-        print("[重要] " + _model_missing_detail())
-        print("=" * 50 + "\n")
-        hide_console = False
+  # 无模型版安装包：模型需用户自行下载。给出明确指引并保持命令行窗口可见，避免静默失败。
+  if not model_present():
+    print("\n" + "=" * 50)
+    print("[重要] " + _model_missing_detail())
+    print("=" * 50 + "\n")
+    hide_console = False
 
-    import socket as _socket
+  import socket as _socket
 
-    def _pick_port(p):
-        for cand in range(p, p + 50):
-            _s = _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM)
-            try:
-                _s.bind((host, cand))
-                _s.close()
-                return cand
-            except OSError:
-                _s.close()
-        return None
+  def _pick_port(p):
+    for cand in range(p, p + 50):
+      _s = _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM)
+      try:
+        _s.bind((host, cand))
+        _s.close()
+        return cand
+      except OSError:
+        _s.close()
+    return None
 
-    actual_port = _pick_port(port)
-    if actual_port is None:
-        print(f"\n[错误] 端口 {port} ~ {port + 49} 均被占用，无法启动服务器。")
-        print("请关闭占用端口的程序，或换用其他起始端口后重试。")
-        input("按回车键退出...")
-        return
-    if actual_port != port:
-        print(f"提示：端口 {port} 已被占用，已自动改用端口 {actual_port}")
+  actual_port = _pick_port(port)
+  if actual_port is None:
+    print(f"\n[错误] 端口 {port} ~ {port + 49} 均被占用，无法启动服务器。")
+    print("请关闭占用端口的程序，或换用其他起始端口后重试。")
+    input("按回车键退出...")
+    return
+  if actual_port != port:
+    print(f"提示：端口 {port} 已被占用，已自动改用端口 {actual_port}")
 
-    port = actual_port
-    url = f"http://{host}:{port}"
-    print(f"\n{'='*50}")
-    print(f"  VoxCPM2 Web UI 已启动")
-    print(f"  访问地址: {url}")
-    print(f"  模型目录: {resolve_model_dir()}")
-    print(f"    (VOXCPM_MODELS_DIR={os.environ.get('VOXCPM_MODELS_DIR', '') or '(未设置)'}, "
-          f"VOXCPM_MODEL_DIR={os.environ.get('VOXCPM_MODEL_DIR', '') or '(未设置)'})")
-    print(f"  按 Ctrl+C 停止服务器")
-    print(f"{'='*50}\n")
+  port = actual_port
+  url = f"http://{host}:{port}"
+  print(f"\n{'=' * 50}")
+  print("  VoxCPM2 Web UI 已启动")
+  print(f"  访问地址: {url}")
+  print(f"  模型目录: {resolve_model_dir()}")
+  print(
+    f"    (VOXCPM_MODELS_DIR={os.environ.get('VOXCPM_MODELS_DIR', '') or '(未设置)'}, "
+    f"VOXCPM_MODEL_DIR={os.environ.get('VOXCPM_MODEL_DIR', '') or '(未设置)'})"
+  )
+  print("  按 Ctrl+C 停止服务器")
+  print(f"{'=' * 50}\n")
 
-    # 自动打开浏览器
-    def open_browser():
-        time.sleep(1.5)
-        try:
-            webbrowser.open(url)
-        except Exception:
-            pass
-
-    threading.Thread(target=open_browser, daemon=True).start()
-
-    # 启动后自动隐藏命令行窗口（Windows），网页按钮可随时重新显示
-    # 仅当服务器确实启动成功后才隐藏，避免失败时被静默吞掉
-    started = {"ok": False}
+  # 自动打开浏览器
+  def open_browser():
+    time.sleep(1.5)
     try:
-        app.add_event_handler("startup", lambda: started.__setitem__("ok", True))
-    except Exception:
-        pass
-    if hide_console and sys.platform == "win32":
-        def hide_later():
-            time.sleep(2.5)
-            if started["ok"]:
-                _set_console_visible(False)
-        threading.Thread(target=hide_later, daemon=True).start()
+      webbrowser.open(url)
+    except Exception as e:
+      print(f"[提示] 自动打开浏览器失败（{e}），请手动访问: {url}", file=sys.stderr)
 
-    try:
-        uvicorn.run(app, host=host, port=port, log_level="warning")
-    except OSError as e:
-        print(f"\n[错误] 无法在 {host}:{port} 启动服务器：{e}")
-        print("该端口可能已被其他程序占用。请换用其他端口后重试，例如：")
-        print(f"  python vox_web_ui.py --port 8010")
-        input("按回车键退出...")
+  threading.Thread(target=open_browser, daemon=True).start()
+
+  # 启动后自动隐藏命令行窗口（Windows），网页按钮可随时重新显示
+  # 仅当服务器确实启动成功后才隐藏，避免失败时被静默吞掉
+  started = {"ok": False}
+  try:
+    app.add_event_handler("startup", lambda: started.__setitem__("ok", True))
+  except Exception as e:
+    # 注册失败 → started.ok 保持 False → 不隐藏控制台（安全默认），仅记一条日志
+    print(f"[提示] 注册 startup 事件失败，窗口将不自动隐藏（{e}）", file=sys.stderr)
+  if hide_console and sys.platform == "win32":
+
+    def hide_later():
+      time.sleep(2.5)
+      if started["ok"]:
+        _set_console_visible(False)
+
+    threading.Thread(target=hide_later, daemon=True).start()
+
+  try:
+    uvicorn.run(app, host=host, port=port, log_level="warning")
+  except OSError as e:
+    print(f"\n[错误] 无法在 {host}:{port} 启动服务器：{e}")
+    print("该端口可能已被其他程序占用。请换用其他端口后重试，例如：")
+    print("  python vox_web_ui.py --port 8010")
+    input("按回车键退出...")
 
 
 # ══════════════════════════════════════════════════════════
 #  入口
 # ══════════════════════════════════════════════════════════
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="VoxCPM2 Web UI — 本地语音合成")
-    parser.add_argument("--port", type=int, default=18978, help="HTTP 端口 (默认 18978)")
-    parser.add_argument("--host", type=str, default="127.0.0.1", help="监听地址 (默认 127.0.0.1)")
-    parser.add_argument("--model-dir", type=str, default="", help="本地模型目录")
-    parser.add_argument("--output-dir", type=str, default="", help="输出目录")
-    parser.add_argument("--show-console", action="store_true", help="保留命令行窗口显示（调试用）")
-    args = parser.parse_args()
+  parser = argparse.ArgumentParser(description="VoxCPM2 Web UI — 本地语音合成")
+  parser.add_argument("--port", type=int, default=18978, help="HTTP 端口 (默认 18978)")
+  parser.add_argument(
+    "--host", type=str, default="127.0.0.1", help="监听地址 (默认 127.0.0.1)"
+  )
+  parser.add_argument("--model-dir", type=str, default="", help="本地模型目录")
+  parser.add_argument("--output-dir", type=str, default="", help="输出目录")
+  parser.add_argument(
+    "--show-console", action="store_true", help="保留命令行窗口显示（调试用）"
+  )
+  args = parser.parse_args()
 
-    if args.model_dir:
-        os.environ["VOXCPM_MODEL_DIR"] = args.model_dir
-        os.environ["VOXCPM_MODELS_DIR"] = args.model_dir
-    if args.output_dir:
-        os.environ["VOXCPM_OUTPUT_DIR"] = args.output_dir
+  if args.model_dir:
+    os.environ["VOXCPM_MODEL_DIR"] = args.model_dir
+    os.environ["VOXCPM_MODELS_DIR"] = args.model_dir
+  if args.output_dir:
+    os.environ["VOXCPM_OUTPUT_DIR"] = args.output_dir
 
-    run_server(port=args.port, host=args.host, hide_console=not args.show_console)
+  run_server(port=args.port, host=args.host, hide_console=not args.show_console)

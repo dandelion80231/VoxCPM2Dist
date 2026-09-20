@@ -77,8 +77,7 @@ def _load_user_rules():
             rules.append(("lit", left, right))
     if bad:
         print(
-            "[num_norm_extra] 忽略 %d 条格式错误的规则: %s"
-            % (len(bad), "; ".join(bad)[:200]),
+            f"[num_norm_extra] 忽略 {len(bad)} 条格式错误的规则: {'; '.join(bad)[:200]}",
             file=sys.stderr,
         )
     _user_rules_cache = (mtime, rules)
@@ -91,6 +90,42 @@ def user_rule_count():
         return len(_load_user_rules())
     except Exception:
         return 0
+
+
+def builtin_rule_summary():
+    """内置归一化规则只读速览（纯文档，不影响行为；供 Web UI 归一化规则编辑器展示）。
+
+    目的：让用户看到内置管线已覆盖哪些场景，便于判断 num_norm_extra.txt 里要补什么。
+    返回按 normalize_text 实际执行顺序排列的多行文本。
+
+    注意：用户规则（num_norm_extra.txt）在步骤 U 执行——全角转半角之后、下方所有
+    内置数字规则之前，因此可「抢先拦截」任何数字场景（读法建议直接写成中文，
+    内置数字规则就不会再处理它）。"""
+    lines = [
+        "执行顺序：全角→半角 → 音素块 {..} 保护 → 【用户规则 num_norm_extra.txt】→ 下方内置数字规则 → 音素块还原",
+        "（用户规则先于内置数字规则执行，可抢先拦截；读法建议写成中文，内置规则就不会再碰它）",
+        "",
+        "内置数字规则（只读，不可在此编辑；如需覆盖在上面用户规则里抢先写）：",
+        "日期：2024-05-01 / 2024年5月1日 / 5月1号 / 2024年5月 / 裸 2025年 / 2024年-2025年（年份逐位，月/日按位值）",
+        "热线号码：数字后紧跟 报警/急救/火警/热线/客服/专线/咨询/服务 → 逐位读，1 读「幺」，110 特例读「妖妖灵」",
+        "电话号码：关键词（电话/手机/座机/分机…）后逐位读；独立 1[3-9] 开头 11 位手机号也逐位读；固话区号-8位仅关键词后识别",
+        "温度：-10°C→零下十摄氏度，25℃→二十五摄氏度，30°→三十度",
+        "时间：10:30→十点三十（10:30:45 同）；剩余短数字比 N:M → N比M；分数 3/4 → 四分之三",
+        "范围：10~20 / 3-5 → 十到二十 / 三到五",
+        "金额：¥100→一百元，$10.5→十点五美元",
+        "数学符号：数字间 = → 等于；全文 + → 加、× → 乘、÷ → 除",
+        "百分数：67%→百分之六十七，5.6%→百分之五点六，±5%→正负百分之五",
+        "度量单位：m/cm/km/kg/L/m²/km/h 等 → 中文读法（米/厘米/平方公里/公里每小时…）",
+        "负号：-5 → 负五（独立负号场景）",
+        "版本号：1.2.3（多位小数点）→ 逐位读一点二三",
+        "小数：3.14 → 三点一四",
+        "编号关键词：订单号/快递单号/账号/卡号/密码/微信号/QQ号/工号/学号/证号/批号/货号 + 数字 → 逐位读",
+        "普通整数：≤12 位按位值读（2亿→两亿元）；≥13 位视为编号逐位读（如 18 位身份证）",
+        "二/两归一：二百→两百、二万→两万（仅最高位为 2 时）",
+        "字母数字连接：GPT-5.6 → G P T 五点六（连字符去掉，数字按小数读）",
+        "英文缩写拆字母：CPU→C P U、USB→U S B；机构名（NASA/NATO/OPEC…）不打散按单词读",
+    ]
+    return "\n".join(lines)
 
 
 def _apply_user_rules(text):
@@ -107,8 +142,7 @@ def _apply_user_rules(text):
                 if key not in _user_rules_warned:
                     _user_rules_warned.add(key)
                     print(
-                        "[num_norm_extra] 正则规则替换串有误，已跳过: ?%s => %s (%s)"
-                        % (a.pattern, b, e),
+                        f"[num_norm_extra] 正则规则替换串有误，已跳过: ?{a.pattern} => {b} ({e})",
                         file=sys.stderr,
                     )
             except Exception as e:  # 其他意外（用户文件不可信，绝不让它弄崩 TTS）
@@ -116,8 +150,7 @@ def _apply_user_rules(text):
                 if key not in _user_rules_warned:
                     _user_rules_warned.add(key)
                     print(
-                        "[num_norm_extra] 规则执行出错，已跳过: ?%s => %s (%s)"
-                        % (a.pattern, b, e),
+                        f"[num_norm_extra] 规则执行出错，已跳过: ?{a.pattern} => {b} ({e})",
                         file=sys.stderr,
                     )
     return text
@@ -726,4 +759,4 @@ def normalize_text(text: str) -> str:
     return text
 
 
-__all__ = ["normalize_text", "user_rule_count"]
+__all__ = ["normalize_text", "user_rule_count", "builtin_rule_summary"]
