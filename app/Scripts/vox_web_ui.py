@@ -2901,7 +2901,6 @@ function renderVoices() {
     // 整个卡片 mousedown 拖拽排序（移动>5px 才启动，不影响按钮点击）
     wrapper.addEventListener('mousedown', e => {
       if (e.button !== 0) return;
-      e.preventDefault();
       const startX = e.clientX, startY = e.clientY;
       let dragging = false;
       const items = Array.from(grid.querySelectorAll('.voice-item'));
@@ -2910,6 +2909,7 @@ function renderVoices() {
         const dx = ev.clientX - startX, dy = ev.clientY - startY;
         if (!dragging && (Math.abs(dx) > 5 || Math.abs(dy) > 5)) {
           dragging = true;
+          ev.preventDefault();
           wrapper.style.zIndex = '10';
           wrapper.style.position = 'relative';
           wrapper.style.transition = 'none';
