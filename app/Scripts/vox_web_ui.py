@@ -2440,11 +2440,17 @@ HTML_CONTENT = r"""
       <h3>音色描述（可选，留空使用左侧预设；也可写方言/角色）</h3>
       <textarea id="controlText" class="prompt-text-input" placeholder="例如：25岁温柔甜美女声，带一点播音腔。或『深宫太后，威严庄重』『河南方言大叔』"></textarea>
       <div class="example-chips" id="exampleChips">
-        <div class="preview-inline" style="display:contents">
-          <button id="voicePreviewBtn" class="mode-btn" onclick="runVoicePreview()" title="以当前音色设置生成一段短句试听" style="flex:0 0 auto;padding:4px 10px;font-size:12px;">▶ 试听</button>
-          <canvas id="voicePreviewWave" width="140" height="32" style="flex:0 0 auto;width:140px;height:32px;background:var(--surface);border-radius:4px;box-sizing:border-box;opacity:0.4;transition:opacity .3s;"></canvas>
-          <audio id="voicePreviewAudio" controls preload="none" style="flex:0 1 160px;min-width:120px;display:none;height:32px;"></audio>
-          <div id="voicePreviewStatus" class="param-desc" style="flex:0 0 auto;margin:0;font-size:11px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">点击试听生成短句</div>
+        <div class="preview-inline" style="display:flex;align-items:center;gap:6px;margin-left:auto;">
+          <button id="voicePreviewBtn" class="mode-btn" onclick="runVoicePreview()" title="以当前音色设置生成一段短句试听" style="padding:4px 10px;font-size:12px;">▶ 试听</button>
+          <canvas id="voicePreviewWave" width="120" height="28" style="width:120px;height:28px;background:var(--surface);border-radius:4px;box-sizing:border-box;"></canvas>
+          <audio id="voicePreviewAudio" preload="none" style="display:none;"></audio>
+          <button id="previewPlayBtn" onclick="previewPlayPause()" title="播放/暂停" style="display:none;width:28px;height:28px;border-radius:50%;border:1px solid var(--border);background:var(--surface2);color:var(--text);cursor:pointer;font-size:13px;line-height:1;">▶</button>
+          <button id="previewDlBtn" onclick="previewDownload()" title="下载试听音频" style="display:none;padding:2px 6px;border-radius:4px;border:1px solid var(--border);background:var(--surface2);color:var(--text2);cursor:pointer;font-size:11px;">⬇</button>
+          <select id="previewSpeed" onchange="previewSetSpeed(this.value)" title="语速" style="display:none;width:44px;height:24px;border-radius:4px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:11px;padding:0 2px;">
+            <option value="0.5">0.5x</option><option value="0.75">0.75x</option><option value="1" selected>1x</option><option value="1.25">1.25x</option><option value="1.5">1.5x</option><option value="2">2x</option>
+          </select>
+          <input type="range" id="previewVolume" min="0" max="1" step="0.05" value="1" oninput="previewSetVolume(this.value)" title="音量" style="display:none;width:50px;height:4px;accent-color:var(--accent);cursor:pointer;">
+          <div id="voicePreviewStatus" class="param-desc" style="margin:0;font-size:11px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">点击试听生成短句</div>
         </div>
       </div>
     </div>
@@ -2948,19 +2954,25 @@ async function runVoicePreview() {
     status.style.color = '';
     drawPreviewWave(d.peaks || []);
     audio.src = d.wav_url;
-    audio.style.display = 'block';
+    // 显示自定义控件
+    document.getElementById('previewPlayBtn').style.display = 'inline-block';
+    document.getElementById('previewDlBtn').style.display = 'inline-block';
+    document.getElementById('previewSpeed').style.display = 'inline-block';
+    document.getElementById('previewVolume').style.display = 'inline-block';
     // 播放过程中动画波形进度
-    let _peaks = d.peaks || [];
-    const _wave = document.getElementById('voicePreviewWave');
+    const _peaks = d.peaks || [];
     const _anim = () => {
-      if (audio.paused || audio.ended) { _wave.style.opacity = audio.ended ? '1' : '0.4'; return; }
-      _wave.style.opacity = '1';
-      const prog = audio.duration ? audio.currentTime / audio.duration : 0;
-      drawPreviewWave(_peaks, prog);
+      const playBtn = document.getElementById('previewPlayBtn');
+      if (audio.ended) { playBtn.textContent = '▶'; playBtn.title = '播放'; return; }
+      if (!audio.paused) {
+        const prog = audio.duration ? audio.currentTime / audio.duration : 0;
+        drawPreviewWave(_peaks, prog);
+      }
       requestAnimationFrame(_anim);
     };
     requestAnimationFrame(_anim);
-    try { await audio.play(); } catch (e) { status.textContent = '（浏览器限制自动播放，点 ▶ 回放）'; }
+    try { await audio.play(); document.getElementById('previewPlayBtn').textContent = '⏸'; } catch (e) { status.textContent = '（浏览器限制自动播放，点 ▶）'; }
+    audio.onended = () => { document.getElementById('previewPlayBtn').textContent = '▶'; document.getElementById('previewPlayBtn').title = '播放'; };
     status.textContent = '已生成（约 ' + d.duration + 's）';
   } catch (e) {
     status.textContent = '⚠ 试听失败: ' + (e.message || e);
@@ -2970,10 +2982,36 @@ async function runVoicePreview() {
   }
 }
 
+function previewPlayPause() {
+  const audio = document.getElementById('voicePreviewAudio');
+  const playBtn = document.getElementById('previewPlayBtn');
+  if (!audio.src) return;
+  if (audio.paused) { audio.play().catch(() => {}); playBtn.textContent = '⏸'; playBtn.title = '暂停'; }
+  else { audio.pause(); playBtn.textContent = '▶'; playBtn.title = '播放'; }
+}
+
+function previewDownload() {
+  const audio = document.getElementById('voicePreviewAudio');
+  if (!audio.src) return;
+  const a = document.createElement('a');
+  a.href = audio.src;
+  a.download = 'voice_preview.wav';
+  a.click();
+}
+
+function previewSetSpeed(v) {
+  const audio = document.getElementById('voicePreviewAudio');
+  audio.playbackRate = parseFloat(v) || 1;
+}
+
+function previewSetVolume(v) {
+  const audio = document.getElementById('voicePreviewAudio');
+  audio.volume = parseFloat(v);
+}
+
 function drawPreviewWave(peaks, progress = 0) {
   const c = document.getElementById('voicePreviewWave');
   if (!c) return;
-  c.style.opacity = '1';
   const ctx = c.getContext('2d');
   ctx.clearRect(0, 0, c.width, c.height);
   const n = peaks.length;
