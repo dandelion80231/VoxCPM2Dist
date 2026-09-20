@@ -1637,6 +1637,7 @@ HTML_CONTENT = r"""
     border-color: var(--accent);
     background: rgba(108,142,255,0.15);
     color: var(--accent);
+    box-shadow: 0 2px 8px rgba(108,142,255,0.4);
   }
   .voice-icon {
     width: 34px; height: 34px;
@@ -2968,10 +2969,6 @@ function renderVoices() {
     btn.style.width = '100%';
     btn.style.textAlign = 'left';
     btn.onclick = () => selectVoice(id, btn);
-    if (isActive) {
-      btn.style.boxShadow = '0 2px 8px rgba(108,142,255,0.4)';
-      btn.style.borderColor = 'var(--accent, #6c8eff)';
-    }
     if (isLocked) {
       const displayName = (v.name || '').replace(/\s*🔒\s*$/g, '');
       btn.innerHTML = `<div class="voice-icon">🔒</div>
@@ -3077,7 +3074,11 @@ function renderExamples() {
 
 function selectVoice(id, btn) {
   selectedVoice = id;
-  document.querySelectorAll('.voice-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.voice-btn').forEach(b => {
+    b.classList.remove('active');
+    b.style.boxShadow = '';
+    b.style.borderColor = '';
+  });
   btn.classList.add('active');
   // 将预设描述填入「音色描述」框，便于查看/微调
   const v = VOICE_LIST[id] || CUSTOM_VOICES.find(c => c.id === id);
