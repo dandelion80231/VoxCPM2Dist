@@ -2457,9 +2457,10 @@ HTML_CONTENT = r"""
 
     <!-- 参考音频 -->
     <div class="ref-card">
-      <h3 style="display:flex;align-items:center;gap:10px;">音色统一模式（可选）
+      <h3 style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">音色统一模式（可选）
         <button class="mode-btn" id="profileBtn" onclick="openProfileManager()" style="padding:4px 10px;font-size:11px;cursor:pointer;" title="保存 / 应用 / 管理音色档案（voice + 音色描述 + 模式 + 参考音频）">🎚️ 音色档案</button>
         <button class="mode-btn" id="saveProfileBtn" onclick="saveCurrentAsProfile()" style="padding:4px 10px;font-size:11px;cursor:pointer;" title="将当前音色设置保存为固定参考克隆档案（需先试听生成参考音频）">💾 存档案</button>
+        <span id="profileChips" style="display:inline-flex;gap:4px;flex-wrap:wrap;"></span>
       </h3>
       <div class="ref-modes">
         <button class="mode-btn ref-mode-btn active" data-mode="voice_design" onclick="setMode('voice_design', this)">
@@ -2842,6 +2843,7 @@ async function init() {
     ['bindModelStatus', bindModelStatus],
     ['bindAudioPlayer', bindAudioPlayer],
     ['loadPaths', loadPaths],
+    ['renderProfileChips', renderProfileChips],
   ];
   for (const [name, fn] of steps) {
     try {
@@ -3986,6 +3988,26 @@ async function saveCurrentAsProfile() {
     if (d.ok) { showToast('已保存为固定克隆档案：' + name, 'success'); }
     else { showToast(d.error || '保存失败', 'error'); }
   } catch (e) { showToast('保存失败: ' + (e.message || e), 'error'); }
+  await renderProfileChips();
+}
+
+async function renderProfileChips() {
+  const box = document.getElementById('profileChips');
+  if (!box) return;
+  box.innerHTML = '';
+  try {
+    const r = await fetch('/api/profiles');
+    const d = await r.json();
+    const ps = d.profiles || [];
+    for (const p of ps) {
+      const chip = document.createElement('button');
+      chip.style.cssText = 'padding:2px 8px;font-size:11px;border-radius:10px;border:1px solid var(--border);background:var(--surface2);color:var(--text);cursor:pointer;max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+      chip.textContent = p.name || '未命名';
+      chip.title = (p.mode === 'fixed_clone' ? '🔒 ' : '') + (p.control_text || '') + ' (' + (p.mode || 'voice_design') + ')';
+      chip.onclick = () => applyProfile(p.name);
+      box.appendChild(chip);
+    }
+  } catch (e) { /* silent */ }
 }
 async function deleteProfile(name) {
   if (!confirm('确认删除音色档案「' + name + '」？')) return;
@@ -3996,7 +4018,7 @@ async function deleteProfile(name) {
       body: JSON.stringify({ name: name })
     });
     const d = await r.json();
-    if (d.ok) { showToast(d.message || '已删除', 'success'); await refreshProfileList(); }
+    if (d.ok) { showToast(d.message || '已删除', 'success'); await refreshProfileList(); await renderProfileChips(); }
     else showToast(d.error || '删除失败', 'error');
   } catch (e) {
     showToast('删除失败: ' + (e.message || e), 'error');
