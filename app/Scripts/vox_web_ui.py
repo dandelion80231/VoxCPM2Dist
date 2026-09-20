@@ -1611,6 +1611,12 @@ HTML_CONTENT = r"""
     flex-direction: column;
     gap: 6px;
   }
+  .voice-item {
+    border-radius: 10px;
+    cursor: grab;
+    transition: outline 0.15s;
+  }
+  .voice-item:active { cursor: grabbing; }
   .voice-btn {
     display: flex;
     align-items: center;
@@ -2867,15 +2873,11 @@ async function init() {
 function renderVoices() {
   const grid = document.getElementById('voiceGrid');
   grid.innerHTML = '';
-  // 锁定预设替换了哪些内置预设
   const lockedReplacements = CUSTOM_VOICES.filter(v => v.replacesPreset).map(v => v.replacesPreset);
-  // 所有可见预设的原始 ID 列表
   const allIds = Object.keys(VOICE_LIST).filter(k => !lockedReplacements.includes(k))
     .concat(CUSTOM_VOICES.map(v => v.id));
-  // 读取持久化顺序
   let savedOrder = [];
   try { savedOrder = JSON.parse(localStorage.getItem('voxcpm_voice_order') || '[]'); } catch {}
-  // 应用顺序：已保存的在前，新出现的追加在后
   if (savedOrder.length) {
     allIds.sort((a, b) => {
       const ia = savedOrder.indexOf(a), ib = savedOrder.indexOf(b);
@@ -2888,19 +2890,28 @@ function renderVoices() {
     const isCustom = id.startsWith('custom_');
     const isLocked = id.startsWith('locked_');
     const isActive = id === selectedVoice;
+
+    // 外层 div 处理拖拽（HTML5 Drag 在 div 上所有浏览器可靠）
+    const wrapper = document.createElement('div');
+    wrapper.className = 'voice-item';
+    wrapper.draggable = true;
+    wrapper.dataset.id = id;
+
     const btn = document.createElement('button');
     btn.className = 'voice-btn' + (isActive ? ' active' : '') + (isCustom ? ' custom-preset' : '') + (isLocked ? ' locked-preset' : '');
     btn.dataset.id = id;
-    btn.draggable = true;
+    btn.style.width = '100%';
+    btn.style.textAlign = 'left';
     btn.onclick = () => selectVoice(id, btn);
     if (isActive) {
       btn.style.boxShadow = '0 2px 8px rgba(108,142,255,0.4)';
       btn.style.borderColor = 'var(--accent, #6c8eff)';
     }
     if (isLocked) {
+      const displayName = (v.name || '').replace(/\s*🔒\s*$/g, '');
       btn.innerHTML = `<div class="voice-icon">🔒</div>
       <div style="flex:1;min-width:0">
-        <div class="voice-name">${esc(v.name)}</div>
+        <div class="voice-name">${esc(displayName)}</div>
         <div class="voice-desc">${esc(v.desc || '固定克隆')}</div>
       </div>`;
       btn.style.background = 'var(--accent, #6c8eff)';
@@ -2918,25 +2929,28 @@ function renderVoices() {
         <div class="voice-desc">${v.desc}</div>
       </div>`;
     }
-    // 拖拽排序
-    btn.addEventListener('dragstart', e => {
+    wrapper.appendChild(btn);
+
+    // 拖拽事件绑定在外层 div
+    wrapper.addEventListener('dragstart', e => {
       e.dataTransfer.effectAllowed = 'move';
       e.dataTransfer.setData('text/plain', '__voice__:' + id);
-      btn.style.opacity = '0.5';
+      e.dataTransfer.setDragImage(wrapper, 20, 20);
+      setTimeout(() => { wrapper.style.opacity = '0.4'; }, 0);
     });
-    btn.addEventListener('dragend', () => { btn.style.opacity = '1'; });
-    btn.addEventListener('dragover', e => {
+    wrapper.addEventListener('dragend', () => { wrapper.style.opacity = '1'; });
+    wrapper.addEventListener('dragover', e => {
       e.preventDefault();
       e.dataTransfer.dropEffect = 'move';
-      btn.style.outline = '2px solid var(--accent)';
+      wrapper.style.outline = '2px solid var(--accent)';
+      wrapper.style.outlineOffset = '2px';
     });
-    btn.addEventListener('dragleave', () => { btn.style.outline = ''; });
-    btn.addEventListener('drop', e => {
+    wrapper.addEventListener('dragleave', () => { wrapper.style.outline = ''; });
+    wrapper.addEventListener('drop', e => {
       e.preventDefault();
-      btn.style.outline = '';
+      wrapper.style.outline = '';
       const data = e.dataTransfer.getData('text/plain');
       if (!data) return;
-      // 预设拖拽排序
       if (data.startsWith('__voice__:')) {
         const dragId = data.slice(9);
         if (dragId !== id) reorderVoices(dragId, id);
@@ -2961,12 +2975,15 @@ function renderVoices() {
       }
       try { localStorage.setItem('voxcpm_custom_voices', JSON.stringify(CUSTOM_VOICES)); } catch {}
       renderVoices();
-      const newBtn = document.querySelector('.voice-btn[data-id="' + lockedId + '"]');
-      if (newBtn) selectVoice(lockedId, newBtn);
+      const newWrapper = document.querySelector('.voice-item[data-id="' + lockedId + '"]');
+      if (newWrapper) {
+        const newBtn = newWrapper.querySelector('.voice-btn');
+        if (newBtn) selectVoice(lockedId, newBtn);
+      }
       applyProfile(profileName);
       showToast('已将档案「' + profileName + '」锁定到预设位', 'success');
     });
-    grid.appendChild(btn);
+    grid.appendChild(wrapper);
   }
 }
 
