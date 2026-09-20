@@ -2439,12 +2439,12 @@ HTML_CONTENT = r"""
     <div class="control-card">
       <h3>音色描述（可选，留空使用左侧预设；也可写方言/角色）</h3>
       <textarea id="controlText" class="prompt-text-input" placeholder="例如：25岁温柔甜美女声，带一点播音腔。或『深宫太后，威严庄重』『河南方言大叔』"></textarea>
-      <div class="example-chips" id="exampleChips"></div>
-      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px;padding:8px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;">
-        <button id="voicePreviewBtn" class="mode-btn" onclick="runVoicePreview()" title="以当前音色设置（预设/描述/参考音频/模式）生成一段短句，试听效果" style="flex:0 0 auto;align-items:center;">▶ 试听当前音色</button>
-        <canvas id="voicePreviewWave" width="206" height="44" style="flex:0 0 auto;width:206px;height:44px;background:var(--surface);border-radius:6px;box-sizing:border-box;"></canvas>
-        <audio id="voicePreviewAudio" controls preload="none" style="flex:0 1 200px;min-width:160px;display:none;height:38px;"></audio>
-        <div id="voicePreviewStatus" class="param-desc" style="flex:1 1 120px;min-width:0;margin:0;">点试听生成一段短句，预览当前音色效果</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:10px;">
+        <div class="example-chips" id="exampleChips" style="display:contents;"></div>
+        <button id="voicePreviewBtn" class="mode-btn" onclick="runVoicePreview()" title="以当前音色设置生成一段短句试听" style="flex:0 0 auto;margin-left:auto;">▶ 试听</button>
+        <canvas id="voicePreviewWave" width="160" height="36" style="flex:0 0 auto;width:160px;height:36px;background:var(--surface);border-radius:4px;box-sizing:border-box;opacity:0.4;transition:opacity .3s;"></canvas>
+        <audio id="voicePreviewAudio" controls preload="none" style="flex:0 1 180px;min-width:140px;display:none;height:34px;"></audio>
+        <div id="voicePreviewStatus" class="param-desc" style="flex:0 0 auto;min-width:0;margin:0;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">点击试听生成短句</div>
       </div>
     </div>
 
@@ -2940,33 +2940,55 @@ async function runVoicePreview() {
   try {
     const r = await fetch('/api/voice-preview', { method: 'POST', body: fd });
     const d = await r.json();
-    if (!d.ok) { status.textContent = d.error || '试听失败'; return; }
+    if (!d.ok) { status.textContent = '⚠ ' + (d.error || '试听失败'); status.style.color = 'var(--err,#e55)'; return; }
+    status.style.color = '';
     drawPreviewWave(d.peaks || []);
     audio.src = d.wav_url;
     audio.style.display = 'block';
-    try { await audio.play(); } catch (e) { status.textContent = '（浏览器限制自动播放，请点下方 ▶ 按钮）'; }
-    status.textContent = '已生成试听样本（约 ' + d.duration + ' 秒），波形见上；点 ▶ 可回放';
+    // 播放过程中动画波形进度
+    let _peaks = d.peaks || [];
+    const _wave = document.getElementById('voicePreviewWave');
+    const _anim = () => {
+      if (audio.paused || audio.ended) { _wave.style.opacity = audio.ended ? '1' : '0.4'; return; }
+      _wave.style.opacity = '1';
+      const prog = audio.duration ? audio.currentTime / audio.duration : 0;
+      drawPreviewWave(_peaks, prog);
+      requestAnimationFrame(_anim);
+    };
+    requestAnimationFrame(_anim);
+    try { await audio.play(); } catch (e) { status.textContent = '（浏览器限制自动播放，点 ▶ 回放）'; }
+    status.textContent = '已生成（约 ' + d.duration + 's）';
   } catch (e) {
-    status.textContent = '试听失败: ' + (e.message || e);
+    status.textContent = '⚠ 试听失败: ' + (e.message || e);
+    status.style.color = 'var(--err,#e55)';
   } finally {
     btn.disabled = false;
   }
 }
 
-function drawPreviewWave(peaks) {
+function drawPreviewWave(peaks, progress = 0) {
   const c = document.getElementById('voicePreviewWave');
   if (!c) return;
+  c.style.opacity = '1';
   const ctx = c.getContext('2d');
   ctx.clearRect(0, 0, c.width, c.height);
   const n = peaks.length;
   if (!n) return;
   const cw = c.width / n;
-  ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--accent') || '#6c8eff';
+  const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent') || '#6c8eff';
+  const dim = accent + '44';
+  const progressIdx = Math.floor(progress * n);
   for (let i = 0; i < n; i++) {
     const p = peaks[i] || 0;
     const h = Math.max(2, p * (c.height - 4));
+    ctx.fillStyle = i < progressIdx ? accent : dim;
     ctx.fillRect(i * cw + 1, (c.height - h) / 2, Math.max(1, cw - 2), h);
   }
+  if (progress > 0 && progress < 1) {
+    ctx.fillStyle = accent;
+    ctx.fillRect(progress * c.width, 0, 1.5, c.height);
+  }
+}
 }
 
 function bindSliders() {
