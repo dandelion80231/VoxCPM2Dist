@@ -13,15 +13,16 @@
   2) 可编程：download_models(progress_cb=..., should_stop=...) 由网页后台线程调用，
      通过 progress_cb 回报进度、should_stop 支持取消，无额外打印。
 """
+
+import concurrent.futures
 import os
+import shutil
 import ssl
 import sys
-import shutil
 import threading
 import time
 import urllib.error
 import urllib.request
-import concurrent.futures
 
 
 class _DownloadCancelled(Exception):
@@ -62,11 +63,11 @@ MAIN_ITEMS = [(f, MS_BASE, HF_BASE) for f in FILES]
 ZIP_ITEMS = [(f, MS_ZIP_BASE, None) for f in ZIP_FILES]
 
 # ── 多线程下载调参 ──
-MT_THREADS_DEFAULT = 8          # 默认并发段数（env VOXCPM_DL_THREADS 可覆盖，1-32）
-CHUNK = 1024 * 1024             # 1MB 读块
+MT_THREADS_DEFAULT = 8  # 默认并发段数（env VOXCPM_DL_THREADS 可覆盖，1-32）
+CHUNK = 1024 * 1024  # 1MB 读块
 SLICE_ALIGN = 32 * 1024 * 1024  # 切片边界 32MB 对齐
-SLICE_MIN = 64 * 1024 * 1024    # 单段最小字节数（文件小于 段数*该值 时自动降档线程数）
-RETRY_BACKOFFS = (2, 5, 15)    # 单段失败后的重试退避秒数（重试后仍失败才判整体失败）
+SLICE_MIN = 64 * 1024 * 1024  # 单段最小字节数（文件小于 段数*该值 时自动降档线程数）
+RETRY_BACKOFFS = (2, 5, 15)  # 单段失败后的重试退避秒数（重试后仍失败才判整体失败）
 
 
 def make_ctx():
@@ -205,14 +206,15 @@ def plan_slices(total, n):
 
 class _MTState:
     """多线程下载的工作线程共享状态。"""
+
     __slots__ = ("sizes", "lock", "stop", "cancelled", "fail")
 
     def __init__(self, n):
-        self.sizes = [0] * n          # 每段已下载字节（切片文件自身大小）
+        self.sizes = [0] * n  # 每段已下载字节（切片文件自身大小）
         self.lock = threading.Lock()
         self.stop = threading.Event()
         self.cancelled = False
-        self.fail = None              # 首个致命段错误文本
+        self.fail = None  # 首个致命段错误文本
 
 
 def _want_stop(state, should_stop):
@@ -241,11 +243,11 @@ def _download_slice(base_url, fname, dest, k, start, end, state, should_stop):
     except Exception:
         have = 0
     with state.lock:
-        state.sizes[k] = have       # 协调线程据此统计已传量（含续传/已完成的段）
+        state.sizes[k] = have  # 协调线程据此统计已传量（含续传/已完成的段）
     if have == slen:
-        return "ok"                 # 本段已完整
+        return "ok"  # 本段已完整
     if have > slen:
-        have = 0                   # 异常超大切片文件：重拉本段
+        have = 0  # 异常超大切片文件：重拉本段
     err = ""
     attempts = 1 + len(RETRY_BACKOFFS)
     for attempt in range(attempts):
@@ -274,7 +276,7 @@ def _download_slice(base_url, fname, dest, k, start, end, state, should_stop):
                         return "ok"
             err = "truncated: %d/%d bytes" % (have, slen)
         except urllib.error.HTTPError as e:
-            if e.code == 416:        # 范围不满足 -> 该段实际已完整
+            if e.code == 416:  # 范围不满足 -> 该段实际已完整
                 return "ok"
             err = "HTTP %s" % e.code
         except Exception as e:
@@ -342,7 +344,15 @@ def print_report(title, rep):
         print("    全部就绪，无需下载。")
 
 
-def download_one(base_url, fname, dest, progress_cb=None, file_index=0, file_count=0, should_stop=None):
+def download_one(
+    base_url,
+    fname,
+    dest,
+    progress_cb=None,
+    file_index=0,
+    file_count=0,
+    should_stop=None,
+):
     """下载单个文件（支持断点续传）。返回 True 成功 / False 失败。
 
     progress_cb(dict): 每个数据块回报当前文件进度；should_stop(): 返回 True 时中止。
@@ -395,28 +405,46 @@ def download_one(base_url, fname, dest, progress_cb=None, file_index=0, file_cou
             got += len(buf)
             if total:
                 pct = got * 100 // total
-                sys.stdout.write("\r    %-22s %3d%%  %s / %s" % (fname, pct, _human(got), _human(total)))
+                sys.stdout.write(
+                    "\r    %-22s %3d%%  %s / %s"
+                    % (fname, pct, _human(got), _human(total))
+                )
             else:
                 sys.stdout.write("\r    %-22s %s" % (fname, _human(got)))
             sys.stdout.flush()
             if progress_cb:
-                frac = (file_index - 1)
+                frac = file_index - 1
                 if total:
                     frac += pct / 100.0
                 else:
                     frac += 0.5
                 try:
-                    op = int(frac / file_count * 100) if file_count else (pct if total else 0)
+                    op = (
+                        int(frac / file_count * 100)
+                        if file_count
+                        else (pct if total else 0)
+                    )
                 except Exception:
                     op = pct if total else 0
-                progress_cb({
-                    "phase": "download", "file": fname, "downloaded": got, "total": total,
-                    "percent": pct if total else None, "file_index": file_index,
-                    "file_count": file_count, "overall_percent": op, "status": "downloading",
-                })
+                progress_cb(
+                    {
+                        "phase": "download",
+                        "file": fname,
+                        "downloaded": got,
+                        "total": total,
+                        "percent": pct if total else None,
+                        "file_index": file_index,
+                        "file_count": file_count,
+                        "overall_percent": op,
+                        "status": "downloading",
+                    }
+                )
     sys.stdout.write("\n")
     if total and got < total:
-        print("    [警告] %s 下载大小不足（%s / %s），可能中断" % (fname, _human(got), _human(total)))
+        print(
+            "    [警告] %s 下载大小不足（%s / %s），可能中断"
+            % (fname, _human(got), _human(total))
+        )
         return False
     try:
         os.replace(part, dest)
@@ -426,7 +454,15 @@ def download_one(base_url, fname, dest, progress_cb=None, file_index=0, file_cou
     return True
 
 
-def download_one_mt(base_url, fname, dest, progress_cb=None, file_index=0, file_count=0, should_stop=None):
+def download_one_mt(
+    base_url,
+    fname,
+    dest,
+    progress_cb=None,
+    file_index=0,
+    file_count=0,
+    should_stop=None,
+):
     """下载单个文件（多线程 Range 切片，逐段续传；源不支持 Range 时退回单连接顺序下载）。
 
     与 download_one 契约一致：返回 True 成功 / False 失败；should_stop() 为真时抛 _DownloadCancelled。
@@ -435,8 +471,15 @@ def download_one_mt(base_url, fname, dest, progress_cb=None, file_index=0, file_
     """
     total, supports = probe_range_support(base_url, fname)
     if not supports or not total:
-        return download_one(base_url, fname, dest, progress_cb=progress_cb,
-                            file_index=file_index, file_count=file_count, should_stop=should_stop)
+        return download_one(
+            base_url,
+            fname,
+            dest,
+            progress_cb=progress_cb,
+            file_index=file_index,
+            file_count=file_count,
+            should_stop=should_stop,
+        )
     slices = plan_slices(total, _mt_threads())
     state = _MTState(len(slices))
     s0f = "%s.part.0" % dest
@@ -446,9 +489,7 @@ def download_one_mt(base_url, fname, dest, progress_cb=None, file_index=0, file_
         old_part = dest + ".part"
         if os.path.exists(old_part):
             osz = os.path.getsize(old_part)
-            if osz > s0len:
-                os.remove(old_part)
-            elif os.path.exists(s0f) and os.path.getsize(s0f) >= osz:
+            if osz > s0len or os.path.exists(s0f) and os.path.getsize(s0f) >= osz:
                 os.remove(old_part)
             else:
                 os.replace(old_part, s0f)
@@ -458,9 +499,15 @@ def download_one_mt(base_url, fname, dest, progress_cb=None, file_index=0, file_
         pass
 
     last_t, last_dl = time.time(), 0
-    with concurrent.futures.ThreadPoolExecutor(max_workers=len(slices), thread_name_prefix="dl") as ex:
-        futs = [ex.submit(_download_slice, base_url, fname, dest, k, s, e, state, should_stop)
-                for (k, s, e) in slices]
+    with concurrent.futures.ThreadPoolExecutor(
+        max_workers=len(slices), thread_name_prefix="dl"
+    ) as ex:
+        futs = [
+            ex.submit(
+                _download_slice, base_url, fname, dest, k, s, e, state, should_stop
+            )
+            for (k, s, e) in slices
+        ]
         while True:
             fin = sum(1 for f in futs if f.done())
             if fin == len(futs):
@@ -479,15 +526,33 @@ def download_one_mt(base_url, fname, dest, progress_cb=None, file_index=0, file_
                 except Exception:
                     op = pct
                 if progress_cb:
-                    progress_cb({
-                        "phase": "download", "file": fname, "downloaded": dl, "total": total,
-                        "percent": pct, "file_index": file_index, "file_count": file_count,
-                        "overall_percent": op, "status": "downloading",
-                        "threads": len(slices), "speed_bps": speed,
-                    })
+                    progress_cb(
+                        {
+                            "phase": "download",
+                            "file": fname,
+                            "downloaded": dl,
+                            "total": total,
+                            "percent": pct,
+                            "file_index": file_index,
+                            "file_count": file_count,
+                            "overall_percent": op,
+                            "status": "downloading",
+                            "threads": len(slices),
+                            "speed_bps": speed,
+                        }
+                    )
                 else:
-                    sys.stdout.write("\r    %-22s %3d%%  %s / %s  %dT  %d MB/s" % (
-                        fname, pct, _human(dl), _human(total), len(slices), speed // (1024 * 1024)))
+                    sys.stdout.write(
+                        "\r    %-22s %3d%%  %s / %s  %dT  %d MB/s"
+                        % (
+                            fname,
+                            pct,
+                            _human(dl),
+                            _human(total),
+                            len(slices),
+                            speed // (1024 * 1024),
+                        )
+                    )
                     sys.stdout.flush()
                 last_t, last_dl = now, dl
             if should_stop and should_stop():
@@ -544,7 +609,10 @@ def download_one_mt(base_url, fname, dest, progress_cb=None, file_index=0, file_
     except Exception:
         final_size = -1
     if final_size != total:
-        print("    [警告] %s 拼接结果 %s / %s，保留现场待重跑" % (fname, _human(final_size), _human(total)))
+        print(
+            "    [警告] %s 拼接结果 %s / %s，保留现场待重跑"
+            % (fname, _human(final_size), _human(total))
+        )
         return False
     for j in range(len(slices)):
         p = "%s.part.%d" % (dest, j)
@@ -556,7 +624,9 @@ def download_one_mt(base_url, fname, dest, progress_cb=None, file_index=0, file_
     return True
 
 
-def _do_download(items, target, hf_fallback, progress_cb=None, should_stop=None, label=""):
+def _do_download(
+    items, target, hf_fallback, progress_cb=None, should_stop=None, label=""
+):
     """按扫描结果下载指定文件。hf_fallback=True 时主源失败回退 HuggingFace。"""
     ok = True
     n = len(items)
@@ -572,28 +642,54 @@ def _do_download(items, target, hf_fallback, progress_cb=None, should_stop=None,
             except Exception:
                 pass
         if progress_cb:
-            progress_cb({
-                "phase": "download", "file": fname, "file_index": i, "file_count": n,
-                "status": "downloading", "message": "正在下载 %s（%s）" % (fname, label),
-            })
+            progress_cb(
+                {
+                    "phase": "download",
+                    "file": fname,
+                    "file_index": i,
+                    "file_count": n,
+                    "status": "downloading",
+                    "message": "正在下载 %s（%s）" % (fname, label),
+                }
+            )
         print("[下载] " + fname)
-    done = download_one_mt(ms_base, fname, dest, progress_cb=progress_cb,
-                           file_index=i, file_count=n, should_stop=should_stop)
+    done = download_one_mt(
+        ms_base,
+        fname,
+        dest,
+        progress_cb=progress_cb,
+        file_index=i,
+        file_count=n,
+        should_stop=should_stop,
+    )
     if not done and hf_fallback and hf_base:
         print("  ModelScope 失败，尝试 HuggingFace 回退...")
-        done = download_one_mt(hf_base, fname, dest, progress_cb=progress_cb,
-                               file_index=i, file_count=n, should_stop=should_stop)
+        done = download_one_mt(
+            hf_base,
+            fname,
+            dest,
+            progress_cb=progress_cb,
+            file_index=i,
+            file_count=n,
+            should_stop=should_stop,
+        )
         if progress_cb:
             try:
                 op = int(i / n * 100) if n else 100
             except Exception:
                 op = 100
-            progress_cb({
-                "phase": "download", "file": fname, "file_index": i, "file_count": n,
-                "status": "done", "percent": 100,
-                "overall_percent": op,
-                "message": "%s 下载完成" % fname,
-            })
+            progress_cb(
+                {
+                    "phase": "download",
+                    "file": fname,
+                    "file_index": i,
+                    "file_count": n,
+                    "status": "done",
+                    "percent": 100,
+                    "overall_percent": op,
+                    "message": "%s 下载完成" % fname,
+                }
+            )
         if not done:
             print("[失败] " + fname)
             ok = False
@@ -613,7 +709,9 @@ def download_models(progress_cb=None, should_stop=None):
     返回 (ok_main, ok_zip)。
     """
     if progress_cb:
-        progress_cb({"phase": "scan", "status": "scanning", "message": "正在检测模型文件…"})
+        progress_cb(
+            {"phase": "scan", "status": "scanning", "message": "正在检测模型文件…"}
+        )
 
     rep_main = scan_group(MAIN_ITEMS, TARGET)
     try:
@@ -621,28 +719,66 @@ def download_models(progress_cb=None, should_stop=None):
     except Exception as _e:
         print("[警告] 无法创建降噪模型目录 %s: %s（跳过可选项）" % (ZIP_TARGET, _e))
         ZIP_TARGET = None
-    rep_zip = scan_group(ZIP_ITEMS, ZIP_TARGET) if ZIP_TARGET else {"missing": [], "incomplete": [], "suspicious": [], "present": [], "todo": []}
+    rep_zip = (
+        scan_group(ZIP_ITEMS, ZIP_TARGET)
+        if ZIP_TARGET
+        else {
+            "missing": [],
+            "incomplete": [],
+            "suspicious": [],
+            "present": [],
+            "todo": [],
+        }
+    )
 
     if not rep_main["todo"] and not rep_zip["todo"]:
         if progress_cb:
-            progress_cb({"phase": "done", "status": "done", "message": "模型文件均已就绪，无需下载。"})
+            progress_cb(
+                {
+                    "phase": "done",
+                    "status": "done",
+                    "message": "模型文件均已就绪，无需下载。",
+                }
+            )
         return True, True
 
     main_todo = [(f, MS_BASE, HF_BASE) for f in rep_main["todo"]]
     zip_todo = [(f, MS_ZIP_BASE, None) for f in rep_zip["todo"]]
 
-    ok_main = _do_download(main_todo, TARGET, hf_fallback=True,
-                           progress_cb=progress_cb, should_stop=should_stop, label="主模型 VoxCPM2")
-    ok_zip = _do_download(zip_todo, ZIP_TARGET, hf_fallback=False,
-                          progress_cb=progress_cb, should_stop=should_stop, label="离线降噪 ZipEnhancer")
+    ok_main = _do_download(
+        main_todo,
+        TARGET,
+        hf_fallback=True,
+        progress_cb=progress_cb,
+        should_stop=should_stop,
+        label="主模型 VoxCPM2",
+    )
+    ok_zip = _do_download(
+        zip_todo,
+        ZIP_TARGET,
+        hf_fallback=False,
+        progress_cb=progress_cb,
+        should_stop=should_stop,
+        label="离线降噪 ZipEnhancer",
+    )
 
     if progress_cb:
         if ok_main:
-            progress_cb({"phase": "done", "status": "done",
-                         "message": "模型下载完成。请返回主界面加载模型（或重启程序）。"})
+            progress_cb(
+                {
+                    "phase": "done",
+                    "status": "done",
+                    "message": "模型下载完成。请返回主界面加载模型（或重启程序）。",
+                }
+            )
         else:
-            progress_cb({"phase": "done", "status": "error",
-                         "message": "部分主模型文件未下载成功，请检查网络后重试。"})
+            progress_cb(
+                {
+                    "phase": "done",
+                    "status": "error",
+                    "message": "部分主模型文件未下载成功，请检查网络后重试。",
+                }
+            )
     return ok_main, ok_zip
 
 
@@ -663,7 +799,17 @@ def main():
     except Exception as _e:
         print("[警告] 无法创建降噪模型目录 %s: %s（跳过可选项）" % (ZIP_TARGET, _e))
         ZIP_TARGET = None
-    rep_zip = scan_group(ZIP_ITEMS, ZIP_TARGET) if ZIP_TARGET else {"missing": [], "incomplete": [], "suspicious": [], "present": [], "todo": []}
+    rep_zip = (
+        scan_group(ZIP_ITEMS, ZIP_TARGET)
+        if ZIP_TARGET
+        else {
+            "missing": [],
+            "incomplete": [],
+            "suspicious": [],
+            "present": [],
+            "todo": [],
+        }
+    )
     print_report("离线降噪 ZipEnhancer（可选项）", rep_zip)
     print("")
 
@@ -687,8 +833,12 @@ def main():
         print("✅ 降噪模型就绪。重启程序即可在「降噪」选项中启用离线降噪。")
     else:
         print("⚠️ 降噪模型部分文件未下载（可选项）。如需离线降噪，可手动从")
-        print("https://modelscope.cn/models/iic/speech_zipenhancer_ans_multiloss_16k_base 下载后放入")
-        print("models\\zipenhancer\\，或复制完整版安装目录下的 models\\zipenhancer\\ 文件夹。")
+        print(
+            "https://modelscope.cn/models/iic/speech_zipenhancer_ans_multiloss_16k_base 下载后放入"
+        )
+        print(
+            "models\\zipenhancer\\，或复制完整版安装目录下的 models\\zipenhancer\\ 文件夹。"
+        )
 
 
 if __name__ == "__main__":
