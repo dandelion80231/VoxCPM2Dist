@@ -2326,6 +2326,7 @@ HTML_CONTENT = r"""
       <input class="cv-name" id="customVoiceName" placeholder="音色名称，如「解说大叔」">
       <div class="cv-hint">将保存上方「音色描述」框中的当前内容</div>
       <button class="voice-btn custom-save" onclick="saveCustomVoice()">＋ 保存为预设</button>
+      <button class="voice-btn custom-save" onclick="deleteCustomPreset()" style="margin-top:4px;opacity:0.8;font-size:11px;">🗑 删除当前预设</button>
       <div class="cv-saved" id="cvSaved">✅ 已保存</div>
     </div>
   </aside>
@@ -2869,16 +2870,65 @@ function renderVoices() {
   const all = [...Object.entries(VOICE_LIST), ...CUSTOM_VOICES.map(v => [v.id, v])];
   for (const [id, v] of all) {
     const isCustom = typeof id === 'string' && id.startsWith('custom_');
+    const isLocked = typeof id === 'string' && id.startsWith('locked_');
     const btn = document.createElement('button');
-    btn.className = 'voice-btn' + (id === selectedVoice ? ' active' : '') + (isCustom ? ' custom-preset' : '');
+    btn.className = 'voice-btn' + (id === selectedVoice ? ' active' : '') + (isCustom ? ' custom-preset' : '') + (isLocked ? ' locked-preset' : '');
     btn.dataset.id = id;
     btn.onclick = () => selectVoice(id, btn);
-    btn.innerHTML = `
+    if (isLocked) {
+      // 锁定音色：右上角🔒 + 填充色背景
+      btn.innerHTML = `<div class="voice-icon">${v.icon || '🔒'}</div>
+      <div style="flex:1;min-width:0">
+        <div class="voice-name">${esc(v.name)} <span style="font-size:9px;vertical-align:top;">🔒</span></div>
+        <div class="voice-desc">${esc(v.desc || '')}</div>
+      </div>`;
+      btn.style.background = 'var(--accent, #6c8eff)22';
+      btn.style.border = '1px solid var(--accent, #6c8eff)55';
+    } else {
+      btn.innerHTML = `
       <div class="voice-icon">${v.icon}</div>
       <div>
         <div class="voice-name">${v.name}${isCustom ? ' <span style="font-size:10px;color:var(--text2)">★</span>' : ''}</div>
         <div class="voice-desc">${v.desc}</div>
       </div>`;
+    }
+    // 拖拽目标：档案 chip 拖到预设上 → 替换为锁定音色
+    btn.addEventListener('dragover', e => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      btn.style.borderColor = 'var(--accent)';
+      btn.style.borderWidth = '2px';
+    });
+    btn.addEventListener('dragleave', () => {
+      btn.style.borderColor = '';
+      btn.style.borderWidth = '';
+    });
+    btn.addEventListener('drop', e => {
+      e.preventDefault();
+      btn.style.borderColor = '';
+      btn.style.borderWidth = '';
+      const profileName = e.dataTransfer.getData('text/plain');
+      if (!profileName) return;
+      // 将档案绑定为锁定预设
+      const lockedId = 'locked_' + Date.now();
+      const lockedVoice = {
+        id: lockedId,
+        name: profileName + ' 🔒',
+        desc: '(固定克隆) ' + (v.desc || '').slice(0, 20),
+        icon: '🔒',
+        profileName: profileName,  // 关联档案名
+      };
+      // 替换当前预设位置
+      const idx = CUSTOM_VOICES.findIndex(cv => cv.id === id);
+      if (idx >= 0) CUSTOM_VOICES[idx] = lockedVoice;
+      else CUSTOM_VOICES.push(lockedVoice);
+      try { localStorage.setItem('voxcpm_custom_voices', JSON.stringify(CUSTOM_VOICES)); } catch {}
+      renderVoices();
+      selectVoice(lockedId, document.querySelector('.voice-btn[data-id="' + lockedId + '"]'));
+      // 应用档案设置
+      applyProfile(profileName);
+      showToast('已将档案「' + profileName + '」锁定到预设位', 'success');
+    });
     grid.appendChild(btn);
   }
 }
@@ -2908,8 +2958,15 @@ function selectVoice(id, btn) {
   document.querySelectorAll('.voice-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   // 将预设描述填入「音色描述」框，便于查看/微调
-  const v = VOICE_LIST[id];
-  if (v) document.getElementById('controlText').value = v.desc;
+  const v = VOICE_LIST[id] || CUSTOM_VOICES.find(c => c.id === id);
+  if (v) document.getElementById('controlText').value = v.desc || '';
+  // 锁定预设自动应用档案设置
+  if (v && v.profileName) {
+    currentMode = 'fixed_clone';
+    const cloneBtn = document.querySelector('.ref-mode-btn[data-mode="fixed_clone"]');
+    if (cloneBtn) setMode('fixed_clone', cloneBtn);
+    applyProfile(v.profileName);
+  }
 }
 
 function setMode(mode, btn) {
@@ -3349,6 +3406,21 @@ function saveCustomVoice() {
   saved.style.display = 'block';
   setTimeout(() => saved.style.display = 'none', 2000);
   showToast('已保存自定义音色：' + name, 'success');
+}
+
+function deleteCustomPreset() {
+  // 删除当前选中的自定义/锁定预设
+  const idx = CUSTOM_VOICES.findIndex(v => v.id === selectedVoice);
+  if (idx < 0) { showToast('请先选中一个自定义预设再删除', 'info'); return; }
+  const removed = CUSTOM_VOICES[idx];
+  if (!confirm('确认删除预设「' + removed.name + '」？')) return;
+  CUSTOM_VOICES.splice(idx, 1);
+  try { localStorage.setItem('voxcpm_custom_voices', JSON.stringify(CUSTOM_VOICES)); } catch {}
+  selectedVoice = 'default';
+  renderVoices();
+  const btn = document.querySelector('.voice-btn[data-id="default"]');
+  if (btn) selectVoice('default', btn);
+  showToast('已删除预设「' + removed.name + '」', 'success');
 }
 
 // ── 顶部环境栏（横向）──
@@ -4001,10 +4073,36 @@ async function renderProfileChips() {
     const ps = d.profiles || [];
     for (const p of ps) {
       const chip = document.createElement('button');
-      chip.style.cssText = 'padding:2px 8px;font-size:11px;border-radius:10px;border:1px solid var(--border);background:var(--surface2);color:var(--text);cursor:pointer;max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+      chip.draggable = true;
+      chip.dataset.profileName = p.name || '';
+      chip.style.cssText = 'padding:2px 8px;font-size:11px;border-radius:10px;border:1px solid var(--border);background:var(--surface2);color:var(--text);cursor:grab;max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;user-select:none;';
       chip.textContent = p.name || '未命名';
-      chip.title = (p.mode === 'fixed_clone' ? '🔒 ' : '') + (p.control_text || '') + ' (' + (p.mode || 'voice_design') + ')';
+      chip.title = (p.mode === 'fixed_clone' ? '🔒 ' : '') + (p.control_text || '') + ' (' + (p.mode || 'voice_design') + ') — 拖到左侧预设可锁定音色；拖到其它标签前/后可排序';
       chip.onclick = () => applyProfile(p.name);
+      // 拖拽排序（drop 到另一个 chip 前/后）
+      chip.addEventListener('dragstart', e => {
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', p.name || '');
+        chip.style.opacity = '0.4';
+      });
+      chip.addEventListener('dragend', () => { chip.style.opacity = '1'; });
+      chip.addEventListener('dragover', e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; chip.style.borderColor = 'var(--accent)'; });
+      chip.addEventListener('dragleave', () => { chip.style.borderColor = 'var(--border)'; });
+      chip.addEventListener('drop', e => {
+        e.preventDefault(); chip.style.borderColor = 'var(--border)';
+        const fromName = e.dataTransfer.getData('text/plain');
+        if (!fromName || fromName === p.name) return;
+        // 在档案数组中交换位置
+        const arr = box.querySelectorAll('button[data-profilename]');
+        const fromChip = Array.from(arr).find(c => c.dataset.profileName === fromName);
+        if (fromChip) {
+          const idxFrom = Array.from(box.children).indexOf(fromChip);
+          const idxTo = Array.from(box.children).indexOf(chip);
+          if (idxFrom < idxTo) box.insertBefore(fromChip, chip.nextSibling);
+          else box.insertBefore(fromChip, chip);
+        }
+        showToast('档案顺序已更新（本地显示）', 'info');
+      });
       box.appendChild(chip);
     }
   } catch (e) { /* silent */ }
