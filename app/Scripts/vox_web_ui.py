@@ -86,6 +86,7 @@ MODEL_ID = "openbmb/VoxCPM2"
 MAX_CHUNK_SIZE = 240
 executor = ThreadPoolExecutor(max_workers=2)
 
+
 # ── 总式数值转换（任何失败返回默认值，绝不抛异常）─────────────
 def _safe_int(value, default: int = 0) -> int:
   try:
@@ -99,6 +100,7 @@ def _safe_float(value, default: float = 0.0) -> float:
     return float(value)
   except (TypeError, ValueError, OverflowError):
     return default
+
 
 # ── 音色预设 ─────────────────────────────────────────────
 VOICE_PRESETS = {
@@ -146,7 +148,9 @@ _output_dir = Path(os.environ.get("VOXCPM_OUTPUT_DIR", str(Path.home() / "Deskto
 # 留空 = 不挂载 LoRA，使用原版模型；设置后下次合成将重载模型并挂载 LoRA。
 _lora_weights_path: str = ""
 # LoRA 实际加载结果（模型加载后填充），供状态面板如实显示，避免「假成功」。
-_lora_load_info: tuple | None = None  # (loaded_count, skipped_count) 或 None（尚未加载/未配置）
+_lora_load_info: tuple | None = (
+  None  # (loaded_count, skipped_count) 或 None（尚未加载/未配置）
+)
 _lora_resolve_error: str = ""  # resolve_lora 失败原因（路径错/配置坏等），空=未失败
 
 
@@ -661,7 +665,9 @@ def load_model(force_reload: bool = False):
     model = VoxCPM.from_pretrained(
       model_path,
       load_denoiser=use_denoiser,
-      zipenhancer_model_id=cast("str", zpath if use_denoiser else None),  # 运行时接受 None（关闭降噪）
+      zipenhancer_model_id=cast(
+        "str", zpath if use_denoiser else None
+      ),  # 运行时接受 None（关闭降噪）
       optimize=False,
       device=device,
       **lora_kwargs,
@@ -783,7 +789,9 @@ def resample_audio(audio: np.ndarray, sr_in: int, sr_out: int) -> np.ndarray:
     from scipy.signal import resample as sp_resample
 
     n = _safe_int(round(len(audio) * sr_out / sr_in))
-    return cast("np.ndarray", sp_resample(audio, n))  # scipy 存根重载返回 tuple，实际为 ndarray
+    return cast(
+      "np.ndarray", sp_resample(audio, n)
+    )  # scipy 存根重载返回 tuple，实际为 ndarray
   except Exception:
     _scipy_resample_ok = False  # scipy 不可用则继续尝试下一策略
   # 简单线性插值回退
@@ -847,7 +855,9 @@ def normalize_segments(audio_segments: list, target_mode: str = "mean") -> list:
   valid_rms = [r for r in rms_values if r > 1e-9]
   if not valid_rms:
     return audio_segments
-  target_rms = rms_values[0] if target_mode == "first" else _safe_float(np.mean(valid_rms))
+  target_rms = (
+    rms_values[0] if target_mode == "first" else _safe_float(np.mean(valid_rms))
+  )
   if target_rms < 1e-9:
     return audio_segments
 
@@ -935,7 +945,9 @@ def synthesize(args: dict) -> dict:
         text = auto_text
         phoneme_mode = True
     except Exception:
-      _phoneme_auto_skipped = True  # 自动纠错失败不阻塞，退回默认链路（多音字可能读错，可手动标注兜底）
+      _phoneme_auto_skipped = (
+        True  # 自动纠错失败不阻塞，退回默认链路（多音字可能读错，可手动标注兜底）
+      )
   normalize = requested_normalize and not phoneme_mode
   denoise = str(args.get("denoise", "false")).lower() in ("true", "1", "yes", True)
   prompt_text = args.get("prompt_text") or None  # 终极克隆：参考音频的转录文本
@@ -991,7 +1003,9 @@ def synthesize(args: dict) -> dict:
 
       text = strip_annotated_hanzi(text)
     except Exception:
-      _phoneme_strip_skipped = True  # 剥离失败不阻塞合成，退回原文本（可能重复读但保证能出结果）
+      _phoneme_strip_skipped = (
+        True  # 剥离失败不阻塞合成，退回原文本（可能重复读但保证能出结果）
+      )
 
   chunks = split_text(text, chunk_size=chunk_size)
   total_chunks = len(chunks)
@@ -1078,7 +1092,11 @@ def synthesize(args: dict) -> dict:
           kwargs["prompt_text"] = seed_prompt_text
         wav = model.generate(**kwargs)
         _regen = (
-          (lambda t, _kw={k: v for k, v in kwargs.items() if k != "text"}: model.generate(text=t, **_kw))
+          (
+            lambda t, _kw={k: v for k, v in kwargs.items() if k != "text"}: (
+              model.generate(text=t, **_kw)
+            )
+          )
           if audio_guard is not None
           else None
         )
@@ -1114,13 +1132,20 @@ def synthesize(args: dict) -> dict:
           denoise=denoise,
         )
         _regen = (
-          (lambda t, _ref=current_ref, _sr_path=seed_ref_path, _st=seed_prompt_text,
-                   _cfg=cfg, _stp=steps, _nm=normalize, _dn=denoise:
-           model.generate(
-             text=t, cfg_value=_cfg, inference_timesteps=_stp,
-             reference_wav_path=_ref, prompt_wav_path=_sr_path, prompt_text=_st,
-             normalize=_nm, denoise=_dn,
-           ))
+          (
+            lambda t, _ref=current_ref, _sr_path=seed_ref_path, _st=seed_prompt_text, _cfg=cfg, _stp=steps, _nm=normalize, _dn=denoise: (
+              model.generate(
+                text=t,
+                cfg_value=_cfg,
+                inference_timesteps=_stp,
+                reference_wav_path=_ref,
+                prompt_wav_path=_sr_path,
+                prompt_text=_st,
+                normalize=_nm,
+                denoise=_dn,
+              )
+            )
+          )
           if audio_guard is not None
           else None
         )
@@ -1134,10 +1159,15 @@ def synthesize(args: dict) -> dict:
           denoise=denoise,
         )
         _regen = (
-          (lambda t, _cfg=cfg, _stp=steps, _nm=normalize, _dn=denoise: model.generate(
-            text=t, cfg_value=_cfg, inference_timesteps=_stp,
-            normalize=_nm, denoise=_dn,
-          ))
+          (
+            lambda t, _cfg=cfg, _stp=steps, _nm=normalize, _dn=denoise: model.generate(
+              text=t,
+              cfg_value=_cfg,
+              inference_timesteps=_stp,
+              normalize=_nm,
+              denoise=_dn,
+            )
+          )
           if audio_guard is not None
           else None
         )
@@ -1310,6 +1340,7 @@ def get_app_version(fallback="5.3"):
         return v
   except Exception as _ver_exc:  # 版本号读取失败时仅提示，不阻断启动
     import sys
+
     print(f"[警告] 读取 app/version.txt 失败: {_ver_exc}", file=sys.stderr)
   return fallback
 
@@ -4523,7 +4554,11 @@ if HAS_WEB:
         seg = arr[(b * n) // 64 : ((b + 1) * n) // 64] if n else np.zeros(0)
         peaks.append(_safe_float(np.max(np.abs(seg))) if len(seg) else 0.0)
       m = max(peaks) or 1.0
-      return fname, [round(p / m, 4) for p in peaks], round(n / _safe_float(sr, 24000.0), 2)
+      return (
+        fname,
+        [round(p / m, 4) for p in peaks],
+        round(n / _safe_float(sr, 24000.0), 2),
+      )
 
     loop = asyncio.get_running_loop()
     try:

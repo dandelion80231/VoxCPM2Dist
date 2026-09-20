@@ -59,7 +59,11 @@ def has_runaway(audio, sample_rate: int, max_silence_ms: int = 2000) -> bool:
 
 
 def trim_internal_silence(
-    audio, sample_rate: int, max_internal_silence_ms: int = 1200, keep_tail_ms: int = 200, fade_ms: int = 30
+    audio,
+    sample_rate: int,
+    max_internal_silence_ms: int = 1200,
+    keep_tail_ms: int = 200,
+    fade_ms: int = 30,
 ) -> np.ndarray:
     """裁掉段内长静音及其后的幻觉噪声：
 
@@ -141,12 +145,24 @@ def guard_chunk(
             f"自动对半拆段重生成（第 {depth + 1}/{max_depth} 层）"
         )
         left = guard_chunk(
-            regen_fn(chunk_text[:mid]), sample_rate, regen_fn, chunk_text[:mid],
-            min_chars, max_depth, depth + 1, log,
+            regen_fn(chunk_text[:mid]),
+            sample_rate,
+            regen_fn,
+            chunk_text[:mid],
+            min_chars,
+            max_depth,
+            depth + 1,
+            log,
         )
         right = guard_chunk(
-            regen_fn(chunk_text[mid:]), sample_rate, regen_fn, chunk_text[mid:],
-            min_chars, max_depth, depth + 1, log,
+            regen_fn(chunk_text[mid:]),
+            sample_rate,
+            regen_fn,
+            chunk_text[mid:],
+            min_chars,
+            max_depth,
+            depth + 1,
+            log,
         )
         return np.concatenate([left, right]).astype(np.float32)
     return wav

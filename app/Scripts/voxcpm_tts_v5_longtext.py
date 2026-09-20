@@ -310,7 +310,9 @@ def normalize_segments(audio_segments: list, target_mode: str = "mean") -> list:
     if not valid_rms:
         return audio_segments
     target_rms = (
-        rms_values[0] if target_mode == "first" else float(sum(valid_rms) / len(valid_rms))
+        rms_values[0]
+        if target_mode == "first"
+        else float(sum(valid_rms) / len(valid_rms))
     )
     if target_rms < 1e-9:
         return audio_segments
