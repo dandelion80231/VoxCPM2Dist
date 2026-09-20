@@ -694,6 +694,11 @@ def main():
         print(f"  CFG:             {args.cfg}")
         print(f"  STEPS:           {args.steps}")
         print(f"  NORMALIZE:       {args.normalize}")
+        try:
+            from text_norm_cn import user_rule_count
+            print(f"  USER_RULES:      {user_rule_count()} (num_norm_extra.txt)")
+        except Exception:
+            print(f"  USER_RULES:      0 (用户规则不可用)")
         print(f"  CROSSFADE_MS:    {args.crossfade}")
         print(f"  UPDATE_REF:      {args.update_ref}")
         print(f"  LORA:            {LORA_WEIGHTS_PATH or '(未挂载，使用原版模型)'}")

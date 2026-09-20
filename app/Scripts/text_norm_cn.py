@@ -12,8 +12,13 @@
 #   - 英文缩写「按单词读」白名单 _ACRONYM_AS_WORD：命中则不打散字母、交 G2P 当单词读
 #     （NASA/Intel/Google…）；按单词读的 acronym 加全大写词即可，逐字母读的
 #     initialism（FBI/IBM/UN…）切勿加入。
+#   - 用户自定义规则文件 num_norm_extra.txt（与本文件同目录，可选）：
+#     内置规则读不对的数字/写法，在里面加「原文 => 读法」或「?正则 => 替换」，
+#     改完即热生效（按 mtime 重载），详见该文件头部说明。
 
+import os
 import re
+import sys
 
 _CN_DIGITS = "零一二三四五六七八九"
 
@@ -23,6 +28,85 @@ _CN_DIGITS = "零一二三四五六七八九"
 # 注：中文句号「。」是 U+3002（不在 0xFF01-0xFF5E 区间，本就保留）；
 #     中文顿号「、」U+3001、全角分号「；」U+FF1B 等如需保留可补进此集合。
 _FULLWIDTH_PUNCT_KEEP = {0xFF0C, 0xFF0E}
+
+
+# ── 用户自定义归一化规则（num_norm_extra.txt，与本模块同目录；不建则零影响）──
+# 按文件 mtime 缓存：用户编辑保存后下一次合成自动重载，无需重启。
+_USER_RULES_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "num_norm_extra.txt")
+_user_rules_cache = None  # (mtime, [(kind, a, b), ...])  kind: "lit"/"re"
+_user_rules_warned = set()
+
+
+def _load_user_rules():
+    """解析 num_norm_extra.txt → [(kind, a, b), ...]。kind=lit: text.replace(a,b)；
+    kind=re: re.sub(a, b)（a 为已编译正则，b 支持 \1 反向引用）。"""
+    global _user_rules_cache
+    if not os.path.isfile(_USER_RULES_FILE):
+        return ()
+    try:
+        mtime = os.path.getmtime(_USER_RULES_FILE)
+        if _user_rules_cache is not None and _user_rules_cache[0] == mtime:
+            return _user_rules_cache[1]
+        with open(_USER_RULES_FILE, encoding="utf-8", errors="replace") as f:
+            lines = f.readlines()
+    except OSError:
+        return ()
+    rules, bad = [], []
+    for raw in lines:
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        is_re = line.startswith("?")
+        body = line[1:] if is_re else line
+        if "=>" not in body:
+            bad.append(line)
+            continue
+        left, right = body.split("=>", 1)
+        left, right = left.strip(), right.strip()
+        if not left:
+            bad.append(line)
+            continue
+        if is_re:
+            try:
+                rules.append(("re", re.compile(left), right))
+            except re.error:
+                bad.append(line)
+        else:
+            rules.append(("lit", left, right))
+    if bad:
+        print("[num_norm_extra] 忽略 %d 条格式错误的规则: %s" % (len(bad), "; ".join(bad)[:200]), file=sys.stderr)
+    _user_rules_cache = (mtime, rules)
+    return rules
+
+
+def user_rule_count():
+    """当前生效的用户规则条数（--show-config 展示用）。"""
+    try:
+        return len(_load_user_rules())
+    except Exception:
+        return 0
+
+
+def _apply_user_rules(text):
+    for kind, a, b in _load_user_rules():
+        if kind == "lit":
+            text = text.replace(a, b)
+        else:
+            # 替换串里的反向引用（\1 等）在首次 sub 时才校验，用户写错会让整段
+            # 合成崩溃 → 单条规则失败只警告跳过（首次出现时），不影响其余规则。
+            try:
+                text = a.sub(b, text)
+            except re.error as e:
+                key = (a.pattern, b)
+                if key not in _user_rules_warned:
+                    _user_rules_warned.add(key)
+                    print("[num_norm_extra] 正则规则替换串有误，已跳过: ?%s => %s (%s)" % (a.pattern, b, e), file=sys.stderr)
+            except Exception as e:  # 其他意外（用户文件不可信，绝不让它弄崩 TTS）
+                key = (a.pattern, b)
+                if key not in _user_rules_warned:
+                    _user_rules_warned.add(key)
+                    print("[num_norm_extra] 规则执行出错，已跳过: ?%s => %s (%s)" % (a.pattern, b, e), file=sys.stderr)
+    return text
 
 
 def _fullwidth_to_halfwidth(s: str) -> str:
@@ -129,16 +213,26 @@ _MEASURE_ALT = "|".join(re.escape(u) for u, _ in sorted(_MEASURE_UNITS, key=lamb
 _MEASURE_MAP = dict(_MEASURE_UNITS)
 
 
+def _safe_int(s, default=0):
+    r"""int() 总式包装：各调用点输入按构造都是正则 \d+ 捕获组（纯数字串，int() 本不抛）；
+    兜底仅防极端"非数字泄漏"（全角数字/脏输入），保证单个异常字符不会崩掉整个合成任务。
+    合法数字串上行为与 int() 完全一致。"""
+    try:
+        return int(s)
+    except (TypeError, ValueError):
+        return default
+
+
 def _num_to_ch(s: str) -> str:
     """将阿拉伯数字串（含小数点）按位转换为中文读法。"""
-    return "".join(_CN_DIGITS[int(c)] if c.isdigit() else "点" for c in s)
+    return "".join(_CN_DIGITS[_safe_int(c)] if c.isdigit() else "点" for c in s)
 
 
 def _hotline_to_ch(s: str) -> str:
     """热线号码逐位读法：1 读成「幺」；110 特例读「妖妖灵」（报警电话的趣味读法）。"""
     if s == "110":
         return "妖妖灵"
-    return "".join("幺" if c == "1" else _CN_DIGITS[int(c)] for c in s)
+    return "".join("幺" if c == "1" else _CN_DIGITS[_safe_int(c)] for c in s)
 
 
 def _int_to_chinese_small(n: int) -> str:
@@ -151,10 +245,10 @@ def _int_to_chinese_small(n: int) -> str:
     res = ""
     zero = False
     for i, ch in enumerate(s):
-        d = int(ch)
+        d = _safe_int(ch)
         pos = length - 1 - i
         if d == 0:
-            if not zero and pos > 0 and any(int(c) != 0 for c in s[i + 1:]):
+            if not zero and pos > 0 and any(_safe_int(c) != 0 for c in s[i + 1:]):
                 zero = True
         else:
             if zero:
@@ -199,14 +293,14 @@ def _decimal_to_ch(s: str) -> str:
     兼容全角句号 ．（如 1．2），先归一化为 ASCII 点再拆分。"""
     s = s.replace("．", ".")
     int_part, dec_part = s.split(".")
-    int_val = _num_to_chinese_value(int(int_part)) if int_part != "0" else "零"
-    dec = "".join(_CN_DIGITS[int(c)] for c in dec_part)
+    int_val = _num_to_chinese_value(_safe_int(int_part)) if int_part != "0" else "零"
+    dec = "".join(_CN_DIGITS[_safe_int(c)] for c in dec_part)
     return f"{int_val}点{dec}"
 
 
 def _num_or_decimal(s: str) -> str:
     """整数位值读、小数走 _decimal_to_ch。"""
-    return _decimal_to_ch(s) if "." in s else _num_to_chinese_value(int(s))
+    return _decimal_to_ch(s) if "." in s else _num_to_chinese_value(_safe_int(s))
 
 
 def normalize_text(text: str) -> str:
@@ -231,6 +325,10 @@ def normalize_text(text: str) -> str:
     # Y) 全角→半角（必须最先做，否则全角数字/字母会漏过后续所有规则）
     text = _fullwidth_to_halfwidth(text)
 
+    # U) 用户自定义规则（num_norm_extra.txt）：内置规则的补充/优先覆盖，
+    #    读法产物一般是中文，后续内置数字规则不会再碰它。
+    text = _apply_user_rules(text)
+
     # 1) 日期：YYYY年MM月DD日 / MM月DD日 / MM月DD号 / YYYY年MM月
     #    年份逐位读（二零二四），月份、日期按位值读（六月二十六日）
     def date_repl(m):
@@ -239,22 +337,22 @@ def normalize_text(text: str) -> str:
         if year:
             out += _num_to_ch(year) + "年"
         if month:
-            out += _int_to_chinese_small(int(month)) + "月"
+            out += _int_to_chinese_small(_safe_int(month)) + "月"
         if day:
             suffix = "日" if "日" in m.group(0) else "号"
-            out += _int_to_chinese_small(int(day)) + suffix
+            out += _int_to_chinese_small(_safe_int(day)) + suffix
         return out
 
     # 1.2) 横线/斜杠/点分日期（4 位年）：2024-01-15 / 2024/1/15 / 2024.1.15
     def dash_date_repl(m):
         out = _num_to_ch(m.group(1)) + "年"
-        out += _int_to_chinese_small(int(m.group(2))) + "月"
-        out += _int_to_chinese_small(int(m.group(3))) + "日"
+        out += _int_to_chinese_small(_safe_int(m.group(2))) + "月"
+        out += _int_to_chinese_small(_safe_int(m.group(3))) + "日"
         return out
 
     text = re.sub(r'(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})', dash_date_repl, text)
     text = re.sub(r'(\d{4})?年?(\d{1,2})月(\d{1,2})(?:日|号)', date_repl, text)
-    text = re.sub(r'(\d{4})年(\d{1,2})月', lambda m: f"{_num_to_ch(m.group(1))}年{_int_to_chinese_small(int(m.group(2)))}月", text)
+    text = re.sub(r'(\d{4})年(\d{1,2})月', lambda m: f"{_num_to_ch(m.group(1))}年{_int_to_chinese_small(_safe_int(m.group(2)))}月", text)
     # 1.3) 年份区间：2024年-2025年 -> 二零二四年到二零二五年
     #      （必须放在裸年份规则之前，否则年份被单独转换后区间匹配会失败）
     text = re.sub(r'(\d+)年\s*[-—~～]\s*(\d+)年',
@@ -294,11 +392,11 @@ def normalize_text(text: str) -> str:
 
     # 1.8) 时间：14:30 -> 十四点三十分；12:05 -> 十二点零五分；14:30:25 -> 十四点三十分二十五秒
     def time_repl(m):
-        h, mi, s = int(m.group(1)), int(m.group(2)), m.group(3)
+        h, mi, s = _safe_int(m.group(1)), _safe_int(m.group(2)), m.group(3)
         out = _int_to_chinese_small(h) + "点"
         out += (_num_to_ch(f"0{mi}") if mi < 10 else _int_to_chinese_small(mi)) + "分"
         if s is not None:
-            ss = int(s)
+            ss = _safe_int(s)
             out += (_num_to_ch(f"0{ss}") if ss < 10 else _int_to_chinese_small(ss)) + "秒"
         return out
 
@@ -306,16 +404,16 @@ def normalize_text(text: str) -> str:
 
     # 1.9) 比值/比分：3:5 -> 三比五（时间规则已消费 HH:MM，这里处理剩余短数字比）
     text = re.sub(r'(\d{1,3})\s*[:：]\s*(\d{1,3})',
-                  lambda m: f"{_num_to_chinese_value(int(m.group(1)))}比{_num_to_chinese_value(int(m.group(2)))}", text)
+                  lambda m: f"{_num_to_chinese_value(_safe_int(m.group(1)))}比{_num_to_chinese_value(_safe_int(m.group(2)))}", text)
 
     # 1.10) 分数：3/4 -> 四分之三（横线/斜杠日期已先消费 4 位年格式，不冲突）
     text = re.sub(r'(-?)(\d+)\s*/\s*(\d+)',
                   lambda m: (("负" if m.group(1) else "")
-                             + f"{_num_to_chinese_value(int(m.group(3)))}分之{_num_to_chinese_value(int(m.group(2)))}"), text)
+                             + f"{_num_to_chinese_value(_safe_int(m.group(3)))}分之{_num_to_chinese_value(_safe_int(m.group(2)))}"), text)
 
     # 1.11) 范围：10~20 -> 十到二十；3-5 -> 三到五（排除已处理的年份区间/横线日期）
     text = re.sub(r'(?<!\d年)(\d{1,3})\s*[-~～]\s*(\d{1,3})(?!年)',
-                  lambda m: f"{_num_to_chinese_value(int(m.group(1)))}到{_num_to_chinese_value(int(m.group(2)))}", text)
+                  lambda m: f"{_num_to_chinese_value(_safe_int(m.group(1)))}到{_num_to_chinese_value(_safe_int(m.group(2)))}", text)
 
     # 1.12) 金额符号：¥100 -> 一百元；$10.5 -> 十点五美元
     def money_repl(m):
@@ -334,7 +432,7 @@ def normalize_text(text: str) -> str:
     #    否则 ±5% 会被百分号规则先吃掉数字、负号规则再也接不到数字。
     def pct_repl(m):
         sign, s = m.group(1), m.group(2)
-        core = f"百分之{_decimal_to_ch(s)}" if "." in s else f"百分之{_num_to_chinese_value(int(s))}"
+        core = f"百分之{_decimal_to_ch(s)}" if "." in s else f"百分之{_num_to_chinese_value(_safe_int(s))}"
         prefix = "正负" if sign == "±" else "负" if sign in ("-", "−") else ""
         return prefix + core
 
@@ -387,7 +485,7 @@ def normalize_text(text: str) -> str:
     def int_repl(m):
         s = m.group(0)
         if len(s) <= 12:
-            return _num_to_chinese_value(int(s))
+            return _num_to_chinese_value(_safe_int(s))
         return _num_to_ch(s)
 
     text = re.sub(r'\d+', int_repl, text)
@@ -420,4 +518,4 @@ def normalize_text(text: str) -> str:
     return text
 
 
-__all__ = ["normalize_text"]
+__all__ = ["normalize_text", "user_rule_count"]
