@@ -24,8 +24,16 @@ OutputBaseFilename={#MyOutputBase}
 Compression=lzma2/fast
 SolidCompression=no
 ArchitecturesInstallIn64BitMode=x64compatible
-WizardStyle=modern
 PrivilegesRequired=lowest
+; 6.6+ 原生主题（零新依赖）：polar 圆角 + 跟随系统自动深浅色 + 标题栏/边框套主题色
+; 6.7 起 polar 为内置风格，无需外部 .vsf 样式文件
+WizardStyle=modern dynamic polar includetitlebar
+; 标题栏品牌小图标（不指定时深色模式会被系统默认图标替换）
+SetupIconFile={#MyAssets}\VoxCPM_App.ico
+; 向导内置装饰图（各页右上角的文件夹/齿轮等）→ 换成品牌 logo（透明底 PNG，240x459）
+WizardImageFile={#MyAssets}\wizard_brand.png
+; 向导右上角方形小图（选目录等页内置的文件夹图标）→ 品牌 logo
+WizardSmallImageFile={#MyAssets}\wizard_brand_small.png
 UninstallDisplayIcon={app}\VoxCPM_App.ico
 DirExistsWarning=no
 DisableDirPage=no
