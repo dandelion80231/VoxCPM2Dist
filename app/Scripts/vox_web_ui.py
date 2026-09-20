@@ -3088,7 +3088,7 @@ function selectVoice(id, btn) {
     currentMode = 'fixed_clone';
     const cloneBtn = document.querySelector('.ref-mode-btn[data-mode="fixed_clone"]');
     if (cloneBtn) setMode('fixed_clone', cloneBtn);
-    applyProfile(v.profileName);
+    applyProfile(v.profileName, true);
   }
 }
 
@@ -4143,7 +4143,7 @@ async function saveProfileFromCurrent() {
     showToast('保存失败: ' + (e.message || e), 'error');
   }
 }
-async function applyProfile(name) {
+async function applyProfile(name, skipVoice) {
   try {
     const r = await fetch('/api/profiles');
     const d = await r.json();
@@ -4152,7 +4152,7 @@ async function applyProfile(name) {
     // 应用：模式 / 预设 / 音色描述 / 提示文本
     const modeBtn = document.querySelector('.ref-mode-btn[data-mode="' + (p.mode || 'voice_design') + '"]');
     if (modeBtn) setMode(p.mode || 'voice_design', modeBtn);
-    if (p.voice && VOICE_LIST[p.voice]) {
+    if (!skipVoice && p.voice && VOICE_LIST[p.voice]) {
       const voiceBtn = document.querySelector('.voice-btn[data-id="' + p.voice + '"]');
       if (voiceBtn) selectVoice(p.voice, voiceBtn);
       else selectedVoice = p.voice;
