@@ -2459,6 +2459,7 @@ HTML_CONTENT = r"""
     <div class="ref-card">
       <h3 style="display:flex;align-items:center;gap:10px;">音色统一模式（可选）
         <button class="mode-btn" id="profileBtn" onclick="openProfileManager()" style="padding:4px 10px;font-size:11px;cursor:pointer;" title="保存 / 应用 / 管理音色档案（voice + 音色描述 + 模式 + 参考音频）">🎚️ 音色档案</button>
+        <button class="mode-btn" id="saveProfileBtn" onclick="saveCurrentAsProfile()" style="padding:4px 10px;font-size:11px;cursor:pointer;" title="将当前音色设置保存为固定参考克隆档案（需先试听生成参考音频）">💾 存档案</button>
       </h3>
       <div class="ref-modes">
         <button class="mode-btn ref-mode-btn active" data-mode="voice_design" onclick="setMode('voice_design', this)">
@@ -2658,6 +2659,8 @@ let selectedVoice = 'default';
 let currentMode = 'voice_design';
 let refFile = null;
 let currentRefPath = '';   // 音色档案中的参考音频路径（fixed_clone 未重新上传时传给 /api/tts reference_path）
+let lastPreviewUrl = '';   // 最后一次试听生成的 wav_url（播放用）
+let lastPreviewPath = '';  // 最后一次试听生成的磁盘路径（存档案 reference_wav_path 用）
 let recState = null;
 let pollingInterval = null;
 let currentJobId = null;
@@ -2955,6 +2958,8 @@ async function runVoicePreview() {
     status.style.color = '';
     drawPreviewWave(d.peaks || []);
     audio.src = d.wav_url;
+    lastPreviewUrl = d.wav_url;
+    lastPreviewPath = d.file_path || '';
     // 播放过程中动画波形进度
     const _peaks = d.peaks || [];
     const _anim = () => {
@@ -3958,6 +3963,30 @@ async function applyProfile(name) {
     showToast('应用失败: ' + (e.message || e), 'error');
   }
 }
+
+async function saveCurrentAsProfile() {
+  if (!lastPreviewPath) { showToast('请先点击「▶ 试听」生成参考音频，再保存档案', 'error'); return; }
+  const name = prompt('档案名称（如：温柔女声-固定克隆）:', (document.getElementById('controlText').value.trim() || '未命名') + ' (克隆)');
+  if (!name) return;
+  const payload = {
+    name: name,
+    voice: selectedVoice || 'default',
+    control_text: document.getElementById('controlText').value.trim(),
+    mode: 'fixed_clone',
+    reference_wav_path: lastPreviewPath,
+    prompt_text: document.getElementById('promptText').value.trim(),
+  };
+  try {
+    const r = await fetch('/api/profiles', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const d = await r.json();
+    if (d.ok) { showToast('已保存为固定克隆档案：' + name, 'success'); }
+    else { showToast(d.error || '保存失败', 'error'); }
+  } catch (e) { showToast('保存失败: ' + (e.message || e), 'error'); }
+}
 async function deleteProfile(name) {
   if (!confirm('确认删除音色档案「' + name + '」？')) return;
   try {
@@ -4628,6 +4657,7 @@ if HAS_WEB:
       {
         "ok": True,
         "wav_url": f"/api/audio/{fname}",
+        "file_path": str(TEMP_DIR / fname),
         "filename": fname,
         "duration": dur,
         "peaks": peaks,
