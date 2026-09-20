@@ -2440,16 +2440,16 @@ HTML_CONTENT = r"""
       <h3>音色描述（可选，留空使用左侧预设；也可写方言/角色）</h3>
       <textarea id="controlText" class="prompt-text-input" placeholder="例如：25岁温柔甜美女声，带一点播音腔。或『深宫太后，威严庄重』『河南方言大叔』"></textarea>
       <div class="example-chips" id="exampleChips">
-        <div class="preview-inline" style="display:flex;align-items:center;gap:6px;margin-left:auto;">
+        <div class="preview-inline" style="display:flex;align-items:center;gap:6px;margin-left:auto;margin-right:36px;">
           <button id="voicePreviewBtn" class="mode-btn" onclick="runVoicePreview()" title="以当前音色设置生成一段短句试听" style="padding:4px 10px;font-size:12px;">▶ 试听</button>
-          <canvas id="voicePreviewWave" width="120" height="28" style="width:120px;height:28px;background:var(--surface);border:1px solid var(--border);border-radius:4px;box-sizing:border-box;"></canvas>
+          <canvas id="voicePreviewWave" width="180" height="28" style="width:180px;height:28px;background:var(--surface);border:1px solid var(--border);border-radius:4px;box-sizing:border-box;"></canvas>
           <audio id="voicePreviewAudio" preload="none" style="display:none;"></audio>
-          <button id="previewPlayBtn" onclick="previewPlayPause()" title="播放/暂停" style="display:none;width:28px;height:28px;border-radius:50%;border:1px solid var(--border);background:var(--surface2);color:var(--text);cursor:pointer;font-size:13px;line-height:1;">▶</button>
-          <button id="previewDlBtn" onclick="previewDownload()" title="下载试听音频" style="display:none;padding:2px 6px;border-radius:4px;border:1px solid var(--border);background:var(--surface2);color:var(--text2);cursor:pointer;font-size:11px;">⬇</button>
-          <select id="previewSpeed" onchange="previewSetSpeed(this.value)" title="语速" style="display:none;width:44px;height:24px;border-radius:4px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:11px;padding:0 2px;">
+          <button id="previewPlayBtn" onclick="previewPlayPause()" title="播放/暂停" style="width:28px;height:28px;border-radius:50%;border:1px solid var(--border);background:var(--surface2);color:var(--text);cursor:pointer;font-size:13px;line-height:1;">▶</button>
+          <button id="previewDlBtn" onclick="previewDownload()" title="下载试听音频" style="padding:2px 6px;border-radius:4px;border:1px solid var(--border);background:var(--surface2);color:var(--text2);cursor:pointer;font-size:11px;">⬇</button>
+          <select id="previewSpeed" onchange="previewSetSpeed(this.value)" title="语速" style="width:44px;height:24px;border-radius:4px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:11px;padding:0 2px;">
             <option value="0.5">0.5x</option><option value="0.75">0.75x</option><option value="1" selected>1x</option><option value="1.25">1.25x</option><option value="1.5">1.5x</option><option value="2">2x</option>
           </select>
-          <input type="range" id="previewVolume" min="0" max="1" step="0.05" value="1" oninput="previewSetVolume(this.value)" title="音量" style="display:none;width:50px;height:4px;accent-color:var(--accent);cursor:pointer;">
+          <input type="range" id="previewVolume" min="0" max="1" step="0.05" value="1" oninput="previewSetVolume(this.value)" title="音量" style="width:50px;height:4px;accent-color:var(--accent);cursor:pointer;">
           <div id="voicePreviewStatus" class="param-desc" style="margin:0;font-size:11px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">点击试听生成短句</div>
         </div>
       </div>
@@ -2955,11 +2955,6 @@ async function runVoicePreview() {
     status.style.color = '';
     drawPreviewWave(d.peaks || []);
     audio.src = d.wav_url;
-    // 显示自定义控件
-    document.getElementById('previewPlayBtn').style.display = 'inline-block';
-    document.getElementById('previewDlBtn').style.display = 'inline-block';
-    document.getElementById('previewSpeed').style.display = 'inline-block';
-    document.getElementById('previewVolume').style.display = 'inline-block';
     // 播放过程中动画波形进度
     const _peaks = d.peaks || [];
     const _anim = () => {
