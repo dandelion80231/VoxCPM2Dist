@@ -2919,33 +2919,30 @@ function renderVoices() {
     // 左侧预设拖拽排序
     btn.addEventListener('dragstart', e => {
       e.dataTransfer.effectAllowed = 'move';
-      e.dataTransfer.setData('text/voice-id', id);
+      e.dataTransfer.setData('text/plain', '__voice__:' + id);
       btn.style.opacity = '0.5';
     });
     btn.addEventListener('dragend', () => { btn.style.opacity = '1'; });
     // 拖拽目标：档案 chip → 锁定；预设 → 排序
     btn.addEventListener('dragover', e => {
       e.preventDefault();
-      const hasProfile = e.dataTransfer.types.includes('text/plain');
-      const hasVoice = e.dataTransfer.types.includes('text/voice-id');
-      if (hasProfile || hasVoice) {
-        e.dataTransfer.dropEffect = hasProfile ? 'move' : 'move';
-        btn.style.outline = '2px solid var(--accent)';
-      }
+      e.dataTransfer.dropEffect = 'move';
+      btn.style.outline = '2px solid var(--accent)';
     });
     btn.addEventListener('dragleave', () => { btn.style.outline = ''; });
     btn.addEventListener('drop', e => {
       e.preventDefault();
       btn.style.outline = '';
-      // 档案 chip 拖入 → 锁定
-      const profileName = e.dataTransfer.getData('text/plain');
-      const voiceId = e.dataTransfer.getData('text/voice-id');
-      if (voiceId && voiceId !== id) {
-        // 预设拖拽排序
-        reorderVoices(voiceId, id);
+      const data = e.dataTransfer.getData('text/plain');
+      if (!data) return;
+      // 预设拖拽排序
+      if (data.startsWith('__voice__:')) {
+        const voiceId = data.slice(9);
+        if (voiceId !== id) reorderVoices(voiceId, id);
         return;
       }
-      if (!profileName) return;
+      // 档案 chip 拖入 → 锁定
+      const profileName = data;
       const lockedId = 'locked_' + Date.now();
       const lockedVoice = {
         id: lockedId,
