@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 voxcpm_api.py — VoxCPM2 公共后端函数层（REST 标准化 / 模型目录 / 语料与 profile 导入导出）
 
@@ -15,6 +14,8 @@ REST 映射（由 vox_web_ui.py 路由调用）：
   POST /api/corpus            -> write_corpus(content)
   POST /api/corpus/import     -> import_corpus_text(content)
   POST /api/corpus/export     -> export_corpus_to_file()
+  GET  /api/norm-rules        -> read_norm_rules()
+  POST /api/norm-rules        -> write_norm_rules(content)
   GET  /api/profiles          -> list_profiles()
   POST /api/profiles          -> save_profile(name, data)
   POST /api/profiles/delete   -> delete_profile(name)
@@ -69,6 +70,55 @@ def write_corpus(content: str) -> dict:
         "path": str(p),
         "mtime": p.stat().st_mtime,
         "message": "已保存（保存即生效：g2p 检测到文件变化自动热加载，无需重启）",
+    }
+
+
+# ── 归一化规则（num_norm_extra.txt，与 text_norm_cn.py 同目录）────────────────
+# 行格式与 text_norm_cn._load_user_rules 一致：
+#   字面  原文 => 读法      （如 3.14 => 三点一四）
+#   正则  ?pattern => repl  （如 ?0+(\d) => \1，支持反向引用；# 开头为注释）
+# 按 mtime 热重载：保存后下一次合成自动生效，无需重启。
+
+
+def norm_rules_path() -> Path:
+    """用户归一化规则文件（与 text_norm_cn._USER_RULES_FILE 同一路径口径）。"""
+    try:
+        from text_norm_cn import _USER_RULES_FILE
+        return Path(_USER_RULES_FILE)
+    except Exception:
+        return SCRIPT_DIR / "num_norm_extra.txt"
+
+
+def read_norm_rules() -> dict:
+    """读取用户归一化规则（只读，不修改）。返回 path/exists/content/rule_count。"""
+    p = norm_rules_path()
+    exists = p.exists()
+    rule_count = 0
+    try:
+        from text_norm_cn import user_rule_count
+        rule_count = user_rule_count()
+    except Exception:
+        # text_norm_cn 不可用（极端缺路径场景）：规则条数记 0，不影响规则文件的读写本身
+        rule_count = 0
+    return {
+        "path": str(p),
+        "exists": exists,
+        "content": p.read_text(encoding="utf-8") if exists else "",
+        "rule_count": rule_count,
+    }
+
+
+def write_norm_rules(content: str) -> dict:
+    """写回用户归一化规则（UTF-8）。保存即生效：text_norm_cn 按 mtime 自动热加载，无需重启。
+    坏行由 text_norm_cn 解析时单条跳过 + 警告，不会崩合成任务。"""
+    p = norm_rules_path()
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(content or "", encoding="utf-8")
+    return {
+        "ok": True,
+        "path": str(p),
+        "mtime": p.stat().st_mtime,
+        "message": "已保存（保存即生效：归一化规则自动热加载，无需重启）",
     }
 
 

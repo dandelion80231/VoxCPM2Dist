@@ -2213,10 +2213,11 @@ HTML_CONTENT = r"""
     <div class="text-card">
       <div class="text-card-header">
         <h3>待合成文本</h3>
-        <div style="display:flex;gap:8px;align-items:center;">
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end;">
           <span class="char-count" id="charCount">0 字符</span>
           <button class="mode-btn" id="g2pBtn" onclick="g2pConvertText()" style="padding:4px 10px;font-size:11px;cursor:pointer;" title="将输入文本转换为 {ni3}{hao3} 音素串（需已下载 G2PW 离线模型）">🔤 转音素</button>
           <button class="mode-btn" id="txtUploadBtn" onclick="document.getElementById('txtFileInput').click()" style="padding:4px 10px;font-size:11px;cursor:pointer;">📄 上传TXT</button>
+          <button class="mode-btn" id="normRulesBtn" onclick="openNormRulesEditor()" style="padding:4px 10px;font-size:11px;cursor:pointer;" title="查看 / 编辑数字归一化规则 num_norm_extra.txt（字面/正则两种，补充或覆盖内置读法），保存即生效（热加载，无需重启）">🔢 归一化规则</button>
           <button class="mode-btn" id="corpusEditBtn" onclick="openCorpusEditor()" style="padding:4px 10px;font-size:11px;cursor:pointer;" title="查看 / 编辑用户多音字语料 overlay_user_override.txt，保存即生效（热加载，无需重启）">✏️ 编辑语料</button>
           <input type="file" id="txtFileInput" accept=".txt,text/plain" style="display:none">
         </div>
@@ -2376,6 +2377,25 @@ HTML_CONTENT = r"""
     <div class="modal-actions">
       <button class="btn-secondary" onclick="closeCorpusEditor()">取消</button>
       <button class="btn-primary" style="flex:0 0 auto; padding:0 22px; height:40px" onclick="saveCorpus()">保存语料</button>
+    </div>
+  </div>
+</div>
+
+<!-- 数字归一化规则编辑弹窗（num_norm_extra.txt，与 text_norm_cn 同目录；保存即热加载） -->
+<div class="modal-mask" id="normRulesModal">
+  <div class="modal" style="width:720px;max-width:92vw">
+    <div class="modal-head">
+      <h3>编辑归一化规则</h3>
+      <div style="display:flex;gap:6px;align-items:center;">
+        <button class="btn-secondary" style="height:32px;padding:0 12px" onclick="closeNormRulesEditor()">✕</button>
+      </div>
+    </div>
+    <div class="param-desc" id="normRulesPathHint" style="margin-bottom:8px">加载中...</div>
+    <textarea id="normRulesContent" spellcheck="false" style="width:100%;height:340px;font-family:var(--font-mono);font-size:12px;line-height:1.6;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:10px;padding:10px;box-sizing:border-box;resize:vertical;white-space:pre" placeholder="（文件为空或不存在，保存时将新建）"></textarea>
+    <div class="param-desc" style="margin-top:8px">每行一条规则，# 开头为注释。两种类型：<code>原文 =&gt; 读法</code>（如 <code>3.14 =&gt; 三点一四</code>）；<code>?正则 =&gt; 替换</code>（如 <code>?0+(\d) =&gt; \1</code>，支持 \1 反向引用）。建议把读法直接写成中文，内置数字规则就不会再处理它；坏行会被自动跳过并警告，不会崩合成。保存即生效（自动热加载，无需重启）。</div>
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeNormRulesEditor()">取消</button>
+      <button class="btn-primary" style="flex:0 0 auto; padding:0 22px; height:40px" onclick="saveNormRules()">保存规则</button>
     </div>
   </div>
 </div>
@@ -3448,6 +3468,54 @@ async function saveCorpus() {
   }
 }
 
+// ── 归一化规则编辑（num_norm_extra.txt）──
+async function openNormRulesEditor() {
+  const mask = document.getElementById('normRulesModal');
+  const hint = document.getElementById('normRulesPathHint');
+  const box = document.getElementById('normRulesContent');
+  mask.style.display = 'flex';
+  hint.textContent = '加载中...';
+  box.value = '';
+  try {
+    const r = await fetch('/api/norm-rules');
+    const d = await r.json();
+    hint.textContent = d.exists
+      ? '文件：' + d.path + '（' + (d.rule_count || 0) + ' 条生效，保存即热加载，无需重启）'
+      : '规则文件不存在，保存时将新建：' + (d.path || '');
+    box.value = d.content || '';
+  } catch (e) {
+    hint.textContent = '读取失败: ' + (e.message || e);
+  }
+}
+function closeNormRulesEditor() {
+  document.getElementById('normRulesModal').style.display = 'none';
+}
+async function saveNormRules() {
+  const btn = document.querySelector('#normRulesModal .btn-primary');
+  const content = document.getElementById('normRulesContent').value;
+  btn.disabled = true;
+  btn.textContent = '保存中...';
+  try {
+    const r = await fetch('/api/norm-rules', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content: content })
+    });
+    const d = await r.json();
+    if (d.ok) {
+      showToast(d.message || '已保存（保存即生效，无需重启）', 'success');
+      closeNormRulesEditor();
+    } else {
+      showToast(d.error || '保存失败', 'error');
+    }
+  } catch (e) {
+    showToast('保存失败: ' + (e.message || e), 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '保存规则';
+  }
+}
+
 // ── 音色档案管理（REST 标准化：/api/profiles）──
 async function openProfileManager() {
   document.getElementById('profileModal').style.display = 'flex';
@@ -4066,6 +4134,19 @@ if HAS_WEB:
         """写回用户多音字语料文件（UTF-8）。保存即生效：g2p_phoneme 检测到 mtime 变化自动热加载，无需重启。"""
         content = (payload or {}).get("content", "")
         return JSONResponse(voxcpm_api.write_corpus(content))
+
+    # ── 数字归一化规则（num_norm_extra.txt）：保存即热加载，无需重启 ──
+    @app.get("/api/norm-rules")
+    async def get_norm_rules():
+        """读取用户归一化规则文件内容（只读，不修改）；统一走 voxcpm_api 公共后端。"""
+        return JSONResponse(voxcpm_api.read_norm_rules())
+
+    @app.post("/api/norm-rules")
+    async def save_norm_rules(payload: dict):
+        """写回用户归一化规则文件（UTF-8）。保存即生效：text_norm_cn 按 mtime 自动热加载，无需重启；
+        坏行由解析器单条跳过 + 警告，不会崩合成任务。"""
+        content = (payload or {}).get("content", "")
+        return JSONResponse(voxcpm_api.write_norm_rules(content))
 
     # ── 音色档案（profile）：列表 / 新增 / 删除（REST 标准化）──
     @app.get("/api/profiles")

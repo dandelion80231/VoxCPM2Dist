@@ -20,6 +20,7 @@ import datetime
 import os
 import re
 import sys
+import tempfile
 import time
 
 # 内嵌版 Python 不自动添加脚本目录，手动加入以便可靠导入同级模块 text_norm_cn
@@ -38,9 +39,13 @@ except Exception:
 # ── 配置 ─────────────────────────────────────────────────
 MODEL_ID = "openbmb/VoxCPM2"
 # 模型目录：优先新标准环境变量 VOXCPM_MODELS_DIR，兼容旧键 VOXCPM_MODEL_DIR
-LOCAL_MODEL_PATH = os.environ.get("VOXCPM_MODELS_DIR") or os.environ.get("VOXCPM_MODEL_DIR", "")
+LOCAL_MODEL_PATH = os.environ.get("VOXCPM_MODELS_DIR") or os.environ.get(
+    "VOXCPM_MODEL_DIR", ""
+)
 DEVICE = "cuda" if os.environ.get("VOXCPM_DEVICE", "") else "auto"
-DEFAULT_OUTPUT_DIR = Path(os.environ.get("VOXCPM_OUTPUT_DIR", str(Path.home() / "Desktop")))
+DEFAULT_OUTPUT_DIR = Path(
+    os.environ.get("VOXCPM_OUTPUT_DIR", str(Path.home() / "Desktop"))
+)
 # 多音字修正 LoRA 权重路径（训练产出的 step_XXXXXXX 目录，或 lora_weights.safetensors/.ckpt 文件）。
 # 可通过环境变量 VOXCPM_LORA 或命令行 --lora 指定。空 = 不挂载 LoRA，使用原版模型。
 LORA_WEIGHTS_PATH = os.environ.get("VOXCPM_LORA", "")
@@ -52,13 +57,16 @@ def _resolve_zipenhancer_dir():
     here = os.path.dirname(os.path.abspath(__file__))
     for base in (here, os.path.dirname(here)):
         cand = os.path.join(base, "models", "zipenhancer")
-        if os.path.isdir(cand) and os.path.isfile(os.path.join(cand, "configuration.json")):
+        if os.path.isdir(cand) and os.path.isfile(
+            os.path.join(cand, "configuration.json")
+        ):
             return cand
     return None
 
 
 def load_model(no_cache: bool = False, force_reload: bool = False):
     from voxcpm import VoxCPM
+
     model_path = LOCAL_MODEL_PATH if LOCAL_MODEL_PATH else MODEL_ID
     if not no_cache and not force_reload and hasattr(load_model, "_cached_model"):
         print("[模型] 使用缓存模型...")
@@ -72,6 +80,7 @@ def load_model(no_cache: bool = False, force_reload: bool = False):
         if zpath:
             try:
                 from voxcpm.zipenhancer import ZipEnhancer
+
                 ZipEnhancer(zpath)
                 use_denoiser = True
                 print(f"[降噪] 离线降噪模型已启用: {zpath}")
@@ -83,15 +92,30 @@ def load_model(no_cache: bool = False, force_reload: bool = False):
         if LORA_WEIGHTS_PATH:
             try:
                 from lora_helper import resolve_lora
+
                 lora_kwargs, _lora_info = resolve_lora(lora_kwargs, LORA_WEIGHTS_PATH)
                 if not _lora_info.get("ok"):
                     print(f"[LoRA] 未挂载：{_lora_info.get('reason', '未知原因')}")
             except Exception as e:
                 print(f"[LoRA] 加载辅助失败，将不使用 LoRA: {e}")
         if LOCAL_MODEL_PATH and os.path.isdir(LOCAL_MODEL_PATH):
-            model = VoxCPM.from_pretrained(LOCAL_MODEL_PATH, load_denoiser=use_denoiser, zipenhancer_model_id=zpath if use_denoiser else None, optimize=False, device=DEVICE, **lora_kwargs)
+            model = VoxCPM.from_pretrained(
+                LOCAL_MODEL_PATH,
+                load_denoiser=use_denoiser,
+                zipenhancer_model_id=zpath if use_denoiser else None,
+                optimize=False,
+                device=DEVICE,
+                **lora_kwargs,
+            )
         else:
-            model = VoxCPM.from_pretrained(MODEL_ID, load_denoiser=use_denoiser, zipenhancer_model_id=zpath if use_denoiser else None, optimize=False, device=DEVICE, **lora_kwargs)
+            model = VoxCPM.from_pretrained(
+                MODEL_ID,
+                load_denoiser=use_denoiser,
+                zipenhancer_model_id=zpath if use_denoiser else None,
+                optimize=False,
+                device=DEVICE,
+                **lora_kwargs,
+            )
     except Exception as e:
         print(f"[错误] 模型加载失败: {e}")
         raise
@@ -113,11 +137,13 @@ def build_text(input_text: str, control: str = None, normalize: bool = False) ->
     if normalize:
         try:
             from text_norm_cn import normalize_text
+
             text = normalize_text(text)
         except Exception as e:
             print(f"[警告] 自定义文本规范化失败，回退 wetext: {e}")
             try:
                 import wetext
+
                 text = wetext.normalize(text, remove_punct=False, Traditional=False)
             except ImportError:
                 print("[警告] wetext 未安装，跳过文本规范化")
@@ -126,7 +152,9 @@ def build_text(input_text: str, control: str = None, normalize: bool = False) ->
     return text
 
 
-def prepare_text(input_text: str, control: str = None, normalize: bool = False) -> tuple:
+def prepare_text(
+    input_text: str, control: str = None, normalize: bool = False
+) -> tuple:
     """构建最终合成文本，并返回模型侧 normalize 标记（与 Web UI 行为一致）。
 
     混合模式（普通文本 + 局部 {音素} 标注，如"今天一行{hang2}代码写完了"）：
@@ -139,7 +167,12 @@ def prepare_text(input_text: str, control: str = None, normalize: bool = False) 
     返回 (final_text, model_normalize)。
     """
     try:
-        from g2p_phoneme import has_phoneme_block, strip_annotated_hanzi, apply_overlay_auto
+        from g2p_phoneme import (
+            apply_overlay_auto,
+            has_phoneme_block,
+            strip_annotated_hanzi,
+        )
+
         has_mix = has_phoneme_block(input_text or "")
     except Exception:
         has_mix = False
@@ -149,20 +182,26 @@ def prepare_text(input_text: str, control: str = None, normalize: bool = False) 
     if not has_mix:
         try:
             from g2p_phoneme import apply_overlay_auto
+
             input_text, applied = apply_overlay_auto(input_text or "")
             has_mix = applied
         except Exception:
-            pass
+            # 混合模式判定失败不影响主流程（按纯文本路径继续），但打印提示便于排查
+            print("[警告] 混合模式音素块判定失败，按纯文本路径继续", file=sys.stderr)
     model_normalize = normalize and not has_mix
     # 混合模式下去重读：{音素块} 紧跟的前一个汉字读音由音素块接管，送模型前舍去该字
     # （"今天一行{hang2}代码" -> "今天一{hang2}代码"），UI/输入文本仍保留原字供对照。
     if has_mix:
         input_text = strip_annotated_hanzi(input_text)
     # 混合模式下即使 --no-normalize 也强制普通段归一化，保证数字等读对
-    return build_text(input_text, control, normalize=(normalize or has_mix)), model_normalize
+    return build_text(
+        input_text, control, normalize=(normalize or has_mix)
+    ), model_normalize
 
 
-def generate(model, text: str, cfg: float = 2.5, steps: int = 15, normalize: bool = False) -> tuple:
+def generate(
+    model, text: str, cfg: float = 2.5, steps: int = 15, normalize: bool = False
+) -> tuple:
     """单段生成（Voice Design 模式，兼容旧版）"""
     control_match = re.search(r"\(([^)]+)\)", text)
     control_str = control_match.group(1) if control_match else "(无)"
@@ -170,21 +209,31 @@ def generate(model, text: str, cfg: float = 2.5, steps: int = 15, normalize: boo
     print(f"\n[合成] 控制指令: {control_str} | 正文: {body_text[:50]}...")
     t0 = time.time()
     try:
-        wav = model.generate(text=text, cfg_value=cfg, inference_timesteps=steps, normalize=normalize)
+        wav = model.generate(
+            text=text, cfg_value=cfg, inference_timesteps=steps, normalize=normalize
+        )
     except TypeError:
         wav = model.generate(text=text, cfg_value=cfg, inference_timesteps=steps)
     elapsed = time.time() - t0
     sr = model.tts_model.sample_rate
     duration = len(wav) / sr
-    print(f"[合成] 完成: {duration:.1f}s 音频, {elapsed:.1f}s 渲染, RTF {elapsed/duration:.2f}")
+    print(
+        f"[合成] 完成: {duration:.1f}s 音频, {elapsed:.1f}s 渲染, RTF {elapsed / duration:.2f}"
+    )
     return sr, wav
 
 
-def generate_chunk(model, text: str, cfg: float = 2.5, steps: int = 15,
-                   normalize: bool = False, reference_wav_path: str = None,
-                   prompt_wav_path: str = None, prompt_text: str = None) -> tuple:
+def generate_chunk(
+    model,
+    text: str,
+    cfg: float = 2.5,
+    steps: int = 15,
+    normalize: bool = False,
+    reference_wav_path: str = None,
+    prompt_wav_path: str = None,
+    prompt_text: str = None,
+) -> tuple:
     """单段合成（支持 Voice Design / Controllable Clone / Ultimate Clone）"""
-    import soundfile as sf
 
     kwargs = {
         "text": text,
@@ -208,7 +257,9 @@ def generate_chunk(model, text: str, cfg: float = 2.5, steps: int = 15,
     return sr, wav, elapsed, duration
 
 
-def crossfade_concat(audio_list: list, sample_rate: int, fade_ms: int = 80) -> np.ndarray:
+def crossfade_concat(
+    audio_list: list, sample_rate: int, fade_ms: int = 80
+) -> np.ndarray:
     """多段音频等功率交叉淡入淡出拼接（消除段间断裂/爆音）。
 
     规则：首段不淡入（result 初始即第一段、头部不动），末段不淡出（仅头部与前段尾交叉
@@ -263,7 +314,7 @@ def normalize_segments(audio_segments: list, target_mode: str = "mean") -> list:
         return audio_segments
 
     normalized = []
-    for seg, rms in zip(audio_segments, rms_values):
+    for seg, rms in zip(audio_segments, rms_values, strict=True):
         seg_arr = np.asarray(seg, dtype=np.float32)
         if rms < 1e-9:
             normalized.append(seg_arr)
@@ -294,9 +345,11 @@ def split_text(text: str, mode: str = "auto", chunk_size: int = MAX_CHUNK_SIZE) 
     chunks = []
     if mode == "auto":
         current_chunk = ""
-        sentences = re.split(r'([。！？；\.\!\?\;，,])', text)
+        sentences = re.split(r"([。！？；\.\!\?\;，,])", text)
         for i in range(0, len(sentences) - 1, 2):
-            sentence = (sentences[i] or "") + (sentences[i + 1] if i + 1 < len(sentences) else "")
+            sentence = (sentences[i] or "") + (
+                sentences[i + 1] if i + 1 < len(sentences) else ""
+            )
             if len(current_chunk) + len(sentence) <= chunk_size:
                 current_chunk += sentence
             else:
@@ -307,12 +360,14 @@ def split_text(text: str, mode: str = "auto", chunk_size: int = MAX_CHUNK_SIZE) 
             chunks.append(current_chunk)
     elif mode == "fixed":
         for i in range(0, len(text), chunk_size):
-            chunks.append(text[i:i + chunk_size])
+            chunks.append(text[i : i + chunk_size])
     else:
         current_chunk = ""
-        sentences = re.split(r'([。！？；\.\!\?\;，,])', text)
+        sentences = re.split(r"([。！？；\.\!\?\;，,])", text)
         for i in range(0, len(sentences) - 1, 2):
-            sentence = sentences[i] + (sentences[i + 1] if i + 1 < len(sentences) else "")
+            sentence = sentences[i] + (
+                sentences[i + 1] if i + 1 < len(sentences) else ""
+            )
             if len(current_chunk) + len(sentence) <= chunk_size:
                 current_chunk += sentence
             else:
@@ -324,13 +379,23 @@ def split_text(text: str, mode: str = "auto", chunk_size: int = MAX_CHUNK_SIZE) 
     return chunks
 
 
-def generate_long_text(model, text: str, cfg: float = 2.5, steps: int = 15,
-                       normalize: bool = False, split_mode: str = "auto",
-                       chunk_size: int = MAX_CHUNK_SIZE, output_dir: Path = None,
-                       base_filename: str = None, reference_audio: str = None,
-                       prompt_audio: str = None, prompt_text: str = None,
-                       self_seeding: bool = False, update_ref_every: int = 0,
-                       crossfade_ms: int = 80) -> list:
+def generate_long_text(
+    model,
+    text: str,
+    cfg: float = 2.5,
+    steps: int = 15,
+    normalize: bool = False,
+    split_mode: str = "auto",
+    chunk_size: int = MAX_CHUNK_SIZE,
+    output_dir: Path = None,
+    base_filename: str = None,
+    reference_audio: str = None,
+    prompt_audio: str = None,
+    prompt_text: str = None,
+    self_seeding: bool = False,
+    update_ref_every: int = 0,
+    crossfade_ms: int = 80,
+) -> list:
     """
     长文本分段生成，支持三种音色统一模式：
 
@@ -351,7 +416,9 @@ def generate_long_text(model, text: str, cfg: float = 2.5, steps: int = 15,
     control = control_match.group(1) if control_match else ""
     body_text = re.sub(r"^\([^)]+\)", "", text)
 
-    print(f"\n[长文本] 正文共 {len(body_text)} 字符，切分模式: {split_mode}，每段上限: {chunk_size}")
+    print(
+        f"\n[长文本] 正文共 {len(body_text)} 字符，切分模式: {split_mode}，每段上限: {chunk_size}"
+    )
     chunks = split_text(body_text, mode=split_mode, chunk_size=chunk_size)
     print(f"[长文本] 已切分为 {len(chunks)} 段")
 
@@ -378,9 +445,9 @@ def generate_long_text(model, text: str, cfg: float = 2.5, steps: int = 15,
     audio_segments = []
 
     for i, chunk in enumerate(chunks, 1):
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print(f"[段落] 第 {i}/{len(chunks)} 段")
-        print(f"{'='*60}")
+        print(f"{'=' * 60}")
         print(f"[段落] 内容: {chunk[:80]}{'...' if len(chunk) > 80 else ''}")
 
         # 判断当前段的 prompt_wav_path 和 prompt_text
@@ -399,17 +466,23 @@ def generate_long_text(model, text: str, cfg: float = 2.5, steps: int = 15,
         # 模式A: 固定参考音频
         if current_ref and os.path.exists(current_ref) and (i != 1 or reference_audio):
             sr, wav, elapsed, duration = generate_chunk(
-                model, chunk, cfg=cfg, steps=steps, normalize=normalize,
+                model,
+                chunk,
+                cfg=cfg,
+                steps=steps,
+                normalize=normalize,
                 reference_wav_path=current_ref,
                 prompt_wav_path=effective_prompt_wav,
-                prompt_text=effective_prompt_text
+                prompt_text=effective_prompt_text,
             )
             clone_type = "ref_continuation" if effective_prompt_text else "reference"
             print(f"[段落] 使用参考音频克隆（{clone_type}），时长 {duration:.1f}s")
 
             # 可选：定期更新参考音频（保持上下文连贯性，但可能轻微漂移）
             if update_ref_every > 0 and (i % update_ref_every == 0):
-                new_ref = os.path.join(tempfile.gettempdir(), f"voxcpm_ref_{i}_{os.getpid()}.wav")
+                new_ref = os.path.join(
+                    tempfile.gettempdir(), f"voxcpm_ref_{i}_{os.getpid()}.wav"
+                )
                 sf.write(new_ref, wav, sr)
                 current_ref = new_ref
                 print(f"[段落] 参考音频已更新为第 {i} 段")
@@ -426,7 +499,9 @@ def generate_long_text(model, text: str, cfg: float = 2.5, steps: int = 15,
             seed_prompt_text = chunk_text
 
             # 保存为后续段的参考音频
-            ref_path = os.path.join(tempfile.gettempdir(), f"voxcpm_seed_{os.getpid()}.wav")
+            ref_path = os.path.join(
+                tempfile.gettempdir(), f"voxcpm_seed_{os.getpid()}.wav"
+            )
             sf.write(ref_path, wav, sr)
             current_ref = ref_path
             print(f"[段落] 已保存为参考音频: {ref_path}")
@@ -436,16 +511,26 @@ def generate_long_text(model, text: str, cfg: float = 2.5, steps: int = 15,
             if current_ref and os.path.exists(current_ref):
                 # [v5.2] Self-Seeding 后续段：传入 prompt_text 使用 ref_continuation 模式
                 sr, wav, elapsed, duration = generate_chunk(
-                    model, chunk, cfg=cfg, steps=steps, normalize=normalize,
+                    model,
+                    chunk,
+                    cfg=cfg,
+                    steps=steps,
+                    normalize=normalize,
                     reference_wav_path=current_ref,
                     prompt_wav_path=effective_prompt_wav,
-                    prompt_text=effective_prompt_text
+                    prompt_text=effective_prompt_text,
                 )
-                clone_type = "ref_continuation" if effective_prompt_text else "reference"
-                print(f"[段落] 使用自播种参考音频克隆（{clone_type}），时长 {duration:.1f}s")
+                clone_type = (
+                    "ref_continuation" if effective_prompt_text else "reference"
+                )
+                print(
+                    f"[段落] 使用自播种参考音频克隆（{clone_type}），时长 {duration:.1f}s"
+                )
 
                 if update_ref_every > 0 and (i % update_ref_every == 0):
-                    new_ref = os.path.join(tempfile.gettempdir(), f"voxcpm_ref_{i}_{os.getpid()}.wav")
+                    new_ref = os.path.join(
+                        tempfile.gettempdir(), f"voxcpm_ref_{i}_{os.getpid()}.wav"
+                    )
                     sf.write(new_ref, wav, sr)
                     current_ref = new_ref
                     print(f"[段落] 参考音频已更新为第 {i} 段")
@@ -467,7 +552,9 @@ def generate_long_text(model, text: str, cfg: float = 2.5, steps: int = 15,
 
     # 交叉淡入淡出拼接
     if len(audio_segments) > 1:
-        print(f"\n[拼接] 正在使用 {crossfade_ms}ms 交叉淡入淡出拼接 {len(audio_segments)} 段音频...")
+        print(
+            f"\n[拼接] 正在使用 {crossfade_ms}ms 交叉淡入淡出拼接 {len(audio_segments)} 段音频..."
+        )
         audio_segments = normalize_segments(audio_segments, target_mode="mean")
         merged_wav = crossfade_concat(audio_segments, sr, fade_ms=crossfade_ms)
         merged_wav = peak_normalize(merged_wav, peak=0.95)
@@ -485,7 +572,6 @@ def generate_long_text(model, text: str, cfg: float = 2.5, steps: int = 15,
 
 
 def resolve_output_path(output: str | None, text: str, suffix: str = "") -> Path:
-    import datetime
     if output:
         path = Path(output)
         if path.suffix != ".wav":
@@ -502,7 +588,6 @@ def resolve_output_path(output: str | None, text: str, suffix: str = "") -> Path
 
 
 def resolve_base_filename(text: str) -> str:
-    import datetime
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     base = re.sub(r"[\\/:*?\"<>|]", "", text[:20]) if text else "output"
     return f"{base}_{timestamp}"
@@ -523,62 +608,152 @@ VOICE_PRESETS = {
     "default": "25岁年轻温柔甜美女声，带一点播音腔，语速稍平缓",
 }
 
+
 # ── 主入口 ─────────────────────────────────────────────────
 def main():
-    parser = argparse.ArgumentParser(description="VoxCPM2 TTS v5.2 — 长文本配音/音色统一")
+    global DEFAULT_OUTPUT_DIR  # args.dir 分支会改写此模块级全局；不声明则全函数视为局部变量，
+    # 导致 --show-config（行 885）与长文本路径（行 1035）读取未绑定局部变量 → UnboundLocalError
+    parser = argparse.ArgumentParser(
+        description="VoxCPM2 TTS v5.2 — 长文本配音/音色统一"
+    )
     parser.add_argument("-t", "--text", type=str, help="要合成的文本")
     parser.add_argument("-f", "--file", type=str, help="输入文本文件路径")
-    parser.add_argument("-o", "--output", type=str, default=None, help="输出 WAV 文件路径")
-    parser.add_argument("--lora", type=str, default=None,
-                        help="多音字修正 LoRA 权重目录/文件路径（step_XXXXXXX 目录，或 lora_weights.safetensors/.ckpt）。指定后挂载 LoRA 修正读音；也可用环境变量 VOXCPM_LORA")
+    parser.add_argument(
+        "-o", "--output", type=str, default=None, help="输出 WAV 文件路径"
+    )
+    parser.add_argument(
+        "--lora",
+        type=str,
+        default=None,
+        help="多音字修正 LoRA 权重目录/文件路径（step_XXXXXXX 目录，或 lora_weights.safetensors/.ckpt）。指定后挂载 LoRA 修正读音；也可用环境变量 VOXCPM_LORA",
+    )
     parser.add_argument("--dir", type=str, default=None, help="输出目录（默认桌面）")
     parser.add_argument("--no-baseline", action="store_true", help="不生成基线参考音频")
 
     # Voice Control
-    parser.add_argument("--voice", type=str, default=None, choices=list(VOICE_PRESETS.keys()),
-                        help="音色预设名称")
-    parser.add_argument("-c", "--control", type=str, default=None,
-                        help="控制指令（如：25岁年轻温柔甜美女声）")
+    parser.add_argument(
+        "--voice",
+        type=str,
+        default=None,
+        choices=list(VOICE_PRESETS.keys()),
+        help="音色预设名称",
+    )
+    parser.add_argument(
+        "-c",
+        "--control",
+        type=str,
+        default=None,
+        help="控制指令（如：25岁年轻温柔甜美女声）",
+    )
 
     # 音色统一模式（长文本）
-    parser.add_argument("--reference", type=str, help="参考音频路径（固定克隆，长文本默认方式）")
+    parser.add_argument(
+        "--reference", type=str, help="参考音频路径（固定克隆，长文本默认方式）"
+    )
     # [v5.2] 显式传入 prompt_audio / prompt_text 可在固定参考模式下
     # 使用 ref_continuation 模式，让模型既知声又知文
-    parser.add_argument("--prompt-audio", type=str, help="提示音频路径（Ultimate Clone / ref_continuation）")
-    parser.add_argument("--prompt-text", type=str, help="提示音频对应的文本（ref_continuation）")
-    parser.add_argument("--self-seeding", "--self_seeding", dest="self_seeding",
-                        nargs="?", const=True, default=None, type=lambda x: x != "false",
-                        help="自播种模式（第1段 Voice Design，后续克隆）")
-    parser.add_argument("--split", type=str, default=None, choices=["auto", "fixed", "sentence"],
-                        help="文本切分模式")
+    parser.add_argument(
+        "--prompt-audio",
+        type=str,
+        help="提示音频路径（Ultimate Clone / ref_continuation）",
+    )
+    parser.add_argument(
+        "--prompt-text", type=str, help="提示音频对应的文本（ref_continuation）"
+    )
+    parser.add_argument(
+        "--self-seeding",
+        "--self_seeding",
+        dest="self_seeding",
+        nargs="?",
+        const=True,
+        default=None,
+        type=lambda x: x != "false",
+        help="自播种模式（第1段 Voice Design，后续克隆）",
+    )
+    parser.add_argument(
+        "--split",
+        type=str,
+        default=None,
+        choices=["auto", "fixed", "sentence"],
+        help="文本切分模式",
+    )
     parser.add_argument("--chunk-size", type=int, default=180, help="每段最大字符数")
 
     # 生成参数
     parser.add_argument("--cfg", type=float, default=2.5, help="CFG scale (默认 2.5)")
     parser.add_argument("--steps", type=int, default=15, help="推理步数 (默认 15)")
-    parser.add_argument("--no-normalize", action="store_false", dest="normalize", help="禁用文本规范化")
+    parser.add_argument(
+        "--no-normalize", action="store_false", dest="normalize", help="禁用文本规范化"
+    )
     parser.add_argument("--no-cache", action="store_true", help="禁用模型缓存")
 
     # 高级
-    parser.add_argument("--update-ref", type=int, default=0,
-                        help="每 N 段更新一次参考音频（防漂移，0=不更新）")
-    parser.add_argument("--crossfade", type=int, default=80,
-                        help="交叉淡入淡出毫秒数（长文本用，默认 80ms）")
+    parser.add_argument(
+        "--update-ref",
+        type=int,
+        default=0,
+        help="每 N 段更新一次参考音频（防漂移，0=不更新）",
+    )
+    parser.add_argument(
+        "--crossfade",
+        type=int,
+        default=80,
+        help="交叉淡入淡出毫秒数（长文本用，默认 80ms）",
+    )
     parser.add_argument("--no-cuda", action="store_true", help="强制使用 CPU")
     parser.add_argument("-i", "--interactive", action="store_true", help="交互模式")
     parser.add_argument("--list-voices", action="store_true", help="列出所有音色预设")
-    parser.add_argument("--list-profiles", action="store_true", help="列出所有音色档案（与 Web UI /api/profiles 共用后端）")
-    parser.add_argument("--profile-save", type=str, default=None, metavar="NAME[:voice[:control_text]]",
-                        help="保存当前 CLI 音色配置为档案（可带 --voice/--control/--reference/--prompt-text/--mode）")
-    parser.add_argument("--profile-delete", type=str, default=None, metavar="NAME", help="删除指定音色档案")
-    parser.add_argument("--corpus-export", type=str, default=None, nargs="?", const="auto", metavar="PATH",
-                        help="导出用户语料到 PATH（缺省自动生成 exports/ 文件名）")
-    parser.add_argument("--corpus-import", type=str, default=None, metavar="PATH",
-                        help="导入用户语料文本文件（校验格式、坏行跳过、合并写入）")
-    parser.add_argument("--profile-export", type=str, default=None, nargs="?", const="auto", metavar="PATH",
-                        help="导出音色档案为 JSON 到 PATH（缺省自动生成 exports/ 文件名）")
-    parser.add_argument("--profile-import", type=str, default=None, metavar="PATH",
-                        help="导入音色档案 JSON 文件（坏项跳过、同名覆盖）")
+    parser.add_argument(
+        "--list-profiles",
+        action="store_true",
+        help="列出所有音色档案（与 Web UI /api/profiles 共用后端）",
+    )
+    parser.add_argument(
+        "--profile-save",
+        type=str,
+        default=None,
+        metavar="NAME[:voice[:control_text]]",
+        help="保存当前 CLI 音色配置为档案（可带 --voice/--control/--reference/--prompt-text/--mode）",
+    )
+    parser.add_argument(
+        "--profile-delete",
+        type=str,
+        default=None,
+        metavar="NAME",
+        help="删除指定音色档案",
+    )
+    parser.add_argument(
+        "--corpus-export",
+        type=str,
+        default=None,
+        nargs="?",
+        const="auto",
+        metavar="PATH",
+        help="导出用户语料到 PATH（缺省自动生成 exports/ 文件名）",
+    )
+    parser.add_argument(
+        "--corpus-import",
+        type=str,
+        default=None,
+        metavar="PATH",
+        help="导入用户语料文本文件（校验格式、坏行跳过、合并写入）",
+    )
+    parser.add_argument(
+        "--profile-export",
+        type=str,
+        default=None,
+        nargs="?",
+        const="auto",
+        metavar="PATH",
+        help="导出音色档案为 JSON 到 PATH（缺省自动生成 exports/ 文件名）",
+    )
+    parser.add_argument(
+        "--profile-import",
+        type=str,
+        default=None,
+        metavar="PATH",
+        help="导入音色档案 JSON 文件（坏项跳过、同名覆盖）",
+    )
     parser.add_argument("--show-config", action="store_true", help="显示当前配置")
     parser.add_argument("-v", "--version", action="store_true", help="显示版本号")
 
@@ -600,15 +775,25 @@ def main():
             print("  （暂无档案）")
         for p in profiles:
             mode = p.get("mode", "voice_design")
-            print(f"  - {p.get('name', '?'):20s} [{mode}] voice={p.get('voice','')} desc={p.get('control_text','')[:24]}")
+            print(
+                f"  - {p.get('name', '?'):20s} [{mode}] voice={p.get('voice', '')} desc={p.get('control_text', '')[:24]}"
+            )
         sys.exit(0)
     if args.profile_save:
-        name = args.profile_save.split(":")[0] if ":" in args.profile_save else args.profile_save
+        name = (
+            args.profile_save.split(":")[0]
+            if ":" in args.profile_save
+            else args.profile_save
+        )
         payload = {
             "name": name,
             "voice": args.voice or "default",
             "control_text": args.control or "",
-            "mode": "self_seeding" if args.self_seeding else "fixed_clone" if args.reference else "voice_design",
+            "mode": "self_seeding"
+            if args.self_seeding
+            else "fixed_clone"
+            if args.reference
+            else "voice_design",
             "prompt_text": args.prompt_text or "",
             "reference_wav_path": args.reference or "",
         }
@@ -629,8 +814,12 @@ def main():
             out.parent.mkdir(parents=True, exist_ok=True)
             content = voxcpm_api.read_corpus()["content"] or ""
             out.write_text(content, encoding="utf-8")
-            r = {"ok": True, "path": str(out), "bytes": out.stat().st_size,
-                 "message": f"语料已导出：{out}"}
+            r = {
+                "ok": True,
+                "path": str(out),
+                "bytes": out.stat().st_size,
+                "message": f"语料已导出：{out}",
+            }
         print(("[OK] " if r.get("ok") else "[失败] ") + r.get("message", str(r)))
         if r.get("path"):
             print(f"  文件: {r['path']} ({r.get('bytes', 0)} bytes)")
@@ -653,9 +842,15 @@ def main():
         else:
             out = Path(args.profile_export)
             out.parent.mkdir(parents=True, exist_ok=True)
-            out.write_text(voxcpm_api.export_profiles_text()["content"], encoding="utf-8")
-            r = {"ok": True, "path": str(out), "bytes": out.stat().st_size,
-                 "message": f"已导出音色档案：{out}"}
+            out.write_text(
+                voxcpm_api.export_profiles_text()["content"], encoding="utf-8"
+            )
+            r = {
+                "ok": True,
+                "path": str(out),
+                "bytes": out.stat().st_size,
+                "message": f"已导出音色档案：{out}",
+            }
         print(("[OK] " if r.get("ok") else "[失败] ") + r.get("message", str(r)))
         if r.get("path"):
             print(f"  文件: {r['path']} ({r.get('bytes', 0)} bytes)")
@@ -684,11 +879,13 @@ def main():
         sys.exit(0)
 
     if args.show_config:
-        print(f"\n[配置]")
+        print("\n[配置]")
         print(f"  DEVICE:          {DEVICE}")
         print(f"  模型目录:        {LOCAL_MODEL_PATH or MODEL_ID}")
-        print(f"    (VOXCPM_MODELS_DIR={os.environ.get('VOXCPM_MODELS_DIR', '') or '(未设置)'}, "
-              f"VOXCPM_MODEL_DIR={os.environ.get('VOXCPM_MODEL_DIR', '') or '(未设置)'})")
+        print(
+            f"    (VOXCPM_MODELS_DIR={os.environ.get('VOXCPM_MODELS_DIR', '') or '(未设置)'}, "
+            f"VOXCPM_MODEL_DIR={os.environ.get('VOXCPM_MODEL_DIR', '') or '(未设置)'})"
+        )
         print(f"  OUTPUT_DIR:      {DEFAULT_OUTPUT_DIR}")
         print(f"  CHUNK_SIZE:      {MAX_CHUNK_SIZE}")
         print(f"  CFG:             {args.cfg}")
@@ -696,23 +893,25 @@ def main():
         print(f"  NORMALIZE:       {args.normalize}")
         try:
             from text_norm_cn import user_rule_count
+
             print(f"  USER_RULES:      {user_rule_count()} (num_norm_extra.txt)")
         except Exception:
-            print(f"  USER_RULES:      0 (用户规则不可用)")
+            print("  USER_RULES:      0 (用户规则不可用)")
         print(f"  CROSSFADE_MS:    {args.crossfade}")
         print(f"  UPDATE_REF:      {args.update_ref}")
         print(f"  LORA:            {LORA_WEIGHTS_PATH or '(未挂载，使用原版模型)'}")
         sys.exit(0)
 
     import torch
+
     if args.no_cuda and torch.cuda.is_available():
         print("[配置] 强制使用 CPU")
         os.environ["CUDA_VISIBLE_DEVICES"] = ""
 
     if args.interactive:
         model = load_model(no_cache=args.no_cache)
-        print(f"\n[交互模式] 输入 'q' 退出，'h' 帮助")
-        print(f"[交互模式] 语法: <text> 或 @<file> 或 <text> |desc|")
+        print("\n[交互模式] 输入 'q' 退出，'h' 帮助")
+        print("[交互模式] 语法: <text> 或 @<file> 或 <text> |desc|")
         while True:
             try:
                 line = input("\n> ").strip()
@@ -732,13 +931,16 @@ def main():
                 if not os.path.exists(filepath):
                     print(f"[错误] 文件不存在: {filepath}")
                     continue
-                with open(filepath, "r", encoding="utf-8") as f:
+                with open(filepath, encoding="utf-8") as f:
                     text = f.read()
                 control = None
                 final, mnorm = prepare_text(text, control, args.normalize)
-                sr, wav, elapsed, duration = generate_chunk(model, final, cfg=args.cfg, steps=args.steps, normalize=mnorm)
+                sr, wav, elapsed, duration = generate_chunk(
+                    model, final, cfg=args.cfg, steps=args.steps, normalize=mnorm
+                )
                 out = resolve_output_path(None, text)
                 import soundfile as sf
+
                 sf.write(str(out), wav, sr)
                 print(f"[保存] {out}")
             else:
@@ -748,9 +950,12 @@ def main():
                     if len(parts) == 3:
                         line, control = parts[0].strip(), parts[1].strip()
                 final, mnorm = prepare_text(line, control, args.normalize)
-                sr, wav, elapsed, duration = generate_chunk(model, final, cfg=args.cfg, steps=args.steps, normalize=mnorm)
+                sr, wav, elapsed, duration = generate_chunk(
+                    model, final, cfg=args.cfg, steps=args.steps, normalize=mnorm
+                )
                 out = resolve_output_path(None, line)
                 import soundfile as sf
+
                 sf.write(str(out), wav, sr)
                 print(f"[保存] {out}")
         sys.exit(0)
@@ -766,7 +971,7 @@ def main():
         if not os.path.exists(file_path):
             print(f"[错误] 文件不存在: {file_path}")
             sys.exit(1)
-        with open(file_path, "r", encoding="utf-8") as f:
+        with open(file_path, encoding="utf-8") as f:
             input_text = f.read().strip()
         if not input_text:
             print("[错误] 文件为空")
@@ -794,7 +999,6 @@ def main():
         # 修复：args.dir 分支原来引用未赋值的局部 DEFAULT_OUTPUT_DIR 导致 UnboundLocalError
         DEFAULT_OUTPUT_DIR = Path(args.dir)
         DEFAULT_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-        global_DEFAULT_OUTPUT_DIR = DEFAULT_OUTPUT_DIR
 
     # ── 判断长文本模式 ──
     is_long = args.file is not None or len(input_text) > MAX_CHUNK_SIZE
@@ -805,7 +1009,6 @@ def main():
         if args.dir:
             DEFAULT_OUTPUT_DIR = Path(args.dir)
             DEFAULT_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-        global_DEFAULT_OUTPUT_DIR = DEFAULT_OUTPUT_DIR
 
         if not split_mode:
             split_mode = "auto"
@@ -814,24 +1017,31 @@ def main():
         # 判断音色统一模式
         if args.reference:
             print(f"[模式] 使用固定参考音频: {args.reference}")
-        elif args.self_seeding is True or (args.self_seeding is None and control and not args.reference):
-            print(f"[模式] 自动启用自播种（方式1）：第1段 Voice Design，后续克隆")
+        elif args.self_seeding is True or (
+            args.self_seeding is None and control and not args.reference
+        ):
+            print("[模式] 自动启用自播种（方式1）：第1段 Voice Design，后续克隆")
             args.self_seeding = True
         else:
-            print(f"[模式] 逐段音色设计（方式3）：每段独立生成，音色可能不一致")
+            print("[模式] 逐段音色设计（方式3）：每段独立生成，音色可能不一致")
 
         base_name = resolve_base_filename(input_text)
         output_files, merged_wav, sr = generate_long_text(
-            model, final_text, cfg=args.cfg, steps=args.steps,
-            normalize=do_normalize, split_mode=split_mode,
-            chunk_size=args.chunk_size, output_dir=DEFAULT_OUTPUT_DIR,
+            model,
+            final_text,
+            cfg=args.cfg,
+            steps=args.steps,
+            normalize=do_normalize,
+            split_mode=split_mode,
+            chunk_size=args.chunk_size,
+            output_dir=DEFAULT_OUTPUT_DIR,
             base_filename=base_name,
             reference_audio=args.reference,
             prompt_audio=args.prompt_audio,
             prompt_text=args.prompt_text,
             self_seeding=args.self_seeding,
             update_ref_every=args.update_ref,
-            crossfade_ms=args.crossfade
+            crossfade_ms=args.crossfade,
         )
 
         print(f"\n[完成] 共生成 {len(output_files)} 个文件")
@@ -840,26 +1050,38 @@ def main():
     else:
         # 短文本模式
         if args.prompt_audio and args.prompt_text:
-            print(f"\n[模式] Ultimate Clone 模式")
+            print("\n[模式] Ultimate Clone 模式")
             wav = model.generate(
-                text=final_text, prompt_wav_path=args.prompt_audio,
-                prompt_text=args.prompt_text, reference_wav_path=args.reference,
-                cfg_value=args.cfg, inference_timesteps=args.steps
+                text=final_text,
+                prompt_wav_path=args.prompt_audio,
+                prompt_text=args.prompt_text,
+                reference_wav_path=args.reference,
+                cfg_value=args.cfg,
+                inference_timesteps=args.steps,
             )
             sr = model.tts_model.sample_rate
         elif args.reference:
-            print(f"\n[模式] Controllable Clone 模式")
+            print("\n[模式] Controllable Clone 模式")
             wav = model.generate(
-                text=final_text, reference_wav_path=args.reference,
-                cfg_value=args.cfg, inference_timesteps=args.steps
+                text=final_text,
+                reference_wav_path=args.reference,
+                cfg_value=args.cfg,
+                inference_timesteps=args.steps,
             )
             sr = model.tts_model.sample_rate
         else:
-            print(f"\n[模式] Voice Design 模式")
-            sr, wav = generate(model, final_text, cfg=args.cfg, steps=args.steps, normalize=do_normalize)
+            print("\n[模式] Voice Design 模式")
+            sr, wav = generate(
+                model,
+                final_text,
+                cfg=args.cfg,
+                steps=args.steps,
+                normalize=do_normalize,
+            )
 
         path = resolve_output_path(args.output, input_text)
         import soundfile as sf
+
         sf.write(str(path), wav, sr)
         print(f"\n[保存] {path}")
         duration = len(wav) / sr
@@ -867,11 +1089,22 @@ def main():
 
     if args.voice and args.voice in VOICE_PRESETS:
         baseline_control = VOICE_PRESETS[args.voice]
-        baseline_text, bnorm = prepare_text(input_text[:60], baseline_control, do_normalize)
-        if control and not args.no_baseline and not args.reference and not args.prompt_audio:
-            print(f"\n[基线] 生成基线参考音频（用于对比）...")
-            sr_b, wav_b = generate(model, baseline_text, cfg=args.cfg, steps=args.steps, normalize=bnorm)
-            baseline_path = resolve_output_path(None, "baseline_" + input_text[:20], suffix="_baseline")
+        baseline_text, bnorm = prepare_text(
+            input_text[:60], baseline_control, do_normalize
+        )
+        if (
+            control
+            and not args.no_baseline
+            and not args.reference
+            and not args.prompt_audio
+        ):
+            print("\n[基线] 生成基线参考音频（用于对比）...")
+            sr_b, wav_b = generate(
+                model, baseline_text, cfg=args.cfg, steps=args.steps, normalize=bnorm
+            )
+            baseline_path = resolve_output_path(
+                None, "baseline_" + input_text[:20], suffix="_baseline"
+            )
             sf.write(str(baseline_path), wav_b, sr_b)
             print(f"[基线] 已保存: {baseline_path}")
 
