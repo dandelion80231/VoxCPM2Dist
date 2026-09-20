@@ -1612,12 +1612,12 @@ HTML_CONTENT = r"""
     gap: 6px;
   }
   .voice-item {
+    display: flex;
+    align-items: stretch;
+    gap: 2px;
     border-radius: 10px;
-    cursor: grab;
-    touch-action: none;
-    transition: outline 0.15s;
+    cursor: move;
   }
-  .voice-item:active { cursor: grabbing; }
   .voice-btn {
     display: flex;
     align-items: center;
@@ -2873,12 +2873,6 @@ async function init() {
 
 function renderVoices() {
   const grid = document.getElementById('voiceGrid');
-  // 一次性：防止父容器 overflow-y:auto 拦截拖拽
-  if (!grid._dragGuard) {
-    grid._dragGuard = true;
-    grid.addEventListener('dragover', e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; });
-    grid.addEventListener('drop', e => e.preventDefault());
-  }
   grid.innerHTML = '';
   const lockedReplacements = CUSTOM_VOICES.filter(v => v.replacesPreset).map(v => v.replacesPreset);
   const allIds = Object.keys(VOICE_LIST).filter(k => !lockedReplacements.includes(k))
@@ -2898,12 +2892,76 @@ function renderVoices() {
     const isLocked = id.startsWith('locked_');
     const isActive = id === selectedVoice;
 
-    // 外层 div 处理拖拽（HTML5 Drag 在 div 上所有浏览器可靠）
+    // 外层 .voice-item：包含拖拽手柄 + 按钮
     const wrapper = document.createElement('div');
     wrapper.className = 'voice-item';
-    wrapper.draggable = true;
     wrapper.dataset.id = id;
 
+    // 整个卡片 mousedown 拖拽排序（移动>5px 才启动，不影响按钮点击）
+    wrapper.addEventListener('mousedown', e => {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      const startX = e.clientX, startY = e.clientY;
+      let dragging = false;
+      const items = Array.from(grid.querySelectorAll('.voice-item'));
+      const dragIdx = items.indexOf(wrapper);
+      const onMove = ev => {
+        const dx = ev.clientX - startX, dy = ev.clientY - startY;
+        if (!dragging && (Math.abs(dx) > 5 || Math.abs(dy) > 5)) {
+          dragging = true;
+          wrapper.style.zIndex = '10';
+          wrapper.style.position = 'relative';
+          wrapper.style.transition = 'none';
+          wrapper.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
+        }
+        if (dragging) {
+          wrapper.style.transform = 'translateY(' + dy + 'px)';
+          // 计算目标位置
+          const gridTop = grid.getBoundingClientRect().top;
+          const my = ev.clientY - gridTop;
+          let targetIdx = 0;
+          for (let i = 0; i < items.length; i++) {
+            if (i === dragIdx) continue;
+            const r = items[i].getBoundingClientRect();
+            const mid = r.top + r.height / 2 - gridTop;
+            if (my > mid) targetIdx = i + 1;
+          }
+          items.forEach((it, i) => {
+            it.style.outline = '';
+            if (i === targetIdx && targetIdx !== dragIdx) {
+              it.style.outline = '2px solid var(--accent)';
+              it.style.outlineOffset = '2px';
+            }
+          });
+          wrapper._targetIdx = targetIdx;
+        }
+      };
+      const onUp = () => {
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+        if (dragging) {
+          const targetIdx = wrapper._targetIdx || -1;
+          wrapper.style.zIndex = '';
+          wrapper.style.position = '';
+          wrapper.style.transform = '';
+          wrapper.style.transition = '';
+          wrapper.style.boxShadow = '';
+          const all = Array.from(grid.querySelectorAll('.voice-item'));
+          all.forEach(it => { it.style.outline = ''; it.style.outlineOffset = ''; });
+          if (targetIdx >= 0 && targetIdx !== dragIdx) {
+            const dragEl = all[dragIdx];
+            const refEl = all[targetIdx];
+            if (targetIdx > dragIdx) { refEl.after(dragEl); } else { refEl.before(dragEl); }
+            const newOrder = Array.from(grid.querySelectorAll('.voice-item')).map(it => it.dataset.id);
+            try { localStorage.setItem('voxcpm_voice_order', JSON.stringify(newOrder)); } catch {}
+          }
+        }
+      };
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    });
+
+    // 按钮主体
     const btn = document.createElement('button');
     btn.className = 'voice-btn' + (isActive ? ' active' : '') + (isCustom ? ' custom-preset' : '') + (isLocked ? ' locked-preset' : '');
     btn.dataset.id = id;
@@ -2936,34 +2994,19 @@ function renderVoices() {
         <div class="voice-desc">${v.desc}</div>
       </div>`;
     }
-    wrapper.appendChild(btn);
 
-    // 拖拽事件绑定在外层 div
-    wrapper.addEventListener('dragstart', e => {
-      e.dataTransfer.effectAllowed = 'move';
-      e.dataTransfer.setData('text/plain', '__voice__:' + id);
-      e.dataTransfer.setDragImage(wrapper, 20, 20);
-      setTimeout(() => { wrapper.style.opacity = '0.4'; }, 0);
-    });
-    wrapper.addEventListener('dragend', () => { wrapper.style.opacity = '1'; });
+    // 档案 chip HTML5 drop 目标（保留）
     wrapper.addEventListener('dragover', e => {
       e.preventDefault();
       e.dataTransfer.dropEffect = 'move';
-      wrapper.style.outline = '2px solid var(--accent)';
-      wrapper.style.outlineOffset = '2px';
+      wrapper.style.outline = '2px dashed var(--accent)';
     });
     wrapper.addEventListener('dragleave', () => { wrapper.style.outline = ''; });
     wrapper.addEventListener('drop', e => {
       e.preventDefault();
       wrapper.style.outline = '';
       const data = e.dataTransfer.getData('text/plain');
-      if (!data) return;
-      if (data.startsWith('__voice__:')) {
-        const dragId = data.slice(9);
-        if (dragId !== id) reorderVoices(dragId, id);
-        return;
-      }
-      // 档案 chip 拖入 → 锁定
+      if (!data || data.startsWith('__voice__:')) return;
       const profileName = data;
       const lockedId = 'locked_' + Date.now();
       const lockedVoice = {
@@ -2990,6 +3033,8 @@ function renderVoices() {
       applyProfile(profileName);
       showToast('已将档案「' + profileName + '」锁定到预设位', 'success');
     });
+
+    wrapper.appendChild(btn);
     grid.appendChild(wrapper);
   }
 }
