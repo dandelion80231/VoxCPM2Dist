@@ -2439,12 +2439,13 @@ HTML_CONTENT = r"""
     <div class="control-card">
       <h3>音色描述（可选，留空使用左侧预设；也可写方言/角色）</h3>
       <textarea id="controlText" class="prompt-text-input" placeholder="例如：25岁温柔甜美女声，带一点播音腔。或『深宫太后，威严庄重』『河南方言大叔』"></textarea>
-      <div class="example-chips" id="exampleChips"></div>
-      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:8px;">
-        <button id="voicePreviewBtn" class="mode-btn" onclick="runVoicePreview()" title="以当前音色设置生成一段短句试听" style="flex:0 0 auto;">▶ 试听</button>
-        <canvas id="voicePreviewWave" width="160" height="36" style="flex:0 0 auto;width:160px;height:36px;background:var(--surface);border-radius:4px;box-sizing:border-box;opacity:0.4;transition:opacity .3s;"></canvas>
-        <audio id="voicePreviewAudio" controls preload="none" style="flex:0 1 180px;min-width:140px;display:none;height:34px;"></audio>
-        <div id="voicePreviewStatus" class="param-desc" style="flex:1 1 120px;min-width:0;margin:0;">点击试听生成短句</div>
+      <div class="example-chips" id="exampleChips">
+        <div class="preview-inline" style="display:contents">
+          <button id="voicePreviewBtn" class="mode-btn" onclick="runVoicePreview()" title="以当前音色设置生成一段短句试听" style="flex:0 0 auto;padding:4px 10px;font-size:12px;">▶ 试听</button>
+          <canvas id="voicePreviewWave" width="140" height="32" style="flex:0 0 auto;width:140px;height:32px;background:var(--surface);border-radius:4px;box-sizing:border-box;opacity:0.4;transition:opacity .3s;"></canvas>
+          <audio id="voicePreviewAudio" controls preload="none" style="flex:0 1 160px;min-width:120px;display:none;height:32px;"></audio>
+          <div id="voicePreviewStatus" class="param-desc" style="flex:0 0 auto;margin:0;font-size:11px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">点击试听生成短句</div>
+        </div>
       </div>
     </div>
 
@@ -2872,7 +2873,9 @@ function renderVoices() {
 
 function renderExamples() {
   const box = document.getElementById('exampleChips');
-  box.innerHTML = '';
+  // 只清除旧 chips，保留预览区（.preview-inline）
+  box.querySelectorAll('.example-chip').forEach(c => c.remove());
+  const previewAnchor = box.querySelector('.preview-inline');
   for (const [label, desc] of EXAMPLES) {
     const chip = document.createElement('button');
     chip.className = 'example-chip';
@@ -2883,7 +2886,8 @@ function renderExamples() {
       setMode('voice_design', document.querySelector('.mode-btn[data-mode="voice_design"]'));
       document.getElementById('controlText').value = desc;
     };
-    box.appendChild(chip);
+    if (previewAnchor) box.insertBefore(chip, previewAnchor);
+    else box.appendChild(chip);
   }
 }
 
