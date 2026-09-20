@@ -1,0 +1,32 @@
+[
+  {
+    "name": "甜妹女生",
+    "voice": "default",
+    "mode": "fixed_clone",
+    "created_at": "2026-09-20 21:19:04"
+  },
+  {
+    "name": "开朗活泼，语速偏快 (克隆)",
+    "voice": "cheerful_girl",
+    "control_text": "开朗活泼，语速偏快",
+    "mode": "fixed_clone",
+    "reference_wav_path": "voice_preview_1789912313.wav",
+    "created_at": "2026-09-20 21:52:19"
+  },
+  {
+    "name": "新闻播报风格女声 (克隆)",
+    "voice": "calm_male",
+    "control_text": "新闻播报风格",
+    "mode": "fixed_clone",
+    "reference_wav_path": "voice_preview_1789912394.wav",
+    "created_at": "2026-09-20 21:53:47"
+  },
+  {
+    "name": "中年男性，温润儒雅 (克隆)",
+    "voice": "gentleman",
+    "control_text": "中年男性，温润儒雅",
+    "mode": "fixed_clone",
+    "reference_wav_path": "voice_preview_1789912481.wav",
+    "created_at": "2026-09-20 21:55:06"
+  }
+]

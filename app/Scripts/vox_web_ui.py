@@ -4811,7 +4811,11 @@ if HAS_WEB:
     ref_wav_path = None
     if mode == "fixed_clone":
       if reference_path and reference_path.strip():
-        ref_wav_path = reference_path.strip()
+        _rp = reference_path.strip()
+        # 相对路径（纯文件名）解析到 TEMP_DIR
+        if not os.path.isabs(_rp):
+          _rp = str(TEMP_DIR / _rp)
+        ref_wav_path = _rp
         if not os.path.isfile(ref_wav_path):
           raise HTTPException(400, f"参考音频路径不存在: {ref_wav_path}")
       elif reference_wav:
@@ -4879,7 +4883,10 @@ if HAS_WEB:
       ref_path = None
       if mode == "fixed_clone":
         if reference_path and reference_path.strip():
-          ref_path = reference_path.strip()
+          _rp = reference_path.strip()
+          if not os.path.isabs(_rp):
+            _rp = str(TEMP_DIR / _rp)
+          ref_path = _rp
           if not os.path.isfile(ref_path):
             raise RuntimeError(f"参考音频路径不存在: {ref_path}")
         elif reference_wav is not None:
@@ -5001,6 +5008,12 @@ if HAS_WEB:
     name = payload.get("name", "")
     if not HAS_API or not name.strip():
       raise HTTPException(400, "档案名称不能为空")
+    # 绝对路径转相对（只存文件名，避免跨机器路径失效）
+    rwp = payload.get("reference_wav_path", "")
+    if rwp and os.path.isabs(rwp):
+      _td = str(TEMP_DIR) + os.sep
+      if rwp.startswith(_td):
+        payload["reference_wav_path"] = os.path.basename(rwp)
     return JSONResponse(voxcpm_api.save_profile(name, payload))
 
   @app.post("/api/profiles/delete")
