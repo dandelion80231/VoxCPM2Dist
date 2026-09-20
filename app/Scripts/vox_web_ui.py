@@ -4222,15 +4222,11 @@ async function renderProfileChips() {
           const dx = ev.clientX - startX, dy = ev.clientY - startY;
           if (!dragging && (Math.abs(dx) > 5 || Math.abs(dy) > 5)) {
             dragging = true;
-            ev.preventDefault();
             chip.style.zIndex = '10';
-            chip.style.position = 'relative';
-            chip.style.transition = 'none';
             chip.style.boxShadow = '0 2px 8px rgba(0,0,0,0.15)';
           }
           if (dragging) {
             chip.style.transform = 'translate(' + dx + 'px,' + dy + 'px)';
-            // 计算目标位置（水平）
             const siblings = Array.from(box.querySelectorAll('button[data-profilename]'));
             const myX = ev.clientX;
             let targetIdx = 0;
@@ -4255,9 +4251,7 @@ async function renderProfileChips() {
             const dragIdx = siblings.indexOf(chip);
             const targetIdx = chip._targetIdx !== undefined ? chip._targetIdx : -1;
             chip.style.zIndex = '';
-            chip.style.position = '';
             chip.style.transform = '';
-            chip.style.transition = '';
             chip.style.boxShadow = '';
             siblings.forEach(s => { s.style.outline = ''; });
             if (targetIdx >= 0 && targetIdx !== dragIdx) {
