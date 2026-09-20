@@ -1614,6 +1614,7 @@ HTML_CONTENT = r"""
   .voice-item {
     border-radius: 10px;
     cursor: grab;
+    touch-action: none;
     transition: outline 0.15s;
   }
   .voice-item:active { cursor: grabbing; }
@@ -2872,6 +2873,12 @@ async function init() {
 
 function renderVoices() {
   const grid = document.getElementById('voiceGrid');
+  // 一次性：防止父容器 overflow-y:auto 拦截拖拽
+  if (!grid._dragGuard) {
+    grid._dragGuard = true;
+    grid.addEventListener('dragover', e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; });
+    grid.addEventListener('drop', e => e.preventDefault());
+  }
   grid.innerHTML = '';
   const lockedReplacements = CUSTOM_VOICES.filter(v => v.replacesPreset).map(v => v.replacesPreset);
   const allIds = Object.keys(VOICE_LIST).filter(k => !lockedReplacements.includes(k))
