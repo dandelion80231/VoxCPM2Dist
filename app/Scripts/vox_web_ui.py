@@ -2439,12 +2439,12 @@ HTML_CONTENT = r"""
     <div class="control-card">
       <h3>音色描述（可选，留空使用左侧预设；也可写方言/角色）</h3>
       <textarea id="controlText" class="prompt-text-input" placeholder="例如：25岁温柔甜美女声，带一点播音腔。或『深宫太后，威严庄重』『河南方言大叔』"></textarea>
-      <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:10px;">
-        <div class="example-chips" id="exampleChips" style="display:contents;"></div>
-        <button id="voicePreviewBtn" class="mode-btn" onclick="runVoicePreview()" title="以当前音色设置生成一段短句试听" style="flex:0 0 auto;margin-left:auto;">▶ 试听</button>
+      <div class="example-chips" id="exampleChips"></div>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:8px;">
+        <button id="voicePreviewBtn" class="mode-btn" onclick="runVoicePreview()" title="以当前音色设置生成一段短句试听" style="flex:0 0 auto;">▶ 试听</button>
         <canvas id="voicePreviewWave" width="160" height="36" style="flex:0 0 auto;width:160px;height:36px;background:var(--surface);border-radius:4px;box-sizing:border-box;opacity:0.4;transition:opacity .3s;"></canvas>
         <audio id="voicePreviewAudio" controls preload="none" style="flex:0 1 180px;min-width:140px;display:none;height:34px;"></audio>
-        <div id="voicePreviewStatus" class="param-desc" style="flex:0 0 auto;min-width:0;margin:0;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">点击试听生成短句</div>
+        <div id="voicePreviewStatus" class="param-desc" style="flex:1 1 120px;min-width:0;margin:0;">点击试听生成短句</div>
       </div>
     </div>
 
