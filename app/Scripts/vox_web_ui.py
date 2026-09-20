@@ -2891,7 +2891,7 @@ function renderVoices() {
     const btn = document.createElement('button');
     btn.className = 'voice-btn' + (isActive ? ' active' : '') + (isCustom ? ' custom-preset' : '') + (isLocked ? ' locked-preset' : '');
     btn.dataset.id = id;
-    btn.draggable = true;
+    // draggable 不用，用 mousedown 手动拖拽（更可靠）
     btn.onclick = () => selectVoice(id, btn);
     if (isActive) {
       btn.style.boxShadow = '0 2px 8px rgba(108,142,255,0.4)';
@@ -2918,30 +2918,62 @@ function renderVoices() {
         <div class="voice-desc">${v.desc}</div>
       </div>`;
     }
-    // 拖拽排序
-    btn.addEventListener('dragstart', e => {
-      e.dataTransfer.effectAllowed = 'move';
-      e.dataTransfer.setData('text/plain', '__voice__:' + id);
-      btn.style.opacity = '0.5';
+    // mousedown 手动拖拽排序（比 HTML5 Drag API 在 button 上更可靠）
+    btn.addEventListener('mousedown', e => {
+      if (e.button !== 0) return;  // 只左键
+      const startX = e.clientX, startY = e.clientY;
+      let dragging = false;
+      const onMove = ev => {
+        const dx = ev.clientX - startX, dy = ev.clientY - startY;
+        if (!dragging && (Math.abs(dx) > 4 || Math.abs(dy) > 4)) {
+          dragging = true;
+          // 创建 ghost 跟随鼠标
+          const ghost = btn.cloneNode(true);
+          ghost.style.cssText = 'position:fixed;z-index:9999;width:' + btn.offsetWidth + 'px;opacity:0.85;pointer-events:none;';
+          document.body.appendChild(ghost);
+          document.body.style.userSelect = 'none';
+        }
+        if (dragging) {
+          ghost.style.left = (ev.clientX - 10) + 'px';
+          ghost.style.top = (ev.clientY - 10) + 'px';
+          // 高亮目标位置
+          document.querySelectorAll('.voice-btn').forEach(b => b.style.outline = '');
+          const el = document.elementFromPoint(ev.clientX, ev.clientY);
+          const target = el ? el.closest('.voice-btn') : null;
+          if (target && target !== btn) target.style.outline = '2px solid var(--accent)';
+        }
+      };
+      const onUp = ev => {
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+        document.body.style.userSelect = '';
+        const ghost = document.querySelector('.voice-btn-drag-ghost');
+        if (ghost) ghost.remove();
+        document.querySelectorAll('.voice-btn').forEach(b => b.style.outline = '');
+        if (dragging) {
+          const el = document.elementFromPoint(ev.clientX, ev.clientY);
+          const target = el ? el.closest('.voice-btn') : null;
+          if (target && target !== btn) {
+            const targetId = target.dataset.id;
+            if (targetId) reorderVoices(id, targetId);
+          }
+        }
+      };
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
     });
-    btn.addEventListener('dragend', () => { btn.style.opacity = '1'; });
+    // HTML5 drop 目标：接收档案 chip 拖入 → 锁定
     btn.addEventListener('dragover', e => {
       e.preventDefault();
       e.dataTransfer.dropEffect = 'move';
-      btn.style.outline = '2px solid var(--accent)';
+      btn.style.outline = '2px dashed var(--accent)';
     });
     btn.addEventListener('dragleave', () => { btn.style.outline = ''; });
     btn.addEventListener('drop', e => {
       e.preventDefault();
       btn.style.outline = '';
       const data = e.dataTransfer.getData('text/plain');
-      if (!data) return;
-      // 预设拖拽排序
-      if (data.startsWith('__voice__:')) {
-        const dragId = data.slice(9);
-        if (dragId !== id) reorderVoices(dragId, id);
-        return;
-      }
+      if (!data || data.startsWith('__voice__:')) return;  // 档案 chip 拖入才处理
       // 档案 chip 拖入 → 锁定
       const profileName = data;
       const lockedId = 'locked_' + Date.now();
