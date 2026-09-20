@@ -2940,7 +2940,7 @@ function renderVoices() {
         document.removeEventListener('mousemove', onMove);
         document.removeEventListener('mouseup', onUp);
         if (dragging) {
-          const targetIdx = wrapper._targetIdx || -1;
+          const targetIdx = wrapper._targetIdx !== undefined ? wrapper._targetIdx : -1;
           wrapper.style.zIndex = '';
           wrapper.style.position = '';
           wrapper.style.transform = '';
