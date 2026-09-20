@@ -2442,7 +2442,7 @@ HTML_CONTENT = r"""
       <div class="example-chips" id="exampleChips">
         <div class="preview-inline" style="display:flex;align-items:center;gap:6px;margin-left:auto;">
           <button id="voicePreviewBtn" class="mode-btn" onclick="runVoicePreview()" title="以当前音色设置生成一段短句试听" style="padding:4px 10px;font-size:12px;">▶ 试听</button>
-          <canvas id="voicePreviewWave" width="120" height="28" style="width:120px;height:28px;background:var(--surface);border-radius:4px;box-sizing:border-box;"></canvas>
+          <canvas id="voicePreviewWave" width="120" height="28" style="width:120px;height:28px;background:var(--surface);border:1px solid var(--border);border-radius:4px;box-sizing:border-box;"></canvas>
           <audio id="voicePreviewAudio" preload="none" style="display:none;"></audio>
           <button id="previewPlayBtn" onclick="previewPlayPause()" title="播放/暂停" style="display:none;width:28px;height:28px;border-radius:50%;border:1px solid var(--border);background:var(--surface2);color:var(--text);cursor:pointer;font-size:13px;line-height:1;">▶</button>
           <button id="previewDlBtn" onclick="previewDownload()" title="下载试听音频" style="display:none;padding:2px 6px;border-radius:4px;border:1px solid var(--border);background:var(--surface2);color:var(--text2);cursor:pointer;font-size:11px;">⬇</button>
@@ -2831,6 +2831,7 @@ async function init() {
     ['loadCustomVoices', loadCustomVoices],
     ['renderVoices', renderVoices],
     ['renderExamples', renderExamples],
+    ['drawPreviewWavePlaceholder', () => { const c = document.getElementById('voicePreviewWave'); if (!c) return; const ctx = c.getContext('2d'); ctx.clearRect(0, 0, c.width, c.height); ctx.fillStyle = (getComputedStyle(document.documentElement).getPropertyValue('--accent') || '#6c8eff') + '55'; const mid = c.height / 2; for (let i = 0; i < c.width; i += 4) { ctx.fillRect(i, mid - 1, 2, 2); } }],
     ['loadHistory', loadHistory],
     ['bindSliders', bindSliders],
     ['bindTextArea', bindTextArea],
