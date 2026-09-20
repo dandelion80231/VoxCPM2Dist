@@ -2989,7 +2989,6 @@ function drawPreviewWave(peaks, progress = 0) {
     ctx.fillRect(progress * c.width, 0, 1.5, c.height);
   }
 }
-}
 
 function bindSliders() {
   const cfg = document.getElementById('cfgSlider');
