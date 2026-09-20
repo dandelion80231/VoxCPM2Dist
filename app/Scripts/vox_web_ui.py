@@ -4213,29 +4213,63 @@ async function renderProfileChips() {
       chip.textContent = p.name || '未命名';
       chip.title = (p.mode === 'fixed_clone' ? '🔒 ' : '') + (p.control_text || '') + ' (' + (p.mode || 'voice_design') + ') — 拖到左侧预设可锁定音色；拖到其它标签前/后可排序';
       chip.onclick = () => applyProfile(p.name);
-      // 拖拽排序（drop 到另一个 chip 前/后）
-      chip.addEventListener('dragstart', e => {
-        e.dataTransfer.effectAllowed = 'move';
-        e.dataTransfer.setData('text/plain', p.name || '');
-        chip.style.opacity = '0.4';
-      });
-      chip.addEventListener('dragend', () => { chip.style.opacity = '1'; });
-      chip.addEventListener('dragover', e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; chip.style.borderColor = 'var(--accent)'; });
-      chip.addEventListener('dragleave', () => { chip.style.borderColor = 'var(--border)'; });
-      chip.addEventListener('drop', e => {
-        e.preventDefault(); chip.style.borderColor = 'var(--border)';
-        const fromName = e.dataTransfer.getData('text/plain');
-        if (!fromName || fromName === p.name) return;
-        // 在档案数组中交换位置
-        const arr = box.querySelectorAll('button[data-profilename]');
-        const fromChip = Array.from(arr).find(c => c.dataset.profileName === fromName);
-        if (fromChip) {
-          const idxFrom = Array.from(box.children).indexOf(fromChip);
-          const idxTo = Array.from(box.children).indexOf(chip);
-          if (idxFrom < idxTo) box.insertBefore(fromChip, chip.nextSibling);
-          else box.insertBefore(fromChip, chip);
-        }
-        showToast('档案顺序已更新（本地显示）', 'info');
+      // mousedown 拖拽排序（chip 水平排列）
+      chip.addEventListener('mousedown', e => {
+        if (e.button !== 0) return;
+        const startX = e.clientX, startY = e.clientY;
+        let dragging = false;
+        const onMove = ev => {
+          const dx = ev.clientX - startX, dy = ev.clientY - startY;
+          if (!dragging && (Math.abs(dx) > 5 || Math.abs(dy) > 5)) {
+            dragging = true;
+            ev.preventDefault();
+            chip.style.zIndex = '10';
+            chip.style.position = 'relative';
+            chip.style.transition = 'none';
+            chip.style.boxShadow = '0 2px 8px rgba(0,0,0,0.15)';
+          }
+          if (dragging) {
+            chip.style.transform = 'translate(' + dx + 'px,' + dy + 'px)';
+            // 计算目标位置（水平）
+            const siblings = Array.from(box.querySelectorAll('button[data-profilename]'));
+            const myX = ev.clientX;
+            let targetIdx = 0;
+            for (let i = 0; i < siblings.length; i++) {
+              const r = siblings[i].getBoundingClientRect();
+              if (myX > r.left + r.width / 2) targetIdx = i + 1;
+            }
+            siblings.forEach((s, i) => {
+              s.style.outline = '';
+              if (i === targetIdx && targetIdx !== siblings.indexOf(chip)) {
+                s.style.outline = '2px solid var(--accent)';
+              }
+            });
+            chip._targetIdx = targetIdx;
+          }
+        };
+        const onUp = () => {
+          document.removeEventListener('mousemove', onMove);
+          document.removeEventListener('mouseup', onUp);
+          if (dragging) {
+            const siblings = Array.from(box.querySelectorAll('button[data-profilename]'));
+            const dragIdx = siblings.indexOf(chip);
+            const targetIdx = chip._targetIdx !== undefined ? chip._targetIdx : -1;
+            chip.style.zIndex = '';
+            chip.style.position = '';
+            chip.style.transform = '';
+            chip.style.transition = '';
+            chip.style.boxShadow = '';
+            siblings.forEach(s => { s.style.outline = ''; });
+            if (targetIdx >= 0 && targetIdx !== dragIdx) {
+              const refEl = siblings[targetIdx];
+              if (targetIdx > dragIdx) box.insertBefore(chip, refEl.nextSibling);
+              else box.insertBefore(chip, refEl);
+            }
+            showToast('档案顺序已更新', 'info');
+          }
+        };
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
       });
       box.appendChild(chip);
     }
