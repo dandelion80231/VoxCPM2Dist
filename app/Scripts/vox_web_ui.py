@@ -10,6 +10,8 @@ VoxCPM2 Web UI — 一体化界面（版本号见 app/version.txt）
   - 异步任务队列（模型加载 + TTS 合成）
 """
 
+# pyright: reportPossiblyUnboundVariable = none
+
 import argparse
 import asyncio
 import datetime
@@ -19,6 +21,14 @@ import queue
 import re
 import shutil
 import sys
+import threading
+import time
+import uuid
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
+from typing import cast
+
+import numpy as np
 
 # 内嵌版 Python(python_cuda)不会把脚本所在目录加入 sys.path，
 # 手动加入以便导入同级模块（text_norm_cn 等），否则双击 .bat 会因
@@ -35,14 +45,13 @@ try:
 except Exception as _e_dl:  # 极端情况（如缺 urllib），仍保证 UI 可启动
   _dlmod = None
   HAS_DL = False
-  print("[VoxCPM2] 模型下载模块不可用: %s" % _e_dl)
-import threading
-import time
-import uuid
-from concurrent.futures import ThreadPoolExecutor
-from pathlib import Path
+  print(f"[VoxCPM2] 模型下载模块不可用: {_e_dl}")
 
-import numpy as np
+# 本地模块导入（sys.path 已设置，紧跟其后）
+try:
+  from text_norm_cn import normalize_text
+except Exception:
+  normalize_text = None
 
 # 公共后端函数层（Web UI 与 CLI 共用；含语料/profile 管理，模型目录解析见 commit2）
 try:
@@ -51,7 +60,7 @@ try:
   HAS_API = True
 except Exception as _e_api:
   HAS_API = False
-  print("[VoxCPM2] 公共后端函数层不可用: %s" % _e_api)
+  print(f"[VoxCPM2] 公共后端函数层不可用: {_e_api}")
 
 # ── 依赖检查 ─────────────────────────────────────────────
 try:
@@ -76,6 +85,20 @@ except ImportError:
 MODEL_ID = "openbmb/VoxCPM2"
 MAX_CHUNK_SIZE = 240
 executor = ThreadPoolExecutor(max_workers=2)
+
+# ── 总式数值转换（任何失败返回默认值，绝不抛异常）─────────────
+def _safe_int(value, default: int = 0) -> int:
+  try:
+    return int(value)
+  except (TypeError, ValueError, OverflowError):
+    return default
+
+
+def _safe_float(value, default: float = 0.0) -> float:
+  try:
+    return float(value)
+  except (TypeError, ValueError, OverflowError):
+    return default
 
 # ── 音色预设 ─────────────────────────────────────────────
 VOICE_PRESETS = {
@@ -123,9 +146,7 @@ _output_dir = Path(os.environ.get("VOXCPM_OUTPUT_DIR", str(Path.home() / "Deskto
 # 留空 = 不挂载 LoRA，使用原版模型；设置后下次合成将重载模型并挂载 LoRA。
 _lora_weights_path: str = ""
 # LoRA 实际加载结果（模型加载后填充），供状态面板如实显示，避免「假成功」。
-_lora_load_info: tuple = (
-  None  # (loaded_count, skipped_count) 或 None（尚未加载/未配置）
-)
+_lora_load_info: tuple | None = None  # (loaded_count, skipped_count) 或 None（尚未加载/未配置）
 _lora_resolve_error: str = ""  # resolve_lora 失败原因（路径错/配置坏等），空=未失败
 
 
@@ -143,7 +164,7 @@ def _load_config():
       if cfg.get("lora_weights_path"):
         _lora_weights_path = cfg["lora_weights_path"]
   except Exception:
-    pass
+    _load_failed = True  # 有意吞没：配置文件缺失/损坏时保持默认路径
 
 
 def _save_config():
@@ -253,7 +274,7 @@ def _install_diagnostics():
   try:
     _log_dir = Path(__file__).resolve().parent.parent / "cache"
     _log_dir.mkdir(parents=True, exist_ok=True)
-    _logf = open(_log_dir / "web_ui.log", "a", encoding="utf-8", buffering=1)
+    _logf = open(_log_dir / "web_ui.log", "a", encoding="utf-8", buffering=1)  # noqa: SIM115  (long-lived handle for module-lifetime _Tee logging; can't use `with` without re-indenting 4000+ lines)
 
     class _Tee:
       def __init__(self, *streams):
@@ -264,14 +285,14 @@ def _install_diagnostics():
           try:
             o.write(s)
           except Exception:
-            pass
+            _stream_write_failed = True  # 某流写失败则跳过，继续写其余流
 
       def flush(self):
         for o in self._streams:
           try:
             o.flush()
           except Exception:
-            pass
+            _stream_flush_failed = True  # 某流刷失败则跳过
 
       def isatty(self):
         for o in self._streams:
@@ -279,7 +300,7 @@ def _install_diagnostics():
             if o.isatty():
               return True
           except Exception:
-            pass
+            _stream_isatty_failed = True  # 某流 isatty 检查失败则继续检查其余流
         return False
 
       def fileno(self):
@@ -287,7 +308,7 @@ def _install_diagnostics():
           try:
             return o.fileno()
           except Exception:
-            pass
+            _stream_fileno_failed = True  # 某流无 fileno 则继续，全部失败才抛 OSError
         raise OSError("no fileno")
 
     if sys.stdout is not None:
@@ -304,10 +325,10 @@ def _install_diagnostics():
         "a",
         encoding="utf-8",
       ) as f:
-        f.write("\n=== %s @ %s ===\n" % (tag, time.strftime("%Y-%m-%d %H:%M:%S")))
+        f.write(f"\n=== {tag} @ {time.strftime('%Y-%m-%d %H:%M:%S')} ===\n")
         _tb.print_exception(et, ev, tb, file=f)
     except Exception:
-      pass
+      _exc_log_ok = False  # 日志写失败不能再抛异常，静默降级
 
   def _main_hook(et, ev, tb):
     _write_crash("未捕获异常(主线程)", et, ev, tb)
@@ -316,7 +337,7 @@ def _install_diagnostics():
   try:
     sys.excepthook = _main_hook
   except Exception:
-    pass
+    _main_hook_ok = False  # 极少发生；保留系统默认 excepthook
 
   def _thread_hook(args):
     _write_crash("线程未捕获异常", args.exc_type, args.exc_value, args.exc_traceback)
@@ -325,14 +346,14 @@ def _install_diagnostics():
       with _dl_lock:
         if _dl_state.get("status") in ("scanning", "downloading"):
           _dl_state["status"] = "error"
-          _dl_state["message"] = "下载线程异常: %s" % args.exc_value
+          _dl_state["message"] = f"下载线程异常: {args.exc_value}"
     except Exception:
-      pass
+      _dl_hook_ok = False  # 下载线程崩溃时标记前端状态，避免一直转圈；标记失败则静默
 
   try:
     threading.excepthook = _thread_hook
   except Exception:
-    pass
+    _thread_hook_ok = False  # 极少发生；保留默认线程钩子
 
 
 _install_diagnostics()
@@ -365,15 +386,17 @@ def _resolve_zipenhancer_dir():
   try:
     anchors.append(os.path.dirname(os.path.abspath(__file__)))
   except Exception:
-    pass
+    _anchor_probe_ok = False  # 定位失败则尝试下一个锚点
   if getattr(sys, "frozen", False):
     # PyInstaller 冻结后，模型随 exe 目录或 _MEIPASS 解包
     try:
       anchors.append(os.path.dirname(os.path.abspath(sys.executable)))
     except Exception:
-      pass
+      _anchor_probe_ok = False  # 定位失败则尝试下一个锚点
     if hasattr(sys, "_MEIPASS"):
-      anchors.append(sys._MEIPASS)
+      _mepass = getattr(sys, "_MEIPASS", None)
+      if _mepass:
+        anchors.append(_mepass)
   seen = set()
   for a in anchors:
     if a in seen:
@@ -466,7 +489,7 @@ def verify_model_files():
       sz = os.path.getsize(p)
       ok = sz > 0 and sz >= _MODEL_MIN_SIZE.get(f, 1)
       issue = "" if ok else ("文件为空" if sz == 0 else "体积异常偏小，可能下载不完整")
-      files.append({"name": f, "ok": bool(ok), "size": int(sz), "issue": issue})
+      files.append({"name": f, "ok": bool(ok), "size": sz, "issue": issue})
     else:
       missing.append(f)
       files.append({"name": f, "ok": False, "size": 0, "issue": "文件缺失"})
@@ -490,7 +513,7 @@ _dl_state = {
   "started_at": None,
   "finished_at": None,
 }
-_dl_thread = [None]  # 用列表存线程引用，便于在函数内修改
+_dl_thread: list = [None]  # 用列表存线程引用，便于在函数内修改
 
 
 def _dl_progress(p: dict):
@@ -498,6 +521,11 @@ def _dl_progress(p: dict):
     for k, v in p.items():
       if v is not None:
         _dl_state[k] = v
+
+
+def _is_download_cancelled(exc: BaseException) -> bool:
+  """总式：判定是否为下载取消异常（布尔判断移出 except 块）。"""
+  return _dlmod is not None and isinstance(exc, _dlmod._DownloadCancelled)
 
 
 def _dl_run():
@@ -508,7 +536,7 @@ def _dl_run():
         should_stop=lambda: _dl_state.get("status") == "cancelled",
       )
     else:
-      ok_main, ok_zip = (False, False)
+      ok_main = False
     with _dl_lock:
       if _dl_state.get("status") == "cancelled":
         pass  # 已在 cancel 接口标记
@@ -528,7 +556,7 @@ def _dl_run():
         )
         _dl_state["finished_at"] = time.time()
   except Exception as _e_cancel:
-    if _dlmod is not None and isinstance(_e_cancel, _dlmod._DownloadCancelled):
+    if _is_download_cancelled(_e_cancel):
       with _dl_lock:
         _dl_state["status"] = "cancelled"
         _dl_state["message"] = "已取消下载。可重新点击下载，已下载部分将自动续传。"
@@ -536,7 +564,7 @@ def _dl_run():
     else:
       with _dl_lock:
         _dl_state["status"] = "error"
-        _dl_state["message"] = "下载失败: %s" % _e_cancel
+        _dl_state["message"] = f"下载失败: {_e_cancel}"
         _dl_state["finished_at"] = time.time()
   finally:
     _dl_thread[0] = None
@@ -633,7 +661,7 @@ def load_model(force_reload: bool = False):
     model = VoxCPM.from_pretrained(
       model_path,
       load_denoiser=use_denoiser,
-      zipenhancer_model_id=zpath if use_denoiser else None,
+      zipenhancer_model_id=cast("str", zpath if use_denoiser else None),  # 运行时接受 None（关闭降噪）
       optimize=False,
       device=device,
       **lora_kwargs,
@@ -675,14 +703,14 @@ def unload_model():
 
     gc.collect()
   except Exception:
-    pass
+    _gc_ok = False  # 回收失败不影响卸载主流程
   try:
     import torch
 
     if torch.cuda.is_available():
       torch.cuda.empty_cache()
   except Exception:
-    pass
+    _cuda_cleanup_ok = False  # 显存清理失败不影响卸载主流程
   print("[VoxCPM2] 模型已卸载")
 
 
@@ -736,7 +764,11 @@ def split_text(text: str, chunk_size: int = MAX_CHUNK_SIZE) -> list:
   return chunks
 
 
-from text_norm_cn import normalize_text
+# [v5.4] 分段幻觉守卫（voicebox 移植）；缺失时降级为不启用（不影响主链路）
+try:
+  import audio_guard
+except Exception:  # audio_guard 不存在（旧部署热更新等极端场景）
+  audio_guard = None
 
 
 def resample_audio(audio: np.ndarray, sr_in: int, sr_out: int) -> np.ndarray:
@@ -746,16 +778,16 @@ def resample_audio(audio: np.ndarray, sr_in: int, sr_out: int) -> np.ndarray:
 
     return librosa.resample(audio.astype(np.float32), orig_sr=sr_in, target_sr=sr_out)
   except Exception:
-    pass
+    _librosa_resample_ok = False  # librosa 不可用则继续尝试下一策略
   try:
     from scipy.signal import resample as sp_resample
 
-    n = int(round(len(audio) * sr_out / sr_in))
-    return sp_resample(audio, n)
+    n = _safe_int(round(len(audio) * sr_out / sr_in))
+    return cast("np.ndarray", sp_resample(audio, n))  # scipy 存根重载返回 tuple，实际为 ndarray
   except Exception:
-    pass
+    _scipy_resample_ok = False  # scipy 不可用则继续尝试下一策略
   # 简单线性插值回退
-  n = int(round(len(audio) * sr_out / sr_in))
+  n = _safe_int(round(len(audio) * sr_out / sr_in))
   if n <= 1:
     return audio
   xp = np.linspace(0, len(audio) - 1, len(audio))
@@ -775,7 +807,7 @@ def crossfade_concat(
     return np.array([], dtype=np.float32)
   if len(audio_list) == 1:
     return np.asarray(audio_list[0], dtype=np.float32)
-  fade_n = max(1, int(sample_rate * fade_ms / 1000))
+  fade_n = max(1, _safe_int(sample_rate * fade_ms / 1000))
   result = np.asarray(audio_list[0], dtype=np.float32).copy()
   for seg in audio_list[1:]:
     seg = np.asarray(seg, dtype=np.float32)
@@ -798,7 +830,7 @@ def _segment_rms(audio: np.ndarray) -> float:
   arr = np.asarray(audio, dtype=np.float64)
   if len(arr) == 0:
     return 0.0
-  return float(np.sqrt(np.mean(arr * arr)))
+  return _safe_float(np.sqrt(np.mean(arr * arr)))
 
 
 def normalize_segments(audio_segments: list, target_mode: str = "mean") -> list:
@@ -815,12 +847,12 @@ def normalize_segments(audio_segments: list, target_mode: str = "mean") -> list:
   valid_rms = [r for r in rms_values if r > 1e-9]
   if not valid_rms:
     return audio_segments
-  target_rms = rms_values[0] if target_mode == "first" else float(np.mean(valid_rms))
+  target_rms = rms_values[0] if target_mode == "first" else _safe_float(np.mean(valid_rms))
   if target_rms < 1e-9:
     return audio_segments
 
   normalized = []
-  for seg, rms in zip(audio_segments, rms_values):
+  for seg, rms in zip(audio_segments, rms_values, strict=True):
     seg_arr = np.asarray(seg, dtype=np.float32)
     if rms < 1e-9:
       normalized.append(seg_arr)
@@ -838,7 +870,7 @@ def peak_normalize(audio: np.ndarray, peak: float = 0.95) -> np.ndarray:
   arr = np.asarray(audio, dtype=np.float32)
   if len(arr) == 0:
     return arr
-  max_amp = float(np.max(np.abs(arr)))
+  max_amp = _safe_float(np.max(np.abs(arr)))
   if max_amp < 1e-9:
     return arr
   return arr * (peak / max_amp)
@@ -862,10 +894,9 @@ def synthesize(args: dict) -> dict:
   control = control_text or VOICE_PRESETS.get(voice, VOICE_PRESETS["default"])
   mode = args.get("mode", "voice_design")  # voice_design | fixed_clone | self_seeding
   reference_wav = args.get("reference_wav")
-  prompt_wav = args.get("prompt_wav")
   prompt_text = args.get("prompt_text")
-  cfg = float(args.get("cfg", 2.5))
-  steps = int(args.get("steps", 15))
+  cfg = _safe_float(args.get("cfg", 2.5), 2.5)
+  steps = _safe_int(args.get("steps", 15), 15)
   # normalize：用户显式开关（默认开）。若检测到音素串 {ni3}，自动强制切音素模式
   # （官方要求音素输入必须 normalize=False，且不能把 {} 块交给归一化/模型二次归一化）。
   requested_normalize = str(args.get("normalize", "true")).lower() in (
@@ -904,12 +935,12 @@ def synthesize(args: dict) -> dict:
         text = auto_text
         phoneme_mode = True
     except Exception:
-      pass  # 自动纠错失败不阻塞，退回默认链路（多音字可能读错，可手动标注兜底）
+      _phoneme_auto_skipped = True  # 自动纠错失败不阻塞，退回默认链路（多音字可能读错，可手动标注兜底）
   normalize = requested_normalize and not phoneme_mode
   denoise = str(args.get("denoise", "false")).lower() in ("true", "1", "yes", True)
   prompt_text = args.get("prompt_text") or None  # 终极克隆：参考音频的转录文本
-  crossfade = int(args.get("crossfade", 80))
-  chunk_size = int(args.get("chunk_size", 180))
+  crossfade = _safe_int(args.get("crossfade", 80), 80)
+  chunk_size = _safe_int(args.get("chunk_size", 180), 180)
   target_sr = args.get("target_sr", "native")
 
   with task_lock:
@@ -960,7 +991,7 @@ def synthesize(args: dict) -> dict:
 
       text = strip_annotated_hanzi(text)
     except Exception:
-      pass  # 剥离失败不阻塞合成，退回原文本（可能重复读但保证能出结果）
+      _phoneme_strip_skipped = True  # 剥离失败不阻塞合成，退回原文本（可能重复读但保证能出结果）
 
   chunks = split_text(text, chunk_size=chunk_size)
   total_chunks = len(chunks)
@@ -983,7 +1014,7 @@ def synthesize(args: dict) -> dict:
 
   for i, chunk in enumerate(chunks, 1):
     # 进度按「已完成段数」计算：第一段开始前应为 5%，避免一起步就 50%+
-    progress = int(5 + 80 * (i - 1) / total_chunks)
+    progress = _safe_int(5 + 80 * (i - 1) / total_chunks)
     with task_lock:
       now = time.time()
       r = task_results[job_id]
@@ -1019,12 +1050,14 @@ def synthesize(args: dict) -> dict:
     #   防止模型自带归一化二次破坏 {} 块（问题2双保险）。
     # - 非音素模式：维持原有 normalize 行为。
     if phoneme_mode:
-      processed_chunk = normalize_text(chunk)
+      processed_chunk = normalize_text(chunk) if normalize_text else chunk
       normalize = False
     else:
-      processed_chunk = normalize_text(chunk) if normalize else chunk
+      processed_chunk = normalize_text(chunk) if normalize_text and normalize else chunk
     chunk_text = f"({control}){processed_chunk}" if control else processed_chunk
     chunk_start = time.time()
+    _retry_text = chunk_text  # 默认重试文本；各分支可覆盖（fixed_clone/ref_continuation 用 processed_chunk）
+    _regen = None  # 默认不可重试；各分支按副作用情况覆盖
     try:
       if mode == "fixed_clone" and current_ref:
         # 固定参考克隆 / 终极克隆（参考音频 + 转录文本）
@@ -1044,6 +1077,13 @@ def synthesize(args: dict) -> dict:
           kwargs["prompt_wav_path"] = seed_ref_path
           kwargs["prompt_text"] = seed_prompt_text
         wav = model.generate(**kwargs)
+        _regen = (
+          (lambda t, _kw={k: v for k, v in kwargs.items() if k != "text"}: model.generate(text=t, **_kw))
+          if audio_guard is not None
+          else None
+        )
+        _retry_text = processed_chunk  # 本分支实际生成文本（不含 control 前缀）
+        _retry_text = processed_chunk  # 本分支实际生成文本（不含 control 前缀）
       elif use_self_seeding and i == 1:
         # 第一段 Voice Design
         wav = model.generate(
@@ -1054,6 +1094,7 @@ def synthesize(args: dict) -> dict:
           denoise=denoise,
         )
         seed_prompt_text = chunk_text
+        _regen = None  # 种子段有副作用（写 seed_ref 供后续段克隆），不对半重试，仅裁剪
         seed_ref_path = os.path.join(TEMP_DIR, f"seed_{job_id}.wav")
         # Windows 可能在运行期间清理 AppData\Local\Temp，导致 TEMP_DIR 消失；
         # 写种子前确保目录存在，避免 sf.write 报 "Error opening ...: System error"
@@ -1072,6 +1113,18 @@ def synthesize(args: dict) -> dict:
           normalize=normalize,
           denoise=denoise,
         )
+        _regen = (
+          (lambda t, _ref=current_ref, _sr_path=seed_ref_path, _st=seed_prompt_text,
+                   _cfg=cfg, _stp=steps, _nm=normalize, _dn=denoise:
+           model.generate(
+             text=t, cfg_value=_cfg, inference_timesteps=_stp,
+             reference_wav_path=_ref, prompt_wav_path=_sr_path, prompt_text=_st,
+             normalize=_nm, denoise=_dn,
+           ))
+          if audio_guard is not None
+          else None
+        )
+        _retry_text = processed_chunk
       else:
         wav = model.generate(
           text=chunk_text,
@@ -1080,7 +1133,15 @@ def synthesize(args: dict) -> dict:
           normalize=normalize,
           denoise=denoise,
         )
-
+        _regen = (
+          (lambda t, _cfg=cfg, _stp=steps, _nm=normalize, _dn=denoise: model.generate(
+            text=t, cfg_value=_cfg, inference_timesteps=_stp,
+            normalize=_nm, denoise=_dn,
+          ))
+          if audio_guard is not None
+          else None
+        )
+        _retry_text = chunk_text
       chunk_elapsed = time.time() - chunk_start
       chunk_chars = len(processed_chunk)
       synthesis_elapsed_total += chunk_elapsed
@@ -1096,6 +1157,9 @@ def synthesize(args: dict) -> dict:
             _global_avg_seconds_per_char = avg
 
       sr = model.tts_model.sample_rate
+      if audio_guard is not None:
+        # [v5.4] 幻觉守卫：裁段内长静音；跑飞形态时自动对半拆段重生成（种子段仅裁剪）
+        wav = audio_guard.guard_chunk(wav, sr, _regen, _retry_text)
       audio_segments.append(wav)
     except Exception as e:
       with task_lock:
@@ -1244,8 +1308,9 @@ def get_app_version(fallback="5.3"):
       v = p.read_text(encoding="utf-8-sig").strip()
       if v:
         return v
-  except Exception:
-    pass
+  except Exception as _ver_exc:  # 版本号读取失败时仅提示，不阻断启动
+    import sys
+    print(f"[警告] 读取 app/version.txt 失败: {_ver_exc}", file=sys.stderr)
   return fallback
 
 
@@ -2339,21 +2404,16 @@ HTML_CONTENT = r"""
       </div>
     </div>
 
-    <!-- 音色描述 + 示例 + 音色试听（右下红框区：按钮 + 波形 + 试听播放器） -->
+    <!-- 音色描述 + 示例 + 音色试听（试听横排在描述区下方，不拉宽外框） -->
     <div class="control-card">
       <h3>音色描述（可选，留空使用左侧预设；也可写方言/角色）</h3>
-      <div style="display:flex;gap:12px;align-items:stretch;flex-wrap:wrap;">
-        <div style="flex:1;min-width:0;">
-          <textarea id="controlText" class="prompt-text-input" placeholder="例如：25岁温柔甜美女声，带一点播音腔。或『深宫太后，威严庄重』『河南方言大叔』"></textarea>
-          <div class="example-chips" id="exampleChips"></div>
-        </div>
-        <div style="flex:0 0 230px;display:flex;flex-direction:column;gap:8px;padding:10px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;box-sizing:border-box;">
-          <div style="font-size:12px;font-weight:600;">🎧 音色试听</div>
-          <button id="voicePreviewBtn" class="mode-btn" style="width:100%" onclick="runVoicePreview()" title="以当前音色设置（预设/描述/参考音频/模式）生成一段短句，试听效果">▶ 试听当前音色</button>
-          <canvas id="voicePreviewWave" width="206" height="48" style="width:100%;height:48px;background:var(--surface);border-radius:6px;"></canvas>
-          <audio id="voicePreviewAudio" controls preload="none" style="width:100%;display:none"></audio>
-          <div id="voicePreviewStatus" class="param-desc" style="min-height:16px">点试听生成一段短句，预览当前音色效果</div>
-        </div>
+      <textarea id="controlText" class="prompt-text-input" placeholder="例如：25岁温柔甜美女声，带一点播音腔。或『深宫太后，威严庄重』『河南方言大叔』"></textarea>
+      <div class="example-chips" id="exampleChips"></div>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px;padding:8px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;">
+        <button id="voicePreviewBtn" class="mode-btn" onclick="runVoicePreview()" title="以当前音色设置（预设/描述/参考音频/模式）生成一段短句，试听效果" style="flex:0 0 auto;align-items:center;">▶ 试听当前音色</button>
+        <canvas id="voicePreviewWave" width="206" height="44" style="flex:0 0 auto;width:206px;height:44px;background:var(--surface);border-radius:6px;box-sizing:border-box;"></canvas>
+        <audio id="voicePreviewAudio" controls preload="none" style="flex:0 1 200px;min-width:160px;display:none;height:38px;"></audio>
+        <div id="voicePreviewStatus" class="param-desc" style="flex:1 1 120px;min-width:0;margin:0;">点试听生成一段短句，预览当前音色效果</div>
       </div>
     </div>
 
@@ -2520,7 +2580,7 @@ HTML_CONTENT = r"""
     </details>
     <div class="param-desc" style="margin-bottom:6px;font-weight:600">用户规则（num_norm_extra.txt，可编辑；先于内置数字规则执行）</div>
     <textarea id="normRulesContent" spellcheck="false" style="width:100%;height:260px;font-family:var(--font-mono);font-size:12px;line-height:1.6;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:10px;padding:10px;box-sizing:border-box;resize:vertical;white-space:pre" placeholder="（文件为空或不存在，保存时将新建）"></textarea>
-    <div class="param-desc" style="margin-top:8px">每行一条规则，# 开头为注释。两种类型：<code>原文 =&gt; 读法</code>（如 <code>3.14 =&gt; 三点一四</code>）；<code>?正则 =&gt; 替换</code>（如 <code>?0+(\d) =&gt; \1</code>，支持 \1 反向引用）。建议把读法直接写成中文，内置数字规则就不会再处理它；坏行会被自动跳过并警告，不会崩合成。保存即生效（自动热加载，无需重启）。</div>
+    <div class="param-desc" style="margin-top:8px">每行一条规则，# 开头为注释。三种类型：<code>原文 =&gt; 读法</code>（如 <code>3.14 =&gt; 三点一四</code>，区分大小写）；<code>~原文 =&gt; 读法</code>（如 <code>~qwen-3.8 =&gt; 千问三点八</code>，不区分大小写，普通文本写法）；<code>?正则 =&gt; 替换</code>（如 <code>?0+(\d) =&gt; \1</code>，支持 \1 反向引用）。建议把读法直接写成中文，内置数字规则就不会再处理它；坏行会被自动跳过并警告，不会崩合成。保存即生效（自动热加载，无需重启）。</div>
     <div class="modal-actions">
       <button class="btn-secondary" onclick="closeNormRulesEditor()">取消</button>
       <button class="btn-primary" style="flex:0 0 auto; padding:0 22px; height:40px" onclick="saveNormRules()">保存规则</button>
@@ -4193,7 +4253,7 @@ if HAS_WEB:
       display = min(89, max(actual, simulated))
       # 至少比上次显示多 1%，保证肉眼可见跳动
       last_display = result.get("display_progress", 0)
-      display = min(89, max(int(display), last_display + 1))
+      display = min(89, max(_safe_int(display), last_display + 1))
       result["display_progress"] = display
       result["elapsed_seconds"] = elapsed
       result["remaining_seconds"] = max(0, estimated - elapsed)
@@ -4355,12 +4415,15 @@ if HAS_WEB:
         if not os.path.isfile(ref_wav_path):
           raise HTTPException(400, f"参考音频路径不存在: {ref_wav_path}")
       elif reference_wav:
-        suffix = Path(reference_wav.filename).suffix or ".wav"
+        suffix = Path(reference_wav.filename or "").suffix or ".wav"
         ref_wav_path = str(TEMP_DIR / f"ref_{uuid.uuid4().hex[:8]}{suffix}")
         # 同上：写上传参考音频前确保 TEMP_DIR 仍存在
         TEMP_DIR.mkdir(parents=True, exist_ok=True)
-        with open(ref_wav_path, "wb") as f:
-          shutil.copyfileobj(reference_wav.file, f)
+        try:
+          with open(ref_wav_path, "wb") as f:
+            shutil.copyfileobj(reference_wav.file, f)
+        except OSError as _e_save:
+          raise HTTPException(500, f"参考音频保存失败: {_e_save}") from _e_save
 
     job_id = submit_task(
       {
@@ -4406,13 +4469,12 @@ if HAS_WEB:
       model = load_model()
       if model is None:
         raise RuntimeError(
-            f"模型未加载：{_model_error or '请先点击右上角「加载模型」'}"
+          f"模型未加载：{_model_error or '请先点击右上角「加载模型」'}"
         )
       if not HAS_SF:
         raise RuntimeError("缺少 soundfile 依赖，无法写出音频")
-      control = (
-          (control_text or "").strip()
-          or VOICE_PRESETS.get(voice, VOICE_PRESETS["default"])
+      control = (control_text or "").strip() or VOICE_PRESETS.get(
+        voice, VOICE_PRESETS["default"]
       )
       ref_path = None
       if mode == "fixed_clone":
@@ -4424,8 +4486,11 @@ if HAS_WEB:
           suffix = Path(reference_wav.filename or "").suffix or ".wav"
           ref_path = str(TEMP_DIR / f"ref_{uuid.uuid4().hex[:8]}{suffix}")
           TEMP_DIR.mkdir(parents=True, exist_ok=True)
-          with open(ref_path, "wb") as f:
-            shutil.copyfileobj(reference_wav.file, f)
+          try:
+            with open(ref_path, "wb") as f:
+              shutil.copyfileobj(reference_wav.file, f)
+          except OSError as _e_save:
+            raise RuntimeError(f"参考音频保存失败: {_e_save}") from _e_save
       if ref_path:
         wav = model.generate(
           text=_VOICE_PREVIEW_TEXT,
@@ -4436,7 +4501,9 @@ if HAS_WEB:
           denoise=use_denoise,
         )
       else:
-        chunk_text = f"({control}){_VOICE_PREVIEW_TEXT}" if control else _VOICE_PREVIEW_TEXT
+        chunk_text = (
+          f"({control}){_VOICE_PREVIEW_TEXT}" if control else _VOICE_PREVIEW_TEXT
+        )
         wav = model.generate(
           text=chunk_text,
           cfg_value=cfg,
@@ -4447,16 +4514,16 @@ if HAS_WEB:
       sr = model.tts_model.sample_rate
       arr = np.asarray(wav, dtype=np.float32).ravel()
       TEMP_DIR.mkdir(parents=True, exist_ok=True)
-      fname = f"voice_preview_{int(time.time())}.wav"
+      fname = f"voice_preview_{_safe_int(time.time())}.wav"
       sf.write(str(TEMP_DIR / fname), arr, sr)
       # 64-bin 波形峰值（逐 bin 取绝对值最大，再按全局最大归一化）
       n = len(arr)
       peaks = []
       for b in range(64):
         seg = arr[(b * n) // 64 : ((b + 1) * n) // 64] if n else np.zeros(0)
-        peaks.append(float(np.max(np.abs(seg))) if len(seg) else 0.0)
+        peaks.append(_safe_float(np.max(np.abs(seg))) if len(seg) else 0.0)
       m = max(peaks) or 1.0
-      return fname, [round(p / m, 4) for p in peaks], round(n / float(sr), 2)
+      return fname, [round(p / m, 4) for p in peaks], round(n / _safe_float(sr, 24000.0), 2)
 
     loop = asyncio.get_running_loop()
     try:
@@ -4649,7 +4716,10 @@ def run_server(port: int = 18978, host: str = "127.0.0.1", hide_console: bool = 
   # 仅当服务器确实启动成功后才隐藏，避免失败时被静默吞掉
   started = {"ok": False}
   try:
-    app.add_event_handler("startup", lambda: started.__setitem__("ok", True))
+    _add_event_handler = getattr(app, "add_event_handler", None)
+    if _add_event_handler is None:
+      raise AttributeError("add_event_handler 不可用")
+    _add_event_handler("startup", lambda: started.__setitem__("ok", True))
   except Exception as e:
     # 注册失败 → started.ok 保持 False → 不隐藏控制台（安全默认），仅记一条日志
     print(f"[提示] 注册 startup 事件失败，窗口将不自动隐藏（{e}）", file=sys.stderr)

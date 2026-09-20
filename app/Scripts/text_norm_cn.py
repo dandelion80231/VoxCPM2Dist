@@ -41,7 +41,9 @@ _user_rules_warned = set()
 
 def _load_user_rules():
     """解析 num_norm_extra.txt → [(kind, a, b), ...]。kind=lit: text.replace(a,b)；
-    kind=re: re.sub(a, b)（a 为已编译正则，b 支持 \1 反向引用）。"""
+    kind=re: re.sub(a, b)（a 为已编译正则，b 支持 \1 反向引用）。
+    行首 `~` 前缀 = 不区分大小写的字面规则：内部编译为 re.escape(原文)+IGNORECASE，
+    复用 kind=re 执行路径（替换串为纯字面，无 \1 语义问题）。"""
     global _user_rules_cache
     if not os.path.isfile(_USER_RULES_FILE):
         return ()
@@ -59,7 +61,8 @@ def _load_user_rules():
         if not line or line.startswith("#"):
             continue
         is_re = line.startswith("?")
-        body = line[1:] if is_re else line
+        is_ci = line.startswith("~")
+        body = line[1:] if (is_re or is_ci) else line
         if "=>" not in body:
             bad.append(line)
             continue
@@ -68,7 +71,9 @@ def _load_user_rules():
         if not left:
             bad.append(line)
             continue
-        if is_re:
+        if is_ci:
+            rules.append(("re", re.compile(re.escape(left), re.IGNORECASE), right))
+        elif is_re:
             try:
                 rules.append(("re", re.compile(left), right))
             except re.error:

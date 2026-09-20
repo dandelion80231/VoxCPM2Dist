@@ -269,7 +269,7 @@ def crossfade_concat(
         return np.array([], dtype=np.float32)
     if len(audio_list) == 1:
         return np.asarray(audio_list[0], dtype=np.float32)
-    fade_n = max(1, int(sample_rate * fade_ms / 1000))
+    fade_n = max(1, sample_rate * fade_ms // 1000)
     result = np.asarray(audio_list[0], dtype=np.float32).copy()
     for seg in audio_list[1:]:
         seg = np.asarray(seg, dtype=np.float32)
@@ -292,7 +292,7 @@ def _segment_rms(audio: np.ndarray) -> float:
     arr = np.asarray(audio, dtype=np.float64)
     if len(arr) == 0:
         return 0.0
-    return float(np.sqrt(np.mean(arr * arr)))
+    return float(np.sqrt(np.dot(arr, arr) / max(1, len(arr))))
 
 
 def normalize_segments(audio_segments: list, target_mode: str = "mean") -> list:
@@ -309,7 +309,9 @@ def normalize_segments(audio_segments: list, target_mode: str = "mean") -> list:
     valid_rms = [r for r in rms_values if r > 1e-9]
     if not valid_rms:
         return audio_segments
-    target_rms = rms_values[0] if target_mode == "first" else float(np.mean(valid_rms))
+    target_rms = (
+        rms_values[0] if target_mode == "first" else float(sum(valid_rms) / len(valid_rms))
+    )
     if target_rms < 1e-9:
         return audio_segments
 
@@ -332,7 +334,7 @@ def peak_normalize(audio: np.ndarray, peak: float = 0.95) -> np.ndarray:
     arr = np.asarray(audio, dtype=np.float32)
     if len(arr) == 0:
         return arr
-    max_amp = float(np.max(np.abs(arr)))
+    max_amp = float(np.max(np.abs(arr))) if arr.size else 0.0
     if max_amp < 1e-9:
         return arr
     return arr * (peak / max_amp)
@@ -928,11 +930,12 @@ def main():
                 continue
             if line.startswith("@"):
                 filepath = line[1:].strip().strip("\"'")
-                if not os.path.exists(filepath):
-                    print(f"[错误] 文件不存在: {filepath}")
+                try:
+                    with open(filepath, encoding="utf-8") as f:
+                        text = f.read()
+                except OSError as e:
+                    print(f"[错误] 读取文件失败 {filepath}: {e}")
                     continue
-                with open(filepath, encoding="utf-8") as f:
-                    text = f.read()
                 control = None
                 final, mnorm = prepare_text(text, control, args.normalize)
                 sr, wav, elapsed, duration = generate_chunk(
@@ -968,11 +971,12 @@ def main():
     # ── 读取输入文本 ──
     if args.file:
         file_path = args.file
-        if not os.path.exists(file_path):
-            print(f"[错误] 文件不存在: {file_path}")
+        try:
+            with open(file_path, encoding="utf-8") as f:
+                input_text = f.read().strip()
+        except OSError as e:
+            print(f"[错误] 读取文件失败 {file_path}: {e}")
             sys.exit(1)
-        with open(file_path, encoding="utf-8") as f:
-            input_text = f.read().strip()
         if not input_text:
             print("[错误] 文件为空")
             sys.exit(1)
