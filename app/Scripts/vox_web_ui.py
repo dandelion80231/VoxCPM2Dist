@@ -4207,7 +4207,6 @@ async function renderProfileChips() {
     const ps = d.profiles || [];
     for (const p of ps) {
       const chip = document.createElement('button');
-      chip.draggable = true;
       chip.dataset.profileName = p.name || '';
       chip.style.cssText = 'padding:2px 8px;font-size:11px;border-radius:10px;border:1px solid var(--border);background:var(--surface2);color:var(--text);cursor:grab;max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;user-select:none;';
       chip.textContent = p.name || '未命名';
