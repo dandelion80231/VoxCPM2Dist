@@ -2869,24 +2869,45 @@ function renderVoices() {
   grid.innerHTML = '';
   // 锁定预设替换了哪些内置预设
   const lockedReplacements = CUSTOM_VOICES.filter(v => v.replacesPreset).map(v => v.replacesPreset);
-  // 合并：内置预设（被替换的隐藏）+ 自定义/锁定预设
-  const all = [...Object.entries(VOICE_LIST).filter(([id]) => !lockedReplacements.includes(id)), ...CUSTOM_VOICES.map(v => [v.id, v])];
+  // 内置预设排序（localStorage 持久化用户拖拽顺序）
+  let builtinOrder = [];
+  try { builtinOrder = JSON.parse(localStorage.getItem('voxcpm_voice_order') || '[]'); } catch {}
+  const builtinKeys = Object.keys(VOICE_LIST).filter(k => !lockedReplacements.includes(k));
+  if (builtinOrder.length) {
+    builtinKeys.sort((a, b) => {
+      const ia = builtinOrder.indexOf(a), ib = builtinOrder.indexOf(b);
+      return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib);
+    });
+  }
+  const all = [...builtinKeys.map(k => [k, VOICE_LIST[k]]), ...CUSTOM_VOICES.map(v => [v.id, v])];
   for (const [id, v] of all) {
     const isCustom = typeof id === 'string' && id.startsWith('custom_');
     const isLocked = typeof id === 'string' && id.startsWith('locked_');
+    const isActive = id === selectedVoice;
     const btn = document.createElement('button');
-    btn.className = 'voice-btn' + (id === selectedVoice ? ' active' : '') + (isCustom ? ' custom-preset' : '') + (isLocked ? ' locked-preset' : '');
+    btn.className = 'voice-btn' + (isActive ? ' active' : '') + (isCustom ? ' custom-preset' : '') + (isLocked ? ' locked-preset' : '');
     btn.dataset.id = id;
-    btn.style.position = 'relative';
+    btn.draggable = true;
     btn.onclick = () => selectVoice(id, btn);
+    // 选中阴影
+    if (isActive) {
+      btn.style.boxShadow = '0 2px 8px rgba(108,142,255,0.4)';
+      btn.style.borderColor = 'var(--accent, #6c8eff)';
+    }
     if (isLocked) {
-      btn.innerHTML = `<div class="voice-icon">${v.icon || '🔒'}</div>
+      // 锁定预设：整体填充 + 单🔒图标
+      btn.innerHTML = `<div class="voice-icon">🔒</div>
       <div style="flex:1;min-width:0">
-        <div class="voice-name">${esc(v.name)} <span style="font-size:9px;vertical-align:top;">🔒</span></div>
-        <div class="voice-desc">${esc(v.desc || '')}</div>
+        <div class="voice-name">${esc(v.name)}</div>
+        <div class="voice-desc">${esc(v.desc || '固定克隆')}</div>
       </div>`;
-      btn.style.background = 'var(--accent, #6c8eff)22';
-      btn.style.border = '1px solid var(--accent, #6c8eff)55';
+      btn.style.background = 'var(--accent, #6c8eff)';
+      btn.style.color = '#fff';
+      btn.style.borderColor = 'var(--accent, #6c8eff)';
+      const descEl = btn.querySelector('.voice-desc');
+      if (descEl) descEl.style.color = 'rgba(255,255,255,0.8)';
+      const nameEl = btn.querySelector('.voice-name');
+      if (nameEl) nameEl.style.color = '#fff';
     } else {
       btn.innerHTML = `
       <div class="voice-icon">${v.icon}</div>
@@ -2895,50 +2916,48 @@ function renderVoices() {
         <div class="voice-desc">${v.desc}</div>
       </div>`;
     }
-    // 自定义/锁定预设右上角 × 删除按钮
-    if (isCustom || isLocked) {
-      const delX = document.createElement('span');
-      delX.textContent = '×';
-      delX.style.cssText = 'position:absolute;top:2px;right:4px;font-size:12px;color:var(--text2);cursor:pointer;line-height:1;padding:1px 3px;';
-      delX.title = '删除此预设';
-      delX.onclick = (e) => { e.stopPropagation(); deleteVoiceById(id); };
-      btn.appendChild(delX);
-    }
-    // 拖拽目标：档案 chip 拖到预设上 → 替换为锁定音色
+    // 左侧预设拖拽排序
+    btn.addEventListener('dragstart', e => {
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/voice-id', id);
+      btn.style.opacity = '0.5';
+    });
+    btn.addEventListener('dragend', () => { btn.style.opacity = '1'; });
+    // 拖拽目标：档案 chip → 锁定；预设 → 排序
     btn.addEventListener('dragover', e => {
       e.preventDefault();
-      e.dataTransfer.dropEffect = 'move';
-      btn.style.borderColor = 'var(--accent)';
-      btn.style.borderWidth = '2px';
+      const hasProfile = e.dataTransfer.types.includes('text/plain');
+      const hasVoice = e.dataTransfer.types.includes('text/voice-id');
+      if (hasProfile || hasVoice) {
+        e.dataTransfer.dropEffect = hasProfile ? 'move' : 'move';
+        btn.style.outline = '2px solid var(--accent)';
+      }
     });
-    btn.addEventListener('dragleave', () => {
-      btn.style.borderColor = '';
-      btn.style.borderWidth = '';
-    });
+    btn.addEventListener('dragleave', () => { btn.style.outline = ''; });
     btn.addEventListener('drop', e => {
       e.preventDefault();
-      btn.style.borderColor = '';
-      btn.style.borderWidth = '';
+      btn.style.outline = '';
+      // 档案 chip 拖入 → 锁定
       const profileName = e.dataTransfer.getData('text/plain');
+      const voiceId = e.dataTransfer.getData('text/voice-id');
+      if (voiceId && voiceId !== id) {
+        // 预设拖拽排序
+        reorderVoices(voiceId, id);
+        return;
+      }
       if (!profileName) return;
       const lockedId = 'locked_' + Date.now();
       const lockedVoice = {
         id: lockedId,
         name: profileName,
-        desc: '(固定克隆)',
+        desc: '固定克隆',
         icon: '🔒',
         profileName: profileName,
-        replacesPreset: null,  // 不替换任何内置预设，而是作为新预设追加
+        replacesPreset: VOICE_LIST[id] ? id : null,
       };
-      // 替换当前预设位
       const idx = CUSTOM_VOICES.findIndex(cv => cv.id === id);
       if (idx >= 0) {
-        // 替换已有自定义/锁定预设
         CUSTOM_VOICES[idx] = { ...lockedVoice, replacesPreset: CUSTOM_VOICES[idx].replacesPreset };
-      } else if (VOICE_LIST[id]) {
-        // 替换内置预设：标记 hides
-        lockedVoice.replacesPreset = id;
-        CUSTOM_VOICES.push(lockedVoice);
       } else {
         CUSTOM_VOICES.push(lockedVoice);
       }
@@ -2951,6 +2970,22 @@ function renderVoices() {
     });
     grid.appendChild(btn);
   }
+}
+
+function reorderVoices(dragId, targetId) {
+  // 只重排内置预设的顺序，自定义/锁定预设始终追加在后
+  const builtinKeys = Object.keys(VOICE_LIST).filter(k => {
+    const lockedReplacements = CUSTOM_VOICES.filter(v => v.replacesPreset).map(v => v.replacesPreset);
+    return !lockedReplacements.includes(k);
+  });
+  const idx = builtinKeys.indexOf(dragId);
+  const tIdx = builtinKeys.indexOf(targetId);
+  if (idx < 0 && tIdx < 0) return;
+  if (idx >= 0) builtinKeys.splice(idx, 1);
+  const insertAt = tIdx >= 0 ? builtinKeys.indexOf(targetId) : builtinKeys.length;
+  builtinKeys.splice(insertAt, 0, dragId);
+  try { localStorage.setItem('voxcpm_voice_order', JSON.stringify(builtinKeys)); } catch {}
+  renderVoices();
 }
 
 function renderExamples() {
