@@ -292,9 +292,97 @@ def _set_console_visible(visible: bool) -> bool:
     return False
 
 
+# ── 控制台窗口管理（切换始终可用）────────────────────
+# 有原生控制台（如 .bat 启动）→ 直接显/隐它。
+# 无原生控制台（后台/无头启动）→ 管理一个「日志 tail 窗口」（独立 CREATE_NEW_CONSOLE
+# 窗口 tail 应用日志），保证任何启动方式下「显示/隐藏」都能用，点了不报错。
+_tail_proc = None       # tail 窗口的 Popen
+_tail_hwnd = 0          # tail 窗口 HWND（0=未找到）
+_tail_visible = False   # tail 窗口当前是否显示
+_TAIL_TITLE = "VoxCPM2_LOG_TAIL"
+
+
+def _log_tail_path():
+  """稳定应用日志（_install_diagnostics 必写），tail 窗口跟随它。"""
+  return Path(__file__).resolve().parent.parent / "cache" / "web_ui.log"
+
+
+def _open_tail_console() -> bool:
+  global _tail_proc, _tail_hwnd, _tail_visible
+  import ctypes
+  import subprocess
+  import time
+
+  u32 = ctypes.windll.user32
+  u32.FindWindowW.argtypes = [ctypes.c_wchar_p, ctypes.c_wchar_p]
+  u32.FindWindowW.restype = ctypes.c_void_p
+  # 若之前开过且窗口还在 → 恢复显示
+  if _tail_hwnd and u32.IsWindow(_tail_hwnd):
+    u32.ShowWindow(_tail_hwnd, 9)  # SW_RESTORE
+    u32.SetForegroundWindow(_tail_hwnd)
+    _tail_visible = True
+    return True
+  log = _log_tail_path()
+  try:
+    if not log.exists():
+      log.parent.mkdir(parents=True, exist_ok=True)
+      log.touch()
+    ps_cmd = (
+      '$Host.UI.RawUI.WindowTitle = "{t}"; '
+      'Get-Content -LiteralPath "{p}" -Wait -Encoding UTF8'
+    ).format(t=_TAIL_TITLE, p=str(log))
+    _tail_proc = subprocess.Popen(
+      ['powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', ps_cmd],
+      creationflags=getattr(subprocess, 'CREATE_NEW_CONSOLE', 0x00000010),
+      close_fds=True,
+    )
+  except Exception as e:
+    print(f"[VoxCPM2] 打开日志窗口失败: {e}")
+    _tail_proc = None
+    return False
+  # 按标题找 tail 窗口 HWND（powershell 启动稍慢，重试）
+  for _ in range(25):
+    time.sleep(0.2)
+    h = u32.FindWindowW(None, _TAIL_TITLE)
+    if h:
+      _tail_hwnd = int(h)
+      break
+  _tail_visible = True
+  return True
+
+
+def _close_tail_console() -> bool:
+  global _tail_proc, _tail_hwnd, _tail_visible
+  # 结束 tail 进程 → 其 CREATE_NEW_CONSOLE 窗口自动关闭，不留残留
+  try:
+    if _tail_proc and _tail_proc.poll() is None:
+      _tail_proc.terminate()
+  except Exception:
+    pass
+  _tail_proc = None
+  _tail_hwnd = 0
+  _tail_visible = False
+  return True
+
+
 def _toggle_console() -> bool:
-  # 以真实窗口状态为准，避免内部状态与实际窗口不同步
-  return _set_console_visible(not _is_console_visible())
+  # 切换始终可用：有原生控制台 → 显/隐它；没有 → 管理日志 tail 窗口。
+  if sys.platform != "win32":
+    return False
+  if _get_console_hwnd():
+    return _set_console_visible(not _is_console_visible())
+  if not _tail_visible:
+    return _open_tail_console()
+  return _close_tail_console()
+
+
+def _console_effectively_visible() -> bool:
+  """用户可见的「控制台」（原生控制台或 tail 窗口）当前是否显示。"""
+  if sys.platform != "win32":
+    return False
+  if _get_console_hwnd():
+    return _is_console_visible()
+  return _tail_visible
 
 
 # ── 全局日志落盘 + 异常兜底 ──────────────────────────────
@@ -4025,7 +4113,7 @@ async function toggleConsole() {
     if (d.ok) {
       showToast(d.message || (d.visible ? '命令行窗口已显示' : '命令行窗口已隐藏'), 'success');
     } else {
-      showToast('未检测到可切换的命令行窗口（本实例未附带控制台）', 'info');
+      showToast('命令行窗口切换失败（控制台创建/操作未成功），可再试一次', 'info');
     }
   } catch {}
 }
@@ -4040,8 +4128,8 @@ async function initConsole() {
     const r = await fetch('/api/console_status');
     const d = await r.json();
     updateConsoleIcon(d.visible);
-    // 非 Windows 平台，或本实例未附带控制台窗口（无处可切换）→ 隐藏该按钮，避免点击报错
-    if (d.supported === false || d.has_console === false) {
+    // 仅非 Windows 平台隐藏；Windows 下控制台切换始终可用（无控制台时后端会按需创建一个）
+    if (d.supported === false) {
       const btn = document.getElementById('consoleToggle');
       if (btn) btn.style.display = 'none';
     }
@@ -5123,16 +5211,16 @@ if HAS_WEB:
   async def console_status():
     return JSONResponse(
       {
-        "visible": _is_console_visible(),
+        "visible": _console_effectively_visible(),
         "supported": sys.platform == "win32",
-        "has_console": bool(_get_console_hwnd()),  # 本进程是否真有可切换的控制台窗口
+        "has_console": bool(_get_console_hwnd()),  # 是否有原生控制台（无则用 tail 窗口）
       }
     )
 
   @app.post("/api/toggle_console")
   async def toggle_console():
     ok = _toggle_console()
-    visible = _is_console_visible()
+    visible = _console_effectively_visible()
     return JSONResponse(
       {
         "ok": ok,
