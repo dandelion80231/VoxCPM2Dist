@@ -3302,6 +3302,41 @@ function onPromptInput() {
   document.getElementById('ultimateHint').style.display = ultimate ? 'block' : 'none';
 }
 
+// 从已加载的参考音频现算 64-bin 归一化 peaks（与后端 /api/voice-preview 同口径，供直接试听画波形）
+async function computeRefPeaks() {
+  let ab;
+  if (refFile) {
+    ab = await refFile.arrayBuffer();
+  } else if (currentRefPath) {
+    const fname = currentRefPath.split(/[\\/]/).pop();
+    ab = await (await fetch('/api/audio/' + encodeURIComponent(fname))).arrayBuffer();
+  } else {
+    return null;
+  }
+  try {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    const ctx = new AC();
+    const dec = await ctx.decodeAudioData(ab);
+    const data = dec.getChannelData(0);
+    const n = data.length;
+    const BINS = 64;
+    const peaks = new Array(BINS);
+    let m = 0;
+    for (let b = 0; b < BINS; b++) {
+      const s = (b * n) / BINS | 0;
+      const e = ((b + 1) * n) / BINS | 0;
+      let mx = 0;
+      for (let i = s; i < e; i++) { const v = data[i] < 0 ? -data[i] : data[i]; if (v > mx) mx = v; }
+      peaks[b] = mx; if (mx > m) m = mx;
+    }
+    m = m || 1;
+    try { ctx.close(); } catch (e) {}
+    return peaks.map(p => p / m);
+  } catch (e) {
+    return null;
+  }
+}
+
 // ── 音色试听：以当前音色设置生成一段短句 + 波形显示（/api/voice-preview）──
 async function runVoicePreview() {
   const btn = document.getElementById('voicePreviewBtn');
@@ -3331,6 +3366,25 @@ async function runVoicePreview() {
     } catch (e) {
       status.textContent = '（浏览器限制自动播放，点 ▶）';
     }
+    // 波形：按参考音频现算 peaks 并绘制（进度动画与生成路径同口径）
+    computeRefPeaks().then(peaks => {
+      if (!peaks) return;
+      drawPreviewWave(peaks);
+      const _anim = () => {
+        if (audio.ended) {
+          const p2 = document.getElementById('previewPlayBtn');
+          p2.textContent = '▶'; p2.title = '播放';
+          drawPreviewWave(peaks);   // 复位整条波形
+          return;
+        }
+        if (!audio.paused) {
+          const prog = audio.duration ? audio.currentTime / audio.duration : 0;
+          drawPreviewWave(peaks, prog);
+        }
+        requestAnimationFrame(_anim);
+      };
+      requestAnimationFrame(_anim);
+    }).catch(() => {});
     return;
   }
 
