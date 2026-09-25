@@ -57,7 +57,8 @@ except Exception as _e_ts:
   HAS_TS = False
   print(f"[VoxCPM2] qwen3 时间戳模块不可用: {_e_ts}")
 
-_QWEN_MODEL_DIR = os.environ.get("VOXCPM_TS_MODEL_DIR") or os.path.join(_APP_ROOT, "models", "qwen3_aligner")
+_QWEN_MODEL_DIR_DEFAULT = os.path.join(_APP_ROOT, "models", "qwen3_aligner")
+_QWEN_MODEL_DIR = os.environ.get("VOXCPM_TS_MODEL_DIR") or _QWEN_MODEL_DIR_DEFAULT
 _qwen_lock = threading.Lock()
 _qwen_state = {
   "status": "idle",  # idle | downloading | done | error | cancelled
@@ -178,7 +179,7 @@ _lora_resolve_error: str = ""  # resolve_lora 失败原因（路径错/配置坏
 
 # 启动时从配置文件恢复路径
 def _load_config():
-  global _output_dir, _lora_weights_path
+  global _output_dir, _lora_weights_path, _QWEN_MODEL_DIR
   try:
     if CONFIG_PATH.exists():
       with open(CONFIG_PATH, encoding="utf-8") as f:
@@ -189,6 +190,9 @@ def _load_config():
         os.environ["VOXCPM_MODEL_DIR"] = cfg["model_dir"]
       if cfg.get("lora_weights_path"):
         _lora_weights_path = cfg["lora_weights_path"]
+      if cfg.get("ts_model_dir"):
+        _QWEN_MODEL_DIR = cfg["ts_model_dir"]
+        os.environ["VOXCPM_TS_MODEL_DIR"] = cfg["ts_model_dir"]
   except Exception:
     _load_failed = True  # 有意吞没：配置文件缺失/损坏时保持默认路径
 
@@ -196,12 +200,14 @@ def _load_config():
 def _save_config():
   try:
     model_dir = os.environ.get("VOXCPM_MODEL_DIR", "")
+    ts_dir = "" if _QWEN_MODEL_DIR == _QWEN_MODEL_DIR_DEFAULT else _QWEN_MODEL_DIR
     with open(CONFIG_PATH, "w", encoding="utf-8") as f:
       json.dump(
         {
           "output_dir": str(_output_dir),
           "model_dir": model_dir,
           "lora_weights_path": _lora_weights_path,
+          "ts_model_dir": ts_dir,
         },
         f,
         ensure_ascii=False,
@@ -2676,14 +2682,17 @@ HTML_CONTENT = r"""
     </div>
     <div id="verifyResult"></div>
     <div class="param-label" style="margin-top:14px">Qwen3 时间戳对齐模型（可选）</div>
-    <div class="path-row" id="qwenCard" style="display:none">
-      <span id="qwenState" class="path-input" style="flex:1">
-        <span id="qwenTitle">状态检测中…</span>
-      </span>
+    <div class="path-row">
+      <input id="qwenPathInput" class="path-input" placeholder="（自动管理；也可浏览指向已有 Qwen3 目录）">
+      <button class="btn-secondary" onclick="selectFolder('qwenPathInput','选择 Qwen3 时间戳模型目录')">浏览...</button>
+    </div>
+    <div class="param-desc" id="qwenSub">--timestamps 高精度字级时间戳专用（约 1.75GB，不随安装包附带，不下载也能用基础模式）。默认自动下载到随附 models 目录；也可点「浏览」指向已有的 Qwen3-ForcedAligner 模型目录（点「保存设置」后生效）。</div>
+    <div class="path-row" style="margin-top:10px">
+      <span id="qwenTitle" class="param-desc" style="margin:0;white-space:nowrap">状态检测中…</span>
       <button class="btn-secondary" id="qwenBtn" onclick="qwenDownload()" style="display:none">下载</button>
       <button class="btn-secondary" id="qwenDelBtn" onclick="qwenDelete()" style="display:none">删除</button>
+      <span class="param-desc" id="qwenStateHint" style="margin:0"></span>
     </div>
-    <div class="param-desc" id="qwenSub">--timestamps 高精度字级时间戳专用（约 1.75GB，不随安装包附带，不下载也能用基础模式）。</div>
     <div class="dl-progress" id="qwenProgress" style="display:none;margin-top:8px">
       <div class="progress-bar-wrap"><div class="progress-bar-fill" id="qwenBar"></div></div>
       <div class="dl-progress-meta">
@@ -2936,18 +2945,19 @@ async function refreshQwenCard() {
   try {
     const r = await fetch('/api/qwen-model/status');
     const d = await r.json();
-    const card = document.getElementById('qwenCard');
-    card.style.display = 'block';
+    const pathInput = document.getElementById('qwenPathInput');
+    if (pathInput && d.model_dir) pathInput.value = d.model_dir;
     const title = document.getElementById('qwenTitle');
+    const hint = document.getElementById('qwenStateHint');
+    if (hint) hint.textContent = '';
     const btn = document.getElementById('qwenBtn');
     const delBtn = document.getElementById('qwenDelBtn');
     const prog = document.getElementById('qwenProgress');
     const bar = document.getElementById('qwenBar');
     const msg = document.getElementById('qwenMsg');
     const pct = document.getElementById('qwenPct');
-    const sub = document.getElementById('qwenSub');
     if (d.exists) {
-      title.textContent = `已安装（本地 ${Math.round(d.size_mb/1024*100)/100}GB）`;
+      title.textContent = `已安装（${Math.round(d.size_mb/1024*100)/100}GB）`;
       btn.style.display = 'none';
       delBtn.style.display = 'inline-block';
       prog.style.display = 'none';
@@ -3666,11 +3676,12 @@ async function savePaths() {
   const model_dir = document.getElementById('modelDirInput').value.trim();
   const output_dir = document.getElementById('outputDirInput').value.trim();
   const lora_weights_path = document.getElementById('loraInput').value.trim();
+  const ts_model_dir = document.getElementById('qwenPathInput').value.trim();
   try {
     const r = await fetch('/api/set_config', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model_dir, output_dir, lora_weights_path })
+      body: JSON.stringify({ model_dir, output_dir, lora_weights_path, ts_model_dir })
     });
     const d = await r.json();
     if (d.ok) {
@@ -4946,7 +4957,7 @@ if HAS_WEB:
 
   @app.post("/api/set_config")
   async def set_config(req: Request):
-    global _output_dir, _lora_weights_path
+    global _output_dir, _lora_weights_path, _QWEN_MODEL_DIR
     try:
       data = await req.json()
     except Exception:
@@ -4954,6 +4965,7 @@ if HAS_WEB:
     model_dir = (data.get("model_dir") or "").strip()
     output_dir = (data.get("output_dir") or "").strip()
     lora_weights_path = (data.get("lora_weights_path") or "").strip()
+    ts_model_dir = (data.get("ts_model_dir") or "").strip()
     if output_dir:
       try:
         p = Path(output_dir)
@@ -4978,6 +4990,16 @@ if HAS_WEB:
         _model_loaded = False
         _cached_model = None
         _model_loading = False
+    if ts_model_dir != _QWEN_MODEL_DIR:
+      # qwen3 时间戳模型目录变更（设置页「浏览」或留空回退默认）
+      if ts_model_dir:
+        _QWEN_MODEL_DIR = ts_model_dir
+        os.environ["VOXCPM_TS_MODEL_DIR"] = ts_model_dir
+      else:
+        _QWEN_MODEL_DIR = _QWEN_MODEL_DIR_DEFAULT
+        os.environ.pop("VOXCPM_TS_MODEL_DIR", None)
+      with _qwen_lock:
+        _qwen_state.update({"status": "idle", "file": None, "percent": None, "message": "", "started_at": None, "finished_at": None})
     _save_config()
     return JSONResponse(
       {
@@ -4985,6 +5007,7 @@ if HAS_WEB:
         "model_dir": resolve_model_dir(),
         "output_dir": str(_output_dir),
         "lora_weights_path": _lora_weights_path,
+        "ts_model_dir": _QWEN_MODEL_DIR,
       }
     )
 
