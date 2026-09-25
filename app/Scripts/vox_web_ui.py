@@ -2555,7 +2555,7 @@ HTML_CONTENT = r"""
       <textarea id="controlText" class="prompt-text-input" placeholder="例如：25岁温柔甜美女声，带一点播音腔。或『深宫太后，威严庄重』『河南方言大叔』"></textarea>
       <div class="example-chips" id="exampleChips">
         <div class="preview-inline" style="display:flex;align-items:center;gap:6px;margin-left:auto;margin-right:36px;">
-          <button id="voicePreviewBtn" class="mode-btn" onclick="runVoicePreview()" title="以当前音色设置生成一段短句试听" style="padding:4px 10px;font-size:12px;">▶ 试听</button>
+          <button id="voicePreviewBtn" class="mode-btn" onclick="runVoicePreview()" title="试听（有参考音频时直接播放，否则生成短句）" style="padding:4px 10px;font-size:12px;">▶ 试听</button>
           <canvas id="voicePreviewWave" width="180" height="28" style="width:180px;height:28px;background:var(--surface);border:1px solid var(--border);border-radius:4px;box-sizing:border-box;"></canvas>
           <audio id="voicePreviewAudio" preload="none" style="display:none;"></audio>
           <button id="previewPlayBtn" onclick="previewPlayPause()" title="播放/暂停" style="width:28px;height:28px;border-radius:50%;border:1px solid var(--border);background:var(--surface2);color:var(--text);cursor:pointer;font-size:13px;line-height:1;">▶</button>
@@ -2564,7 +2564,7 @@ HTML_CONTENT = r"""
             <option value="0.5">0.5x</option><option value="0.75">0.75x</option><option value="1" selected>1x</option><option value="1.25">1.25x</option><option value="1.5">1.5x</option><option value="2">2x</option>
           </select>
           <input type="range" id="previewVolume" min="0" max="1" step="0.05" value="1" oninput="previewSetVolume(this.value)" title="音量" style="width:50px;height:4px;accent-color:var(--accent);cursor:pointer;">
-          <div id="voicePreviewStatus" class="param-desc" style="margin:0;font-size:11px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">点击试听生成短句</div>
+          <div id="voicePreviewStatus" class="param-desc" style="margin:0;font-size:11px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">点击试听（有参考音频直接播放）</div>
         </div>
       </div>
     </div>
@@ -3307,6 +3307,34 @@ async function runVoicePreview() {
   const btn = document.getElementById('voicePreviewBtn');
   const status = document.getElementById('voicePreviewStatus');
   const audio = document.getElementById('voicePreviewAudio');
+
+  // ── 直接试听：已有加载的参考音频（音色档案 currentRefPath 或上传的 refFile）时，
+  //    直接播放该参考（免 GPU 推理、秒出），不重新生成短句；无参考才生成 ──
+  if (currentMode === 'fixed_clone' && (refFile || currentRefPath)) {
+    let directUrl = '';
+    if (refFile) {
+      directUrl = URL.createObjectURL(refFile);
+    } else {
+      const fname = currentRefPath.split(/[\\/]/).pop();
+      directUrl = '/api/audio/' + encodeURIComponent(fname);
+    }
+    audio.src = directUrl;
+    lastPreviewUrl = directUrl;
+    if (currentRefPath && !refFile) lastPreviewPath = currentRefPath;   // 档案参考→可再存档案
+    status.style.color = '';
+    status.textContent = '▶ 直接试听参考音频（未重新合成）';
+    const pb = document.getElementById('previewPlayBtn');
+    try {
+      await audio.play();
+      pb.textContent = '⏸'; pb.title = '暂停';
+      audio.onended = () => { pb.textContent = '▶'; pb.title = '播放'; };
+    } catch (e) {
+      status.textContent = '（浏览器限制自动播放，点 ▶）';
+    }
+    return;
+  }
+
+  // ── 否则：无参考音频（纯预设/音色设计），生成一段短句试听 ──
   btn.disabled = true;
   status.textContent = '正在生成试听样本...';
   const fd = new FormData();
