@@ -50,3 +50,13 @@ app/Scripts/verify_lora/
 app/Scripts/verify_xing_baseline/
 app/Scripts/verify_xing_lora/
 app/cache/
+
+# 临时分析/规格脚本与备份
+calc_size*.py
+check_spec*.py
+final_spec.txt
+par_spec.txt
+ts_spec*.txt
+app/Scripts/*.bak-*
+__nomodel_exclude/
+app/Scripts/exports/

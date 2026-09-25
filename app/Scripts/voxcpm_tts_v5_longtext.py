@@ -399,6 +399,7 @@ def generate_long_text(
     self_seeding: bool = False,
     update_ref_every: int = 0,
     crossfade_ms: int = 80,
+    control_explicit: bool = False,
 ) -> list:
     """
     长文本分段生成，支持三种音色统一模式：
@@ -469,9 +470,14 @@ def generate_long_text(
 
         # 模式A: 固定参考音频
         if current_ref and os.path.exists(current_ref) and (i != 1 or reference_audio):
+            # [修复] 仅当控制指令是显式给出(--control 或正文开头括号)时才按段附加,
+            # 预设回退描述不作为风格前缀(保持 daily-news 等默认链路行为不变)
+            _chunk_text = (
+                f"({control}){chunk}" if (control and control_explicit) else chunk
+            )
             sr, wav, elapsed, duration = generate_chunk(
                 model,
-                chunk,
+                _chunk_text,
                 cfg=cfg,
                 steps=steps,
                 normalize=normalize,
@@ -553,6 +559,8 @@ def generate_long_text(
             sf.write(str(part_file), wav, sr)
             output_files.append(part_file)
             print(f"[段落] 已保存: {part_file.name}")
+            if args.timestamps:
+                _run_timestamps(part_file, chunk, args, i)
 
     # 交叉淡入淡出拼接
     if len(audio_segments) > 1:
@@ -573,6 +581,55 @@ def generate_long_text(
         merged_wav = audio_segments[0] if audio_segments else np.array([])
 
     return output_files, merged_wav, sr
+
+
+def _run_timestamps_whisper(audio_file, text, label):
+    """whisper stable-ts 兜底（in-process, CPU）。"""
+    try:
+        import json as _json
+        from voxcpm.timestamps import align_audio_file
+
+        res = align_audio_file(
+            audio_path=str(audio_file), text=text, level="char", device="cpu", language="zh"
+        )
+        side = str(Path(str(audio_file)).with_suffix("")) + ".timestamps.json"
+        _json.dump(
+            {"engine": "stable-ts(whisper-base)", "audio": os.path.basename(str(audio_file)), "items": res.get("items", [])},
+            open(side, "w", encoding="utf-8"), ensure_ascii=False, indent=1,
+        )
+        print(f"[时间戳] whisper 兜底引擎（{label}）→ {os.path.basename(side)}")
+    except Exception as e:
+        print(f"[时间戳] 警告：兜底对齐也失败（{type(e).__name__}: {e}）—— 不阻塞主流程")
+
+
+def _run_timestamps(audio_file, text, args, part_idx):
+    """--timestamps：优先 Qwen3-ForcedAligner（子进程按需加载/卸载），无模型则 whisper 兜底。"""
+    import subprocess
+
+    label = f"part{part_idx:03d}" if part_idx >= 0 else "full"
+    script = Path(__file__).parent / "voxcpm_timestamps_qwen.py"
+    if script.exists():
+        cmd = [
+            sys.executable, str(script),
+            "--audio", str(audio_file),
+            "--text", text,
+            "--language", getattr(args, "timestamps_language", "Chinese"),
+            "--chars",
+        ]
+        if getattr(args, "timestamps_srt", False):
+            cmd.append("--srt")
+        qwen_model = Path(__file__).parent.parent / "models" / "qwen3_aligner" / "model.safetensors"
+        note = "" if qwen_model.exists() else "（首次使用自动下载 ~1.75GB，仅一次）"
+        print(f"[时间戳] Qwen3-ForcedAligner 对齐（{label}）{note}...")
+        r = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
+        for line in (r.stdout or "").splitlines():
+            if line.startswith(("[对齐]", "[保存] SRT", "[释放]", "[下载]")):
+                print("   ", line)
+        if r.returncode != 0:
+            print(f"[时间戳] Qwen3 引擎不可用（exit {r.returncode}，模型下载失败或无网），降级 whisper 兜底")
+            _run_timestamps_whisper(audio_file, text, label)
+        return
+    _run_timestamps_whisper(audio_file, text, label)
 
 
 def resolve_output_path(output: str | None, text: str, suffix: str = "") -> Path:
@@ -687,9 +744,23 @@ def main():
     parser.add_argument("--cfg", type=float, default=2.5, help="CFG scale (默认 2.5)")
     parser.add_argument("--steps", type=int, default=15, help="推理步数 (默认 15)")
     parser.add_argument(
+        "--seed",
+        type=int,
+        default=None,
+        metavar="N",
+        help="可复现种子：同种子+同文本 结果近似一致（不传=随机）",
+    )
+    parser.add_argument(
         "--no-normalize", action="store_false", dest="normalize", help="禁用文本规范化"
     )
     parser.add_argument("--no-cache", action="store_true", help="禁用模型缓存")
+    # 时间戳（词/字级）
+    parser.add_argument(
+        "--timestamps", action="store_true",
+        help="生成词/字级时间戳 sidecar（.timestamps.json）；引擎优先 Qwen3-ForcedAligner，无模型自动降级 whisper",
+    )
+    parser.add_argument("--timestamps-srt", action="store_true", help="同时输出 SRT 字幕（需配 --timestamps）")
+    parser.add_argument("--timestamps-language", default="Chinese", help="对齐语言提示（默认 Chinese）")
 
     # 高级
     parser.add_argument(
@@ -992,10 +1063,25 @@ def main():
         sys.exit(1)
 
     # ── 解析控制指令 ──
+    control_explicit = bool(args.control)
     control = args.control or VOICE_PRESETS.get(args.voice, VOICE_PRESETS["default"])
     res = re.match(r"^\(([^)]+)\)(.*)", input_text)
     if res:
         control, input_text = res.group(1), res.group(2).strip()
+        control_explicit = True
+
+    # ── 可复现种子（官方 README 特性 generate(seed=...)；引擎层不接受 seed kwarg，
+    # 此处统一给全局随机源播种，同种子+同文本+同模型 → 结果近似可复现）──
+    if args.seed is not None:
+        import random as _random_mod
+        import torch as _torch_mod
+
+        _torch_mod.manual_seed(args.seed)
+        if _torch_mod.cuda.is_available():
+            _torch_mod.cuda.manual_seed_all(args.seed)
+        np.random.seed(args.seed)
+        _random_mod.seed(args.seed)
+        print(f"[可复现种子] {args.seed}")
 
     do_normalize = args.normalize
     final_text, do_normalize = prepare_text(input_text, control, do_normalize)
@@ -1048,6 +1134,7 @@ def main():
             self_seeding=args.self_seeding,
             update_ref_every=args.update_ref,
             crossfade_ms=args.crossfade,
+            control_explicit=control_explicit,
         )
 
         print(f"\n[完成] 共生成 {len(output_files)} 个文件")
@@ -1090,6 +1177,8 @@ def main():
 
         sf.write(str(path), wav, sr)
         print(f"\n[保存] {path}")
+        if args.timestamps:
+            _run_timestamps(path, input_text, args, -1)
         duration = len(wav) / sr
         print(f"[完成] 时长 {duration:.1f}s" if duration else "[完成] 合成结束")
 

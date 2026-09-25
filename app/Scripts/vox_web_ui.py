@@ -47,6 +47,28 @@ except Exception as _e_dl:  # 极端情况（如缺 urllib），仍保证 UI 可
   HAS_DL = False
   print(f"[VoxCPM2] 模型下载模块不可用: {_e_dl}")
 
+# qwen3 时间戳对齐模型管理（设置页可选下载/删除；不可用不影响主功能）
+try:
+  import voxcpm_timestamps_qwen as _tsq
+
+  HAS_TS = True
+except Exception as _e_ts:
+  _tsq = None
+  HAS_TS = False
+  print(f"[VoxCPM2] qwen3 时间戳模块不可用: {_e_ts}")
+
+_QWEN_MODEL_DIR = os.environ.get("VOXCPM_TS_MODEL_DIR") or os.path.join(_APP_ROOT, "models", "qwen3_aligner")
+_qwen_lock = threading.Lock()
+_qwen_state = {
+  "status": "idle",  # idle | downloading | done | error | cancelled
+  "file": None,
+  "percent": None,
+  "message": "",
+  "started_at": None,
+  "finished_at": None,
+}
+_qwen_thread: list = [None]
+
 # 本地模块导入（sys.path 已设置，紧跟其后）
 try:
   from text_norm_cn import normalize_text
@@ -418,6 +440,53 @@ def _resolve_zipenhancer_dir():
   return None
 
 
+_legacy_model_cache = ""
+_legacy_model_scanned = False
+
+
+def _find_legacy_model_dir() -> str:
+  """自动迁移：扫描常见安装盘根（C:/D:/E: 第一层），寻找旧版安装目录里已下载的模型。
+
+  no-model 版重新安装后默认目录没有权重，但用户之前（带模型版/旧安装目录）可能已下载过；
+  找到即自动使用，避免“明明有模型却提示未检测到”。带缓存，盘根 listdir 毫秒级。
+  返回有效模型目录（含 model.safetensors + config.json），找不到返回 ""。
+  """
+  global _legacy_model_cache, _legacy_model_scanned
+  if _legacy_model_scanned:
+    return _legacy_model_cache
+  _legacy_model_scanned = True
+  found = ""
+  found_size = 0
+  try:
+    for letter in "CDEFGHIJKLNOPQRSTUWXYZ":
+      drive = f"{letter}:\\"
+      try:
+        names = os.listdir(drive)
+      except Exception:
+        continue
+      for name in names:
+        root = os.path.join(drive, name)
+        for c in (
+          os.path.join(root, "model", "openbmb", "VoxCPM2"),
+          os.path.join(root, "app", "model", "openbmb", "VoxCPM2"),
+        ):
+          if os.path.isfile(os.path.join(c, "model.safetensors")) and os.path.isfile(
+            os.path.join(c, "config.json")
+          ):
+            try:
+              sz = os.path.getsize(os.path.join(c, "model.safetensors"))
+            except Exception:
+              sz = 0
+            if sz > found_size:
+              found, found_size = c, sz
+  except Exception:
+    pass
+  _legacy_model_cache = found
+  if found:
+    print(f"[VoxCPM2] 自动发现旧安装目录的模型：{found}（已启用）")
+  return found
+
+
 def resolve_model_dir(local_path: str = "") -> str:
   """解析模型目录：优先环境变量 VOXCPM_MODELS_DIR（新标准）→ VOXCPM_MODEL_DIR（兼容旧键）
   → 分发版自带本地权重 → 回退 MODEL_ID。"""
@@ -447,6 +516,11 @@ def resolve_model_dir(local_path: str = "") -> str:
   for p in default_candidates + user_candidates:
     if os.path.isdir(p):
       return p
+
+  # 2.5 自动迁移：扫描旧安装目录里已下载的模型（no-model 版重装后不丢旧模型）
+  legacy = _find_legacy_model_dir()
+  if legacy:
+    return legacy
 
   # 3. 全都不存在：回退到 HF repo id（离线环境会失败，但报错路径明确）
   return MODEL_ID
@@ -902,11 +976,24 @@ def synthesize(args: dict) -> dict:
   # 自定义音色描述优先；否则回退到左侧预设
   control_text = args.get("control_text")
   control = control_text or VOICE_PRESETS.get(voice, VOICE_PRESETS["default"])
+  # [修复] 显式控制指令标记: 仅当用户手动填写控制指令框时才在 fixed_clone 模式附加风格前缀
+  # (预设回退描述不作前缀, 保持参考克隆默认链路行为不变; 自播种/逐段设计仍用回退描述)
+  control_explicit = bool(control_text and str(control_text).strip())
   mode = args.get("mode", "voice_design")  # voice_design | fixed_clone | self_seeding
   reference_wav = args.get("reference_wav")
   prompt_text = args.get("prompt_text")
   cfg = _safe_float(args.get("cfg", 2.5), 2.5)
   steps = _safe_int(args.get("steps", 15), 15)
+  # 可复现种子（官方 README 特性 generate(seed=...)）：引擎层 generate() 不接受 seed kwarg，
+  # 这里解析目标种子；真正播种在模型加载完成后、生成循环前（加载过程会消耗 RNG，
+  # 先播种会被抵消导致冷启动首个任务与后续不同）
+  _seed_raw = str(args.get("seed", "") or "").strip()
+  _seed_val = None
+  if _seed_raw:
+    try:
+      _seed_val = int(float(_seed_raw))
+    except (ValueError, TypeError):
+      print(f"[VoxCPM2] seed={_seed_raw!r} 非有效整数，忽略（随机合成）")
   # normalize：用户显式开关（默认开）。若检测到音素串 {ni3}，自动强制切音素模式
   # （官方要求音素输入必须 normalize=False，且不能把 {} 块交给归一化/模型二次归一化）。
   requested_normalize = str(args.get("normalize", "true")).lower() in (
@@ -977,6 +1064,17 @@ def synthesize(args: dict) -> dict:
     with task_lock:
       task_results[job_id] = {"status": "error", "message": f"模型加载失败: {e}"}
     return task_results[job_id]
+  # 播种时机：模型加载完成后、首次生成前（加载/预热消耗了 RNG，此处重播才是确定态）
+  if _seed_val is not None:
+    import random as _random_mod
+    import torch as _torch_mod
+
+    _torch_mod.manual_seed(_seed_val)
+    if _torch_mod.cuda.is_available():
+      _torch_mod.cuda.manual_seed_all(_seed_val)
+    np.random.seed(_seed_val)
+    _random_mod.seed(_seed_val)
+    print(f"[VoxCPM2] 可复现种子已启用: {_seed_val}（生成循环开始前播种）")
 
   # control 前缀在分段循环内按 chunk 拼接
 
@@ -1075,8 +1173,9 @@ def synthesize(args: dict) -> dict:
     try:
       if mode == "fixed_clone" and current_ref:
         # 固定参考克隆 / 终极克隆（参考音频 + 转录文本）
+        # [修复] 仅当用户显式填写控制指令时按段附加 (指令) 前缀, 在参考音色上叠加语气/情绪
         kwargs = {
-          "text": processed_chunk,
+          "text": chunk_text if control_explicit else processed_chunk,
           "cfg_value": cfg,
           "inference_timesteps": steps,
           "reference_wav_path": current_ref,
@@ -1100,8 +1199,7 @@ def synthesize(args: dict) -> dict:
           if audio_guard is not None
           else None
         )
-        _retry_text = processed_chunk  # 本分支实际生成文本（不含 control 前缀）
-        _retry_text = processed_chunk  # 本分支实际生成文本（不含 control 前缀）
+        _retry_text = chunk_text if control_explicit else processed_chunk  # 本分支实际生成文本（显式指令时含 control 前缀）
       elif use_self_seeding and i == 1:
         # 第一段 Voice Design
         wav = model.generate(
@@ -2422,6 +2520,12 @@ HTML_CONTENT = r"""
         <div class="param-slider-row">
           <input type="range" id="chunkSlider" min="60" max="400" step="20" value="180">
         </div>
+        <div style="display:flex;align-items:center;gap:6px;margin-top:6px;">
+          <label style="font-size:11px;color:var(--text2, #8b93a7);white-space:nowrap;" title="可复现种子（官方特性）：填同一整数 → 同文本/同设置结果近似一致，便于对比与复现；留空=随机">
+            种子
+          </label>
+          <input type="text" id="seedInput" placeholder="留空=随机，如 42" style="width:130px;font-size:11px;background:var(--surface, #1c2030);border:1px solid var(--border, #2a3045);border-radius:4px;color:var(--text, #e6e9f2);padding:3px 6px;outline:none;">
+        </div>
       </div>
     </div>
 
@@ -2571,6 +2675,22 @@ HTML_CONTENT = r"""
       <span class="param-desc" style="margin:0">主模型缺失或需更新时可用；约 5GB，支持断点续传。</span>
     </div>
     <div id="verifyResult"></div>
+    <div class="param-label" style="margin-top:14px">Qwen3 时间戳对齐模型（可选）</div>
+    <div class="path-row" id="qwenCard" style="display:none">
+      <span id="qwenState" class="path-input" style="flex:1">
+        <span id="qwenTitle">状态检测中…</span>
+      </span>
+      <button class="btn-secondary" id="qwenBtn" onclick="qwenDownload()" style="display:none">下载</button>
+      <button class="btn-secondary" id="qwenDelBtn" onclick="qwenDelete()" style="display:none">删除</button>
+    </div>
+    <div class="param-desc" id="qwenSub">--timestamps 高精度字级时间戳专用（约 1.75GB，不随安装包附带，不下载也能用基础模式）。</div>
+    <div class="dl-progress" id="qwenProgress" style="display:none;margin-top:8px">
+      <div class="progress-bar-wrap"><div class="progress-bar-fill" id="qwenBar"></div></div>
+      <div class="dl-progress-meta">
+        <span class="progress-msg" id="qwenMsg">准备中…</span>
+        <span class="progress-pct" id="qwenPct"></span>
+      </div>
+    </div>
     <div class="param-label" style="margin-top:14px">多音字修正 LoRA 权重（可选）</div>
     <div class="path-row">
       <input id="loraInput" class="path-input" placeholder="如 C:\...\lora_output\step_0005000">
@@ -2810,6 +2930,67 @@ async function cancelModelDownload() {
   } catch (e) {}
 }
 
+// ── qwen3 时间戳模型（可选下载/删除）───────────────
+let _qwenPolling = false;
+async function refreshQwenCard() {
+  try {
+    const r = await fetch('/api/qwen-model/status');
+    const d = await r.json();
+    const card = document.getElementById('qwenCard');
+    card.style.display = 'block';
+    const title = document.getElementById('qwenTitle');
+    const btn = document.getElementById('qwenBtn');
+    const delBtn = document.getElementById('qwenDelBtn');
+    const prog = document.getElementById('qwenProgress');
+    const bar = document.getElementById('qwenBar');
+    const msg = document.getElementById('qwenMsg');
+    const pct = document.getElementById('qwenPct');
+    const sub = document.getElementById('qwenSub');
+    if (d.exists) {
+      title.textContent = `已安装（本地 ${Math.round(d.size_mb/1024*100)/100}GB）`;
+      btn.style.display = 'none';
+      delBtn.style.display = 'inline-block';
+      prog.style.display = 'none';
+      if (!_qwenPolling && d.dl && d.dl.status === 'done') { msg.textContent = d.dl.message || ''; }
+    } else {
+      title.textContent = '未安装';
+      btn.style.display = 'inline-block';
+      delBtn.style.display = 'none';
+      prog.style.display = 'none';
+    }
+    const st = d.dl ? d.dl.status : 'idle';
+    if (st === 'downloading' || st === 'scanning') {
+      prog.style.display = 'block';
+      btn.style.display = 'none';
+      delBtn.style.display = 'none';
+      const p = d.dl.percent != null ? d.dl.percent : 0;
+      bar.style.width = p + '%';
+      msg.textContent = d.dl.message || '正在下载…';
+      pct.textContent = p + '%';
+      if (!_qwenPolling) { _qwenPolling = true; setTimeout(function tick() { refreshQwenCard().then(() => { if (_qwenPolling) setTimeout(tick, 2000); }); }, 2000); }
+    } else if (st === 'error') {
+      prog.style.display = 'block';
+      bar.style.width = '100%';
+      msg.textContent = d.dl.message || '下载失败';
+      pct.textContent = '';
+    }
+  } catch (e) {}
+}
+async function qwenDownload() {
+  const r = await fetch('/api/qwen-model/download', { method: 'POST' });
+  const d = await r.json();
+  alert(d.message || (d.ok ? '已开始下载。' : '无法开始下载。'));
+  refreshQwenCard();
+}
+async function qwenDelete() {
+  if (!confirm('确定删除本地 qwen3 时间戳模型（释放约 1.75GB）？删除后需重新下载才能用高精度模式。')) return;
+  const r = await fetch('/api/qwen-model/delete', { method: 'POST' });
+  const d = await r.json();
+  alert(d.message || '');
+  _qwenPolling = false;
+  refreshQwenCard();
+}
+
 // ── 初始化 ─────────────────────────────────────
 const VOICE_LIST = {
   default: { icon: '🎤', name: '默认音色', desc: '25岁温柔女声' },
@@ -2853,6 +3034,7 @@ async function init() {
     ['bindAudioPlayer', bindAudioPlayer],
     ['loadPaths', loadPaths],
     ['renderProfileChips', renderProfileChips],
+    ['refreshQwenCard', refreshQwenCard],
   ];
   for (const [name, fn] of steps) {
     try {
@@ -3476,6 +3658,7 @@ async function openSettings() {
     document.getElementById('outputDirInput').value = d.output_dir || '';
     document.getElementById('loraInput').value = d.lora_weights_path || '';
   } catch {}
+  refreshQwenCard();
   document.getElementById('settingsModal').style.display = 'flex';
 }
 function closeSettings() { document.getElementById('settingsModal').style.display = 'none'; }
@@ -3765,6 +3948,7 @@ async function doSynthesize() {
   formData.append('phoneme_mode', document.getElementById('phonemeToggle').checked ? 'true' : 'false');
   formData.append('denoise', document.getElementById('denoiseToggle').checked ? 'true' : 'false');
   formData.append('target_sr', localStorage.getItem('voxcpm_sr') || 'native');
+  formData.append('seed', (document.getElementById('seedInput') || { value: '' }).value.trim());
   const pt = document.getElementById('promptText').value.trim();
   if (pt) formData.append('prompt_text', pt);
   if (refFile && currentMode === 'fixed_clone') {
@@ -4596,6 +4780,107 @@ if HAS_WEB:
       {"ok": True, "message": "已请求取消；下载线程会在当前文件后停止。"}
     )
 
+  # ── qwen3 时间戳对齐模型（可选，单独下载/删除）─────────
+  def _qwen_local_ok() -> bool:
+    """本地 6 文件齐且大小匹配 = True（对照官方 sha 表里的字节数）。"""
+    m = os.path.join(_QWEN_MODEL_DIR, "model.safetensors")
+    if not os.path.exists(m):
+      return False
+    if _tsq is not None:
+      try:
+        sizes = _tsq._QWEN_FILE_SIZES
+        for f, sz in list(sizes.items())[:-1]:  # 前 5 个小文件只需存在
+          if not os.path.exists(os.path.join(_QWEN_MODEL_DIR, f)):
+            return False
+        return os.path.getsize(m) == sizes["model.safetensors"]
+      except Exception:
+        pass
+    return True
+
+  def _qwen_size_mb() -> float:
+    total = 0
+    if os.path.isdir(_QWEN_MODEL_DIR):
+      for f in os.listdir(_QWEN_MODEL_DIR):
+        p = os.path.join(_QWEN_MODEL_DIR, f)
+        if os.path.isfile(p):
+          total += os.path.getsize(p)
+    return round(total / 1048576, 1)
+
+  @app.get("/api/qwen-model/status")
+  async def api_qwen_model_status():
+    with _qwen_lock:
+      snap = dict(_qwen_state)
+    exists = _qwen_local_ok()
+    # 清理 hf cache（仅当本地目录已删）
+    cache_dir = os.path.join(_APP_ROOT, "models", "qwen3_aligner_hf_cache")
+    return JSONResponse(
+      {
+        "exists": exists,
+        "size_mb": 0 if not exists else _qwen_size_mb(),
+        "model_dir": _QWEN_MODEL_DIR,
+        "supported": HAS_TS,
+        "dl": snap,
+      }
+    )
+
+  @app.post("/api/qwen-model/download")
+  async def api_qwen_model_download():
+    global _qwen_thread
+    if not HAS_TS:
+      return JSONResponse({"ok": False, "message": "qwen3 时间戳模块不可用（导入失败），无法下载。"})
+    with _qwen_lock:
+      if _qwen_state.get("status") in ("downloading", "scanning"):
+        return JSONResponse({"ok": False, "message": "正在下载中，请稍候。"})
+      if _qwen_local_ok():
+        return JSONResponse({"ok": True, "message": f"模型已存在（{_qwen_size_mb()/1024:.2f}GB），无需下载。"})
+      _qwen_state.update(
+        {
+          "status": "downloading",
+          "file": None,
+          "percent": None,
+          "message": "准备下载…",
+          "started_at": time.time(),
+          "finished_at": None,
+        }
+      )
+
+    def _qwen_progress(p):
+      with _qwen_lock:
+        _qwen_state.update({k: v for k, v in p.items() if k in ("percent", "message", "file", "phase")})
+
+    def _qwen_run():
+      try:
+        ok = _tsq.ensure_model(_QWEN_MODEL_DIR, allow_download=True, progress_cb=_qwen_progress)
+        with _qwen_lock:
+          if ok:
+            _qwen_state.update({"status": "done", "percent": 100, "message": "下载完成，--timestamps 高精度模式可用。", "finished_at": time.time()})
+          else:
+            _qwen_state.update({"status": "error", "message": "下载失败（无网络或源不可达），可稍后重试。", "finished_at": time.time()})
+      except Exception as e:
+        with _qwen_lock:
+          _qwen_state.update({"status": "error", "message": f"下载异常: {e}", "finished_at": time.time()})
+
+    t = threading.Thread(target=_qwen_run, daemon=True)
+    t.start()
+    with _qwen_lock:
+      _qwen_thread[0] = t
+    return JSONResponse({"ok": True, "message": "已开始下载（8 路并行，约 1.75GB）。"})
+
+  @app.post("/api/qwen-model/delete")
+  async def api_qwen_model_delete():
+    with _qwen_lock:
+      if _qwen_state.get("status") in ("downloading", "scanning"):
+        return JSONResponse({"ok": False, "message": "正在下载中，无法删除。"})
+    freed_mb = _qwen_size_mb()
+    removed = []
+    for d in (_QWEN_MODEL_DIR, os.path.join(_APP_ROOT, "models", "qwen3_aligner_hf_cache")):
+      if os.path.isdir(d):
+        shutil.rmtree(d, ignore_errors=True)
+        removed.append(d)
+    if removed:
+      return JSONResponse({"ok": True, "message": f"已删除 qwen3 时间戳模型（释放 {freed_mb/1024:.2f}GB）。"})
+    return JSONResponse({"ok": True, "message": "本地无 qwen3 模型，无需删除。"})
+
   @app.post("/api/load_model")
   async def load_model_endpoint():
     with state_lock:
@@ -4802,6 +5087,7 @@ if HAS_WEB:
     prompt_text: str = Form(""),
     reference_path: str = Form(""),
     reference_wav: UploadFile = File(None),
+    seed: str = Form(""),
   ):
     if not text.strip():
       raise HTTPException(400, "文本不能为空")
@@ -4845,6 +5131,7 @@ if HAS_WEB:
         "target_sr": target_sr,
         "prompt_text": prompt_text,
         "reference_wav": ref_wav_path,
+        "seed": seed,
       }
     )
     return JSONResponse({"job_id": job_id, "status": "queued"})
