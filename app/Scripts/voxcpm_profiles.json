@@ -28,5 +28,37 @@
     "mode": "fixed_clone",
     "reference_wav_path": "voice_preview_1789912481.wav",
     "created_at": "2026-09-20 21:55:06"
+  },
+  {
+    "name": "中年男性，深沉磁性，感染力强 (克隆)",
+    "voice": "storyteller",
+    "control_text": "中年男性，深沉磁性，感染力强",
+    "mode": "fixed_clone",
+    "reference_wav_path": "voice_preview_1790314932.wav",
+    "created_at": "2026-09-25 13:42:47"
+  },
+  {
+    "name": "新闻播报风格，沉稳磁性男声，咬字清晰 (克隆)",
+    "voice": "calm_male",
+    "control_text": "新闻播报风格，沉稳磁性男声，咬字清晰",
+    "mode": "fixed_clone",
+    "reference_wav_path": "voice_preview_1790315723.wav",
+    "created_at": "2026-09-25 13:55:41"
+  },
+  {
+    "name": "女性，清晰有力，有课堂感染力 (克隆)",
+    "voice": "teacher",
+    "control_text": "女性，清晰有力，有课堂感染力",
+    "mode": "fixed_clone",
+    "reference_wav_path": "voice_preview_1790315910.wav",
+    "created_at": "2026-09-25 13:59:41"
+  },
+  {
+    "name": "60岁老年女性，声音温和，语速清慢 (克隆)",
+    "voice": "elder_woman",
+    "control_text": "60岁老年女性，声音温和，语速清慢",
+    "mode": "fixed_clone",
+    "reference_wav_path": "voice_preview_1790316182.wav",
+    "created_at": "2026-09-25 14:03:33"
   }
 ]
