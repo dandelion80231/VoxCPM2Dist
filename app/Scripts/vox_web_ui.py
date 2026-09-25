@@ -2215,34 +2215,13 @@ HTML_CONTENT = r"""
     border: 1px solid var(--border);
     border-radius: var(--radius-lg);
     padding: 16px;
-    max-height: 280px;
-    overflow-y: auto;
     box-shadow: var(--shadow-sm);
   }
-  .synth-card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-lg);
-    padding: 12px 14px;
-    box-shadow: var(--shadow-sm);
-  }
-  .synth-card-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
-  .synth-card-label { font-size: 12px; font-weight: 600; color: var(--text2); }
-  .synth-card-actions { display: flex; gap: 6px; }
-  .synth-ctrl-btn {
-    width: 28px; height: 28px;
-    border-radius: 50%;
-    border: 1px solid var(--border);
-    background: var(--surface2);
-    color: var(--text);
-    cursor: pointer;
-    font-size: 13px;
-    display: flex; align-items: center; justify-content: center;
-    transition: all 0.15s;
-  }
-  .synth-ctrl-btn:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
-  #synthWave { display: block; width: 100%; height: 48px; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; box-sizing: border-box; }
-  .synth-status { margin-top: 8px; font-size: 11px; color: var(--text2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .history-scroll { max-height: 216px; overflow-y: auto; }
+  .synth-wave-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+  #synthWave { flex: 1 1 auto; min-width: 0; height: 32px; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; box-sizing: border-box; display: block; }
+  .synth-speed { flex: 0 0 auto; height: 28px; padding: 0 6px; font-size: 12px; color: var(--text); background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; cursor: pointer; }
+  .synth-speed:hover { border-color: var(--accent); }
   .history-card h3 { font-size: 12px; color: var(--text2); margin: 0; }
   .history-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
   .history-actions { display: flex; gap: 6px; }
@@ -2792,20 +2771,7 @@ HTML_CONTENT = r"""
       </button>
     </div>
 
-    <!-- 合成试听：最近/正在播放的合成音频波形 + 播放/下载（与 #audioPlayer 同步） -->
-    <div class="synth-card">
-      <div class="synth-card-head">
-        <span class="synth-card-label">🎧 合成试听</span>
-        <div class="synth-card-actions">
-          <button id="synthPlayBtn" class="synth-ctrl-btn" onclick="synthPlayPause()" title="播放/暂停合成音频">▶</button>
-          <button id="synthDlBtn" class="synth-ctrl-btn" onclick="synthDownload()" title="下载当前合成音频">⬇</button>
-        </div>
-      </div>
-      <canvas id="synthWave" width="640" height="48"></canvas>
-      <div id="synthStatus" class="synth-status">合成完成后自动试听，波形显示于此</div>
-    </div>
-
-    <!-- 历史 -->
+        <!-- 历史 -->
     <div class="history-card">
       <div class="history-head">
         <h3>最近合成记录</h3>
@@ -2814,8 +2780,22 @@ HTML_CONTENT = r"""
           <button class="history-action-btn danger" onclick="clearHistory()" title="清空当前列表">✕ 清除</button>
         </div>
       </div>
-      <div id="historyList">
-        <div class="history-empty">暂无记录</div>
+      <!-- 共享波形 + 调速：显示当前播放/最近合成的音频（与 #audioPlayer 同步）；各记录的 播放/下载 见下方列表 -->
+      <div class="synth-wave-row">
+        <canvas id="synthWave" width="640" height="32"></canvas>
+        <select id="synthSpeed" class="synth-speed" onchange="synthSpeedChange()" title="合成音频播放速度">
+          <option value="0.5">0.5x</option>
+          <option value="0.75">0.75x</option>
+          <option value="1" selected>1x</option>
+          <option value="1.25">1.25x</option>
+          <option value="1.5">1.5x</option>
+          <option value="2">2x</option>
+        </select>
+      </div>
+      <div class="history-scroll">
+        <div id="historyList">
+          <div class="history-empty">暂无记录</div>
+        </div>
       </div>
     </div>
 
@@ -3664,7 +3644,7 @@ function drawPreviewWave(peaks, progress = 0) {
   }
 }
 
-// ── 合成试听（底部）波形 + 播放 ───────────────────────
+// ── 共享波形（底部）+ 调速 ───────────────────────
 // 显示“最近/正在播放”的完整合成音频波形，与 #audioPlayer 进度同步；
 // 进度分母用解码时长 _synthDur（与 peaks 同源），避免 audio.duration 未就绪早期掉队。
 let _synthPeaks = null, _synthDur = 0, _synthWav = '', _synthAnimId = 0;
@@ -3709,7 +3689,6 @@ function _synthAnimLoop() {
     if (audio.ended) {
       if (_synthPeaks) drawSynthWave(_synthPeaks);
       _synthAnimId = 0;
-      syncSynthPlayBtn();
       return;
     }
     if (!audio.paused && _synthPeaks && currentPlayingWav === _synthWav) {
@@ -3722,22 +3701,12 @@ function _synthAnimLoop() {
 }
 function ensureSynthAnim() { if (!_synthAnimId && _synthPeaks) _synthAnimLoop(); }
 
-function syncSynthPlayBtn() {
-  const b = document.getElementById('synthPlayBtn');
-  if (!b) return;
-  const p = document.getElementById('audioPlayer');
-  b.textContent = (p && !p.paused && _synthWav && currentPlayingWav === _synthWav) ? '⏸' : '▶';
-}
-
-async function showSynthWave(wavName, autoplay) {
+async function showSynthWave(wavName) {
   const token = wavName;
   _synthWav = wavName;
-  const st = document.getElementById('synthStatus');
-  let ok = false;
   if (_synthPeaksCache[wavName]) {
     _synthPeaks = _synthPeaksCache[wavName].peaks;
     _synthDur = _synthPeaksCache[wavName].dur || 0;
-    ok = !!_synthPeaks;
   } else {
     try {
       const blob = await (await fetch('/api/audio/' + encodeURIComponent(wavName))).blob();
@@ -3745,46 +3714,25 @@ async function showSynthWave(wavName, autoplay) {
       const r = await peaksFromBuffer(ab, 160);
       if (token !== _synthWav) return;   // 已有更新的请求，丢弃此陈旧结果
       _synthPeaks = r.peaks; _synthDur = r.dur || 0;
-      ok = !!_synthPeaks;
-      if (ok) _synthPeaksCache[wavName] = { peaks: _synthPeaks, dur: _synthDur };
+      if (_synthPeaks) _synthPeaksCache[wavName] = { peaks: _synthPeaks, dur: _synthDur };
     } catch (e) {
       if (token !== _synthWav) return;
       _synthPeaks = null; _synthDur = 0;
     }
   }
   if (token !== _synthWav) return;
-  const dl = document.getElementById('synthDlBtn');
-  if (dl) dl.href = '/api/audio/' + encodeURIComponent(wavName);
-  if (st) st.textContent = ok
-    ? '合成音频 ' + wavName + '（约 ' + _synthDur.toFixed(1) + 's）'
-    : '波形加载失败（' + wavName + '）';
   drawSynthWave(_synthPeaks, 0);
-  if (autoplay) { const p = document.getElementById('audioPlayer'); p.play().catch(() => {}); }
-  syncSynthPlayBtn();
+  applySynthSpeed();
   ensureSynthAnim();
 }
 
-function synthPlayPause() {
-  if (!_synthWav) return;
+// 调速：控制 #audioPlayer.playbackRate（底部合成音频）
+function applySynthSpeed() {
+  const sel = document.getElementById('synthSpeed');
   const p = document.getElementById('audioPlayer');
-  if (p.paused) {
-    if (currentPlayingWav !== _synthWav) { p.src = '/api/audio/' + encodeURIComponent(_synthWav); currentPlayingWav = _synthWav; setPlayBtnState(null, false); }
-    if (p.ended) p.currentTime = 0;
-    p.play().catch(() => {});
-    ensureSynthAnim();
-  } else {
-    p.pause();
-  }
-  syncSynthPlayBtn();
+  if (sel && p) p.playbackRate = parseFloat(sel.value) || 1;
 }
-
-function synthDownload() {
-  if (!_synthWav) return;
-  const a = document.createElement('a');
-  a.href = '/api/audio/' + encodeURIComponent(_synthWav);
-  a.download = _synthWav;
-  document.body.appendChild(a); a.click(); a.remove();
-}
+function synthSpeedChange() { applySynthSpeed(); }
 
 function bindSliders() {
   const cfg = document.getElementById('cfgSlider');
@@ -4500,9 +4448,9 @@ function resetBtn() {
 // ── 音频播放 ─────────────────────────────────────
 function bindAudioPlayer() {
   const player = document.getElementById('audioPlayer');
-  player.onended = () => { setPlayBtnState(null, false); syncSynthPlayBtn(); };
-  player.onpause  = () => { if (player.ended) return; setPlayBtnState(currentPlayBtnId, false); syncSynthPlayBtn(); };
-  player.onplay   = () => { setPlayBtnState(currentPlayBtnId, true); syncSynthPlayBtn(); };
+  player.onended = () => setPlayBtnState(null, false);
+  player.onpause  = () => { if (player.ended) return; setPlayBtnState(currentPlayBtnId, false); };
+  player.onplay   = () => setPlayBtnState(currentPlayBtnId, true);
 }
 
 function setPlayBtnState(btnId, isPlaying) {
@@ -4526,13 +4474,11 @@ async function togglePlayAudio(wavName, btnId) {
   if (currentPlayingWav === wavName && !player.paused) {
     player.pause();
     setPlayBtnState(btnId, false);
-    syncSynthPlayBtn();
     return;
   }
   if (currentPlayingWav === wavName && player.paused) {
     await player.play();
     setPlayBtnState(btnId, true);
-    syncSynthPlayBtn();
     ensureSynthAnim();
     return;
   }
@@ -4540,14 +4486,14 @@ async function togglePlayAudio(wavName, btnId) {
   currentPlayingWav = wavName;
   player.src = '/api/audio/' + wavName;
   setPlayBtnState(currentPlayBtnId, false);   // 先把旧按钮重置
+  applySynthSpeed();                          // 新资源会重置 playbackRate，重新应用所选速度
   try {
     await player.play();
     setPlayBtnState(btnId, true);
-    showSynthWave(wavName, false);            // 同步底部「合成试听」波形
+    showSynthWave(wavName);                  // 同步底部共享波形
   } catch {
     setPlayBtnState(btnId, false);
   }
-  syncSynthPlayBtn();
 }
 
 // ── 历史记录 ─────────────────────────────────────
