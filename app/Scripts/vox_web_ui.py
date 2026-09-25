@@ -2525,12 +2525,8 @@ HTML_CONTENT = r"""
         </div>
         <div class="param-slider-row">
           <input type="range" id="chunkSlider" min="60" max="400" step="20" value="180">
-        </div>
-        <div style="display:flex;align-items:center;gap:6px;margin-top:6px;">
-          <label style="font-size:11px;color:var(--text2, #8b93a7);white-space:nowrap;" title="可复现种子（官方特性）：填同一整数 → 同文本/同设置结果近似一致，便于对比与复现；留空=随机">
-            种子
-          </label>
-          <input type="text" id="seedInput" placeholder="留空=随机，如 42" style="width:130px;font-size:11px;background:var(--surface, #1c2030);border:1px solid var(--border, #2a3045);border-radius:4px;color:var(--text, #e6e9f2);padding:3px 6px;outline:none;">
+          <label style="font-size:11px;color:var(--text2, #8b93a7);white-space:nowrap;flex-shrink:0;" title="可复现种子（官方特性）：填同一整数 → 同文本/同设置结果近似一致，便于对比与复现；留空=随机">种子</label>
+          <input type="text" id="seedInput" placeholder="留空=随机，如 42" style="width:96px;flex-shrink:0;font-size:11px;background:var(--surface, #1c2030);border:1px solid var(--border, #2a3045);border-radius:4px;color:var(--text, #e6e9f2);padding:3px 6px;outline:none;">
         </div>
       </div>
     </div>
@@ -2686,12 +2682,12 @@ HTML_CONTENT = r"""
       <input id="qwenPathInput" class="path-input" placeholder="（自动管理；也可浏览指向已有 Qwen3 目录）">
       <button class="btn-secondary" onclick="selectFolder('qwenPathInput','选择 Qwen3 时间戳模型目录')">浏览...</button>
     </div>
-    <div class="param-desc" id="qwenSub">--timestamps 高精度字级时间戳专用（约 1.75GB，不随安装包附带，不下载也能用基础模式）。默认自动下载到随附 models 目录；也可点「浏览」指向已有的 Qwen3-ForcedAligner 模型目录（点「保存设置」后生效）。</div>
+    <div class="param-desc" id="qwenSub">模型读取/下载位置；修改后点「保存设置」生效。</div>
     <div class="path-row" style="margin-top:10px">
       <span id="qwenTitle" class="param-desc" style="margin:0;white-space:nowrap">状态检测中…</span>
       <button class="btn-secondary" id="qwenBtn" onclick="qwenDownload()" style="display:none">下载</button>
       <button class="btn-secondary" id="qwenDelBtn" onclick="qwenDelete()" style="display:none">删除</button>
-      <span class="param-desc" id="qwenStateHint" style="margin:0"></span>
+      <span class="param-desc" style="margin:0">下载约 1.75GB；已安装可删除。</span>
     </div>
     <div class="dl-progress" id="qwenProgress" style="display:none;margin-top:8px">
       <div class="progress-bar-wrap"><div class="progress-bar-fill" id="qwenBar"></div></div>
