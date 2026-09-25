@@ -3329,6 +3329,33 @@ async function peaksFromBuffer(ab) {
   }
 }
 
+// ── 试听波形进度：共享 peaks + 可重启 rAF 循环（第1/2/N次播放都能跟）──
+let _previewPeaks = null;    // 当前试听 64-bin peaks
+let _previewAnimId = 0;      // rAF 句柄（0=未运行）
+
+function _previewAnimLoop() {
+  const audio = document.getElementById('voicePreviewAudio');
+  const _anim = () => {
+    if (_previewAnimId === 0) return;          // 已停止
+    if (audio.ended) {
+      if (_previewPeaks) drawPreviewWave(_previewPeaks);   // 复位整条
+      _previewAnimId = 0;                     // 停循环，等下次播放重启
+      return;
+    }
+    if (!audio.paused && _previewPeaks && isFinite(audio.duration) && audio.duration > 0) {
+      drawPreviewWave(_previewPeaks, audio.currentTime / audio.duration);
+    }
+    _previewAnimId = requestAnimationFrame(_anim);
+  };
+  _previewAnimId = requestAnimationFrame(_anim);
+}
+
+function ensurePreviewAnim() {
+  if (_previewAnimId) return;      // 已在跑
+  if (!_previewPeaks) return;      // 还没 peaks
+  _previewAnimLoop();
+}
+
 // ── 音色试听：以当前音色设置生成一段短句 + 波形显示（/api/voice-preview）──
 async function runVoicePreview() {
   const btn = document.getElementById('voicePreviewBtn');
@@ -3350,13 +3377,13 @@ async function runVoicePreview() {
       directUrl = URL.createObjectURL(blob);
       ab = await blob.arrayBuffer();
     }
-    const peaks = ab ? await peaksFromBuffer(ab) : null;   // 先算好 peaks，进度从 t=0 就能跟
+    _previewPeaks = ab ? await peaksFromBuffer(ab) : null;   // 共享波形进度
     audio.src = directUrl;
     lastPreviewUrl = directUrl;
     if (currentRefPath && !refFile) lastPreviewPath = currentRefPath;   // 档案参考→可再存档案
     status.style.color = '';
     status.textContent = '▶ 直接试听参考音频（未重新合成）';
-    if (peaks) drawPreviewWave(peaks);
+    if (_previewPeaks) drawPreviewWave(_previewPeaks);
     const pb = document.getElementById('previewPlayBtn');
     try {
       await audio.play();
@@ -3365,16 +3392,7 @@ async function runVoicePreview() {
       status.textContent = '（浏览器限制自动播放，点 ▶）';
     }
     audio.onended = () => { pb.textContent = '▶'; pb.title = '播放'; };
-    if (peaks) {
-      const _anim = () => {
-        if (audio.ended) { drawPreviewWave(peaks); return; }   // 复位整条波形 + 停止循环
-        if (!audio.paused && isFinite(audio.duration) && audio.duration > 0) {
-          drawPreviewWave(peaks, audio.currentTime / audio.duration);
-        }
-        requestAnimationFrame(_anim);
-      };
-      requestAnimationFrame(_anim);
-    }
+    ensurePreviewAnim();
     return;
   }
 
@@ -3397,24 +3415,14 @@ async function runVoicePreview() {
     const d = await r.json();
     if (!d.ok) { status.textContent = '⚠ ' + (d.error || '试听失败'); status.style.color = 'var(--err,#e55)'; return; }
     status.style.color = '';
-    drawPreviewWave(d.peaks || []);
+    _previewPeaks = d.peaks || [];          // 共享波形进度
+    drawPreviewWave(_previewPeaks);
     audio.src = d.wav_url;
     lastPreviewUrl = d.wav_url;
     lastPreviewPath = d.file_path || '';
-    // 播放过程中动画波形进度
-    const _peaks = d.peaks || [];
-    const _anim = () => {
-      const playBtn = document.getElementById('previewPlayBtn');
-      if (audio.ended) { playBtn.textContent = '▶'; playBtn.title = '播放'; return; }
-      if (!audio.paused) {
-        const prog = audio.duration ? audio.currentTime / audio.duration : 0;
-        drawPreviewWave(_peaks, prog);
-      }
-      requestAnimationFrame(_anim);
-    };
-    requestAnimationFrame(_anim);
+    ensurePreviewAnim();                    // 起/续波形进度动画
     try { await audio.play(); document.getElementById('previewPlayBtn').textContent = '⏸'; } catch (e) { status.textContent = '（浏览器限制自动播放，点 ▶）'; }
-    audio.onended = () => { document.getElementById('previewPlayBtn').textContent = '▶'; document.getElementById('previewPlayBtn').title = '播放'; };
+    audio.onended = () => { const b = document.getElementById('previewPlayBtn'); b.textContent = '▶'; b.title = '播放'; };
     status.textContent = '已生成（约 ' + d.duration + 's）';
   } catch (e) {
     status.textContent = '⚠ 试听失败: ' + (e.message || e);
@@ -3428,8 +3436,15 @@ function previewPlayPause() {
   const audio = document.getElementById('voicePreviewAudio');
   const playBtn = document.getElementById('previewPlayBtn');
   if (!audio.src) return;
-  if (audio.paused) { audio.play().catch(() => {}); playBtn.textContent = '⏸'; playBtn.title = '暂停'; }
-  else { audio.pause(); playBtn.textContent = '▶'; playBtn.title = '播放'; }
+  if (audio.paused) {
+    if (audio.ended) audio.currentTime = 0;    // 结束后重播→从头
+    audio.play().catch(() => {});
+    playBtn.textContent = '⏸'; playBtn.title = '暂停';
+    ensurePreviewAnim();                       // 每次播放都重启波形进度（第2次也跟随）
+  } else {
+    audio.pause();
+    playBtn.textContent = '▶'; playBtn.title = '播放';
+  }
 }
 
 function previewDownload() {
