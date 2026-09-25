@@ -4025,7 +4025,7 @@ async function toggleConsole() {
     if (d.ok) {
       showToast(d.message || (d.visible ? '命令行窗口已显示' : '命令行窗口已隐藏'), 'success');
     } else {
-      showToast('命令行窗口切换失败，可能当前终端不支持此操作', 'error');
+      showToast('未检测到可切换的命令行窗口（本实例未附带控制台）', 'info');
     }
   } catch {}
 }
@@ -4040,8 +4040,8 @@ async function initConsole() {
     const r = await fetch('/api/console_status');
     const d = await r.json();
     updateConsoleIcon(d.visible);
-    // 非 Windows 平台隐藏该按钮
-    if (d.supported === false) {
+    // 非 Windows 平台，或本实例未附带控制台窗口（无处可切换）→ 隐藏该按钮，避免点击报错
+    if (d.supported === false || d.has_console === false) {
       const btn = document.getElementById('consoleToggle');
       if (btn) btn.style.display = 'none';
     }
@@ -5122,7 +5122,11 @@ if HAS_WEB:
   @app.get("/api/console_status")
   async def console_status():
     return JSONResponse(
-      {"visible": _is_console_visible(), "supported": sys.platform == "win32"}
+      {
+        "visible": _is_console_visible(),
+        "supported": sys.platform == "win32",
+        "has_console": bool(_get_console_hwnd()),  # 本进程是否真有可切换的控制台窗口
+      }
     )
 
   @app.post("/api/toggle_console")
