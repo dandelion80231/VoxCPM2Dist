@@ -2219,6 +2219,30 @@ HTML_CONTENT = r"""
     overflow-y: auto;
     box-shadow: var(--shadow-sm);
   }
+  .synth-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 12px 14px;
+    box-shadow: var(--shadow-sm);
+  }
+  .synth-card-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+  .synth-card-label { font-size: 12px; font-weight: 600; color: var(--text2); }
+  .synth-card-actions { display: flex; gap: 6px; }
+  .synth-ctrl-btn {
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    color: var(--text);
+    cursor: pointer;
+    font-size: 13px;
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.15s;
+  }
+  .synth-ctrl-btn:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+  #synthWave { display: block; width: 100%; height: 48px; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; box-sizing: border-box; }
+  .synth-status { margin-top: 8px; font-size: 11px; color: var(--text2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .history-card h3 { font-size: 12px; color: var(--text2); margin: 0; }
   .history-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
   .history-actions { display: flex; gap: 6px; }
@@ -2768,6 +2792,19 @@ HTML_CONTENT = r"""
       </button>
     </div>
 
+    <!-- 合成试听：最近/正在播放的合成音频波形 + 播放/下载（与 #audioPlayer 同步） -->
+    <div class="synth-card">
+      <div class="synth-card-head">
+        <span class="synth-card-label">🎧 合成试听</span>
+        <div class="synth-card-actions">
+          <button id="synthPlayBtn" class="synth-ctrl-btn" onclick="synthPlayPause()" title="播放/暂停合成音频">▶</button>
+          <button id="synthDlBtn" class="synth-ctrl-btn" onclick="synthDownload()" title="下载当前合成音频">⬇</button>
+        </div>
+      </div>
+      <canvas id="synthWave" width="640" height="48"></canvas>
+      <div id="synthStatus" class="synth-status">合成完成后自动试听，波形显示于此</div>
+    </div>
+
     <!-- 历史 -->
     <div class="history-card">
       <div class="history-head">
@@ -3161,6 +3198,7 @@ async function init() {
     ['renderVoices', renderVoices],
     ['renderExamples', renderExamples],
     ['drawPreviewWavePlaceholder', () => { const c = document.getElementById('voicePreviewWave'); if (!c) return; const ctx = c.getContext('2d'); ctx.clearRect(0, 0, c.width, c.height); ctx.fillStyle = (getComputedStyle(document.documentElement).getPropertyValue('--accent') || '#6c8eff') + '55'; const mid = c.height / 2; for (let i = 0; i < c.width; i += 4) { ctx.fillRect(i, mid - 1, 2, 2); } }],
+    ['drawSynthWavePlaceholder', () => drawSynthWave(null, 0)],
     ['loadHistory', loadHistory],
     ['bindSliders', bindSliders],
     ['bindTextArea', bindTextArea],
@@ -3432,16 +3470,17 @@ function onPromptInput() {
   document.getElementById('ultimateHint').style.display = ultimate ? 'block' : 'none';
 }
 
-// 从已加载的参考音频现算 64-bin 归一化 peaks（与后端 /api/voice-preview 同口径，供直接试听画波形）
-// 解码 ArrayBuffer → 64-bin 归一化 peaks（与后端 /api/voice-preview 同口径，供直接试听画波形）
-async function peaksFromBuffer(ab) {
+// 解码 ArrayBuffer → N-bin 归一化 peaks（与后端 /api/voice-preview 同口径）。
+// 返回 { peaks, dur }：peaks 为归一化数组，dur 为解码时长(秒)——进度分母用它可避免
+// audio.duration 起播前未就绪(Infinity) 导致的早期波形掉队/偏差。
+async function peaksFromBuffer(ab, bins = 64) {
   try {
     const AC = window.AudioContext || window.webkitAudioContext;
     const ctx = new AC();
     const dec = await ctx.decodeAudioData(ab);
     const data = dec.getChannelData(0);
     const n = data.length;
-    const BINS = 64;
+    const BINS = bins;
     const peaks = new Array(BINS);
     let m = 0;
     for (let b = 0; b < BINS; b++) {
@@ -3452,15 +3491,17 @@ async function peaksFromBuffer(ab) {
       peaks[b] = mx; if (mx > m) m = mx;
     }
     m = m || 1;
+    const dur = dec.duration || (n / (dec.sampleRate || 24000));
     try { ctx.close(); } catch (e) {}
-    return peaks.map(p => p / m);
+    return { peaks: peaks.map(p => p / m), dur };
   } catch (e) {
-    return null;
+    return { peaks: null, dur: 0 };
   }
 }
 
 // ── 试听波形进度：共享 peaks + 可重启 rAF 循环（第1/2/N次播放都能跟）──
 let _previewPeaks = null;    // 当前试听 64-bin peaks
+let _previewDur = 0;         // 试听源时长(秒，与 peaks 同源；解码/后端口径，避免 audio.duration 未就绪早期偏差)
 let _previewAnimId = 0;      // rAF 句柄（0=未运行）
 
 function _previewAnimLoop() {
@@ -3472,8 +3513,10 @@ function _previewAnimLoop() {
       _previewAnimId = 0;                     // 停循环，等下次播放重启
       return;
     }
-    if (!audio.paused && _previewPeaks && isFinite(audio.duration) && audio.duration > 0) {
-      drawPreviewWave(_previewPeaks, audio.currentTime / audio.duration);
+    if (!audio.paused && _previewPeaks) {
+      // 进度分母优先用与 peaks 同源的 _previewDur；仅在不可用时才回退 audio.duration
+      const denom = _previewDur > 0 ? _previewDur : (isFinite(audio.duration) && audio.duration > 0 ? audio.duration : 0);
+      if (denom > 0) drawPreviewWave(_previewPeaks, Math.min(1, audio.currentTime / denom));
     }
     _previewAnimId = requestAnimationFrame(_anim);
   };
@@ -3507,7 +3550,8 @@ async function runVoicePreview() {
       directUrl = URL.createObjectURL(blob);
       ab = await blob.arrayBuffer();
     }
-    _previewPeaks = ab ? await peaksFromBuffer(ab) : null;   // 共享波形进度
+    _previewDur = 0;
+    if (ab) { const r = await peaksFromBuffer(ab); _previewPeaks = r.peaks; _previewDur = r.dur || 0; } else { _previewPeaks = null; }   // 共享波形进度 + 时长(与 peaks 同源)
     audio.src = directUrl;
     lastPreviewUrl = directUrl;
     if (currentRefPath && !refFile) lastPreviewPath = currentRefPath;   // 档案参考→可再存档案
@@ -3546,6 +3590,7 @@ async function runVoicePreview() {
     if (!d.ok) { status.textContent = '⚠ ' + (d.error || '试听失败'); status.style.color = 'var(--err,#e55)'; return; }
     status.style.color = '';
     _previewPeaks = d.peaks || [];          // 共享波形进度
+    _previewDur = d.duration || 0;         // 试听时长(与 peaks 同源，避免 audio.duration 未就绪早期偏差)
     drawPreviewWave(_previewPeaks);
     audio.src = d.wav_url;
     lastPreviewUrl = d.wav_url;
@@ -3617,6 +3662,128 @@ function drawPreviewWave(peaks, progress = 0) {
     ctx.fillStyle = accent;
     ctx.fillRect(progress * c.width, 0, 1.5, c.height);
   }
+}
+
+// ── 合成试听（底部）波形 + 播放 ───────────────────────
+// 显示“最近/正在播放”的完整合成音频波形，与 #audioPlayer 进度同步；
+// 进度分母用解码时长 _synthDur（与 peaks 同源），避免 audio.duration 未就绪早期掉队。
+let _synthPeaks = null, _synthDur = 0, _synthWav = '', _synthAnimId = 0;
+let _synthPeaksCache = {};   // wavName -> {peaks, dur}
+
+function drawSynthWave(peaks, progress = 0) {
+  const c = document.getElementById('synthWave');
+  if (!c) return;
+  const dpr = window.devicePixelRatio || 1;
+  let W = c.width, H = c.height;
+  const cwCss = c.clientWidth, chCss = c.clientHeight;
+  if (cwCss > 0 && chCss > 0) {
+    const tW = Math.round(cwCss * dpr), tH = Math.round(chCss * dpr);
+    if (tW !== c.width || tH !== c.height) { c.width = tW; c.height = tH; }
+    W = c.width; H = c.height;
+  }
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, W, H);
+  const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent') || '#6c8eff';
+  const n = peaks ? peaks.length : 0;
+  if (!n) {
+    ctx.fillStyle = accent + '55';
+    const mid = H / 2;
+    for (let x = 0; x < W; x += 4 * dpr) ctx.fillRect(x, mid - dpr, 2 * dpr, 2 * dpr);
+    return;
+  }
+  const BINS = n, cw = W / BINS, dim = accent + '44';
+  const progressIdx = Math.floor(Math.max(0, Math.min(1, progress)) * BINS);
+  for (let i = 0; i < BINS; i++) {
+    const p = peaks[i] || 0;
+    const h = Math.max(2 * dpr, p * (H - 4 * dpr));
+    ctx.fillStyle = i < progressIdx ? accent : dim;
+    ctx.fillRect(i * cw + 1, (H - h) / 2, Math.max(1, cw - 2), h);
+  }
+  if (progress > 0 && progress < 1) { ctx.fillStyle = accent; ctx.fillRect(progress * W, 0, 1.5 * dpr, H); }
+}
+
+function _synthAnimLoop() {
+  const audio = document.getElementById('audioPlayer');
+  const _anim = () => {
+    if (_synthAnimId === 0) return;
+    if (audio.ended) {
+      if (_synthPeaks) drawSynthWave(_synthPeaks);
+      _synthAnimId = 0;
+      syncSynthPlayBtn();
+      return;
+    }
+    if (!audio.paused && _synthPeaks && currentPlayingWav === _synthWav) {
+      const denom = _synthDur > 0 ? _synthDur : (isFinite(audio.duration) && audio.duration > 0 ? audio.duration : 0);
+      if (denom > 0) drawSynthWave(_synthPeaks, Math.min(1, audio.currentTime / denom));
+    }
+    _synthAnimId = requestAnimationFrame(_anim);
+  };
+  _synthAnimId = requestAnimationFrame(_anim);
+}
+function ensureSynthAnim() { if (!_synthAnimId && _synthPeaks) _synthAnimLoop(); }
+
+function syncSynthPlayBtn() {
+  const b = document.getElementById('synthPlayBtn');
+  if (!b) return;
+  const p = document.getElementById('audioPlayer');
+  b.textContent = (p && !p.paused && _synthWav && currentPlayingWav === _synthWav) ? '⏸' : '▶';
+}
+
+async function showSynthWave(wavName, autoplay) {
+  const token = wavName;
+  _synthWav = wavName;
+  const st = document.getElementById('synthStatus');
+  let ok = false;
+  if (_synthPeaksCache[wavName]) {
+    _synthPeaks = _synthPeaksCache[wavName].peaks;
+    _synthDur = _synthPeaksCache[wavName].dur || 0;
+    ok = !!_synthPeaks;
+  } else {
+    try {
+      const blob = await (await fetch('/api/audio/' + encodeURIComponent(wavName))).blob();
+      const ab = await blob.arrayBuffer();
+      const r = await peaksFromBuffer(ab, 160);
+      if (token !== _synthWav) return;   // 已有更新的请求，丢弃此陈旧结果
+      _synthPeaks = r.peaks; _synthDur = r.dur || 0;
+      ok = !!_synthPeaks;
+      if (ok) _synthPeaksCache[wavName] = { peaks: _synthPeaks, dur: _synthDur };
+    } catch (e) {
+      if (token !== _synthWav) return;
+      _synthPeaks = null; _synthDur = 0;
+    }
+  }
+  if (token !== _synthWav) return;
+  const dl = document.getElementById('synthDlBtn');
+  if (dl) dl.href = '/api/audio/' + encodeURIComponent(wavName);
+  if (st) st.textContent = ok
+    ? '合成音频 ' + wavName + '（约 ' + _synthDur.toFixed(1) + 's）'
+    : '波形加载失败（' + wavName + '）';
+  drawSynthWave(_synthPeaks, 0);
+  if (autoplay) { const p = document.getElementById('audioPlayer'); p.play().catch(() => {}); }
+  syncSynthPlayBtn();
+  ensureSynthAnim();
+}
+
+function synthPlayPause() {
+  if (!_synthWav) return;
+  const p = document.getElementById('audioPlayer');
+  if (p.paused) {
+    if (currentPlayingWav !== _synthWav) { p.src = '/api/audio/' + encodeURIComponent(_synthWav); currentPlayingWav = _synthWav; setPlayBtnState(null, false); }
+    if (p.ended) p.currentTime = 0;
+    p.play().catch(() => {});
+    ensureSynthAnim();
+  } else {
+    p.pause();
+  }
+  syncSynthPlayBtn();
+}
+
+function synthDownload() {
+  if (!_synthWav) return;
+  const a = document.createElement('a');
+  a.href = '/api/audio/' + encodeURIComponent(_synthWav);
+  a.download = _synthWav;
+  document.body.appendChild(a); a.click(); a.remove();
 }
 
 function bindSliders() {
@@ -4333,9 +4500,9 @@ function resetBtn() {
 // ── 音频播放 ─────────────────────────────────────
 function bindAudioPlayer() {
   const player = document.getElementById('audioPlayer');
-  player.onended = () => setPlayBtnState(null, false);
-  player.onpause  = () => { if (player.ended) return; setPlayBtnState(currentPlayBtnId, false); };
-  player.onplay   = () => setPlayBtnState(currentPlayBtnId, true);
+  player.onended = () => { setPlayBtnState(null, false); syncSynthPlayBtn(); };
+  player.onpause  = () => { if (player.ended) return; setPlayBtnState(currentPlayBtnId, false); syncSynthPlayBtn(); };
+  player.onplay   = () => { setPlayBtnState(currentPlayBtnId, true); syncSynthPlayBtn(); };
 }
 
 function setPlayBtnState(btnId, isPlaying) {
@@ -4359,11 +4526,14 @@ async function togglePlayAudio(wavName, btnId) {
   if (currentPlayingWav === wavName && !player.paused) {
     player.pause();
     setPlayBtnState(btnId, false);
+    syncSynthPlayBtn();
     return;
   }
   if (currentPlayingWav === wavName && player.paused) {
     await player.play();
     setPlayBtnState(btnId, true);
+    syncSynthPlayBtn();
+    ensureSynthAnim();
     return;
   }
   // 切换到新音频
@@ -4373,9 +4543,11 @@ async function togglePlayAudio(wavName, btnId) {
   try {
     await player.play();
     setPlayBtnState(btnId, true);
+    showSynthWave(wavName, false);            // 同步底部「合成试听」波形
   } catch {
     setPlayBtnState(btnId, false);
   }
+  syncSynthPlayBtn();
 }
 
 // ── 历史记录 ─────────────────────────────────────
