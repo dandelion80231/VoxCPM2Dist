@@ -4713,7 +4713,7 @@ async function openProfileManager() {
 function closeProfileManager() {
   document.getElementById('profileModal').style.display = 'none';
 }
-async function refreshProfileList() {
+async function refreshProfileList(prune = true) {
   const list = document.getElementById('profileList');
   const hint = document.getElementById('profilePathHint');
   list.innerHTML = '<div style="color:var(--muted)">加载中...</div>';
@@ -4726,8 +4726,22 @@ async function refreshProfileList() {
       list.innerHTML = '<div style="color:var(--muted);padding:8px 0">暂无音色档案。先在下方命名并点击「保存当前音色」。</div>';
       return;
     }
+    // 可达性标准：清掉参考音频已不存在的档案（与合成记录同一口径），再渲染
+    const dead = ps.filter(p => p.ref_ok === false);
+    if (prune && dead.length) {
+      for (const p of dead) {
+        await fetch('/api/profiles/delete', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: p.name })
+        });
+      }
+      showToast('已清掉 ' + dead.length + ' 个失效档案（参考音频已不存在）：' + dead.map(p => p.name).join('、'), 'success');
+      await refreshProfileList(false);   // 重拉（不再触发 prune，防删除失败时死循环）
+      return;
+    }
+    const live = ps.filter(p => p.ref_ok !== false);
     list.innerHTML = '';
-    ps.forEach(p => {
+    live.forEach(p => {
       const modeLabel = { voice_design: '音色设计', fixed_clone: '固定参考克隆', self_seeding: '自播种' }[p.mode] || p.mode || '音色设计';
       const desc = (p.control_text || '').slice(0, 40) || (p.voice || '');
       const row = document.createElement('div');
@@ -5756,10 +5770,21 @@ if HAS_WEB:
   # ── 音色档案（profile）：列表 / 新增 / 删除（REST 标准化）──
   @app.get("/api/profiles")
   async def list_profiles():
-    """音色档案列表（用户保存的音色配置：voice/control_text/mode/参考音频等）。"""
-    return JSONResponse(
-      {"profiles": voxcpm_api.list_profiles(), "file": str(voxcpm_api.PROFILE_FILE)}
-    )
+    """音色档案列表（用户保存的音色配置：voice/control_text/mode/参考音频等）。
+    每个档案附 ref_ok：参考音频当前是否可达（与 /api/audio 同款查找路径：
+    TEMP_DIR → 输出目录/VoxCPM_Outputs）；前端据此把不可达档案清出列表。"""
+    profs = [dict(p) for p in voxcpm_api.list_profiles()]
+    out_dir = _output_dir / "VoxCPM_Outputs"
+    for p in profs:
+      rwp = str(p.get("reference_wav_path") or "").strip()
+      if rwp:
+        # 有参考文件：查它还在不在（与 /api/audio 同款查找路径）
+        n = os.path.basename(rwp)
+        p["ref_ok"] = (TEMP_DIR / n).is_file() or (out_dir / n).is_file()
+      else:
+        # 没存参考文件（未上传/音色设计类）：无可达性可查，保留在列表
+        p["ref_ok"] = True
+    return JSONResponse({"profiles": profs, "file": str(voxcpm_api.PROFILE_FILE)})
 
   @app.post("/api/profiles")
   async def add_profile(payload: dict):
