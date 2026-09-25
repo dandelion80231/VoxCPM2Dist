@@ -2218,12 +2218,11 @@ HTML_CONTENT = r"""
     box-shadow: var(--shadow-sm);
   }
   .history-scroll { max-height: 216px; overflow-y: auto; }
-  .synth-wave-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
-  #synthWave { flex: 1 1 auto; min-width: 0; height: 32px; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; box-sizing: border-box; display: block; }
+  .head-wave { flex: 1 1 auto; min-width: 60px; height: 28px; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; box-sizing: border-box; display: block; }
   .synth-speed { flex: 0 0 auto; height: 28px; padding: 0 6px; font-size: 12px; color: var(--text); background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; cursor: pointer; }
   .synth-speed:hover { border-color: var(--accent); }
   .history-card h3 { font-size: 12px; color: var(--text2); margin: 0; }
-  .history-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+  .history-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
   .history-actions { display: flex; gap: 6px; }
   .history-action-btn {
     padding: 3px 8px;
@@ -2775,14 +2774,8 @@ HTML_CONTENT = r"""
     <div class="history-card">
       <div class="history-head">
         <h3>最近合成记录</h3>
-        <div class="history-actions">
-          <button class="history-action-btn" onclick="restoreHistory()" title="恢复上次清除的记录">↩ 恢复</button>
-          <button class="history-action-btn danger" onclick="clearHistory()" title="清空当前列表">✕ 清除</button>
-        </div>
-      </div>
-      <!-- 共享波形 + 调速：显示当前播放/最近合成的音频（与 #audioPlayer 同步）；各记录的 播放/下载 见下方列表 -->
-      <div class="synth-wave-row">
-        <canvas id="synthWave" width="640" height="32"></canvas>
+        <!-- 共享波形 + 调速：与标题同一行，显示当前播放/最近合成音频（与 #audioPlayer 同步） -->
+        <canvas id="synthWave" class="head-wave" width="640" height="28"></canvas>
         <select id="synthSpeed" class="synth-speed" onchange="synthSpeedChange()" title="合成音频播放速度">
           <option value="0.5">0.5x</option>
           <option value="0.75">0.75x</option>
@@ -2791,6 +2784,10 @@ HTML_CONTENT = r"""
           <option value="1.5">1.5x</option>
           <option value="2">2x</option>
         </select>
+        <div class="history-actions">
+          <button class="history-action-btn" onclick="restoreHistory()" title="恢复上次清除的记录">↩ 恢复</button>
+          <button class="history-action-btn danger" onclick="clearHistory()" title="清空当前列表">✕ 清除</button>
+        </div>
       </div>
       <div class="history-scroll">
         <div id="historyList">
