@@ -14,7 +14,7 @@ param(
     # 可手动指定一个 7z 兼容的压缩程序（例如 nano zip / NanaZip 的控制台程序）。
     [string]$CompressorPath,
     # 无模型版：打包时排除 app/model 与 app/models（约 4.7GB），产物写入 payload_nomodel，
-    # ISCC 传 /DVoxNoModel 产出 VoxCPM2_TTS_v{版本}_nomodel_Setup（文件名版本号取自 app/version.txt，约 0.6GB，可直接挂 GitHub Release）。
+    # ISCC 传 /DVoxNoModel 产出 VoxCPM2_TTS_v{版本}_nomodel_Setup（文件名版本号取自 app/version.txt；v5.3.7 实测约 1.83GB，单文件仍可直接挂 GitHub Release）。
     [switch]$NoModel
 )
 
