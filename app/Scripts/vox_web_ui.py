@@ -4498,8 +4498,39 @@ async function togglePlayAudio(wavName, btnId) {
 function loadHistory() {
   try {
     history = JSON.parse(localStorage.getItem('voxcpm_history') || '[]');
-    renderHistory();
+  } catch { history = []; }
+  renderHistory();
+  pruneMissingRecords();   // 后端校验可达性，清掉音频文件已不存在的记录
+}
+
+// 记录文件可达性校验（与 /api/audio 同款查找路径）：不可达的从列表+恢复备份中清掉并持久化
+async function pruneMissingRecords() {
+  const files = [...new Set(history.map(h => h.wav).filter(Boolean))];
+  if (!files.length) return;
+  let found = null;
+  try {
+    const r = await fetch('/api/history/check', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ files })
+    });
+    const d = await r.json();
+    found = (d && d.found) || null;
   } catch {}
+  if (!found) return;               // 校验请求失败（后端异常等）：保留现状，不错误清除
+  const isMissing = f => f && found[f] === false;
+  let removed = 0;
+  history = history.filter(h => { if (isMissing(h.wav)) { removed++; return false; } return true; });
+  if (removed) {
+    localStorage.setItem('voxcpm_history', JSON.stringify(history));
+    try {  // 「恢复」备份同步清理，防止死记录复活
+      const bk = JSON.parse(localStorage.getItem('voxcpm_history_backup') || '[]');
+      if (Array.isArray(bk) && bk.length) {
+        localStorage.setItem('voxcpm_history_backup', JSON.stringify(bk.filter(b => !isMissing(b.wav))));
+      }
+    } catch {}
+    showToast(`已清掉 ${removed} 条失效记录（音频文件已不存在）`, 'success');
+  }
+  renderHistory();
 }
 
 function addHistory(item) {
@@ -4530,6 +4561,7 @@ function restoreHistory() {
     history = restored.slice(0, 20);
     localStorage.setItem('voxcpm_history', JSON.stringify(history));
     renderHistory();
+    pruneMissingRecords();   // 恢复的记录也要过可达性校验
     showToast('已恢复上次清除的记录', 'success');
   } catch (e) {
     showToast('恢复失败: ' + e.message, 'error');
@@ -5798,6 +5830,22 @@ if HAS_WEB:
       filename=safe_name,
       headers={"Content-Disposition": f"attachment; filename*=UTF-8''{safe_name}"},
     )
+
+  @app.post("/api/history/check")
+  async def check_history_files(payload: dict):
+    """「最近合成记录」可达性校验：按 /api/audio 同款查找路径（TEMP_DIR → _output_dir/VoxCPM_Outputs）
+    判断文件是否可访问，前端据此把不可达记录从列表清掉（含「恢复」备份）。"""
+    files = payload.get("files") if isinstance(payload, dict) else None
+    if not isinstance(files, list):
+      files = []
+    out_dir = _output_dir / "VoxCPM_Outputs"
+    found = {}
+    for f in files[:200]:
+      n = os.path.basename(str(f).strip())
+      if not n:
+        continue
+      found[n] = (TEMP_DIR / n).is_file() or (out_dir / n).is_file()
+    return {"ok": True, "found": found}
 
 
 def run_server(port: int = 18978, host: str = "127.0.0.1", hide_console: bool = True):
