@@ -19,7 +19,7 @@
 
 本仓库**不含**安装包（4 个文件共约 5.1 GB，超过 GitHub 单文件/仓库限制）。获取开箱即用版有如下途径（按新→旧）：
 
-1. **v5.3.7 无模型版单文件 exe（当前最新，推荐）**：`VoxCPM2_TTS_v5.3.7_nomodel_Setup.exe`（约 1.83 GB，Inno Setup 7.0.2 构建，单文件即装、无需分卷）。随包内容：8 个音色档案（7 克隆 + 甜妹女生无参考）与 7 个档案参考 wav（装完即听克隆音色）、OpenAI 兼容 API（`Scripts\start_openai_api.bat`，:8020）、qwen3 时间戳模型首用自动下载、Web UI 全部 v5.3.7 更新（见「版本历史 v5.3.7」）。不含模型权重，安装后按下方「无模型版说明」获取模型。单文件 <2GB，可直接挂 GitHub Release 或网盘分发。
+1. **v5.3.7 无模型版单文件 exe（当前最新，推荐）**：`VoxCPM2_TTS_v5.3.7_nomodel_Setup.exe`（约 1.71GB，Inno Setup 7.0.2 构建，单文件即装、无需分卷）。随包内容：8 个音色档案（7 克隆 + 甜妹女生无参考）与 7 个档案参考 wav（装完即听克隆音色）、OpenAI 兼容 API（`Scripts\start_openai_api.bat`，:8020）、qwen3 时间戳模型首用自动下载、Web UI 全部 v5.3.7 更新（见「版本历史 v5.3.7」）。不含模型权重，安装后按下方「无模型版说明」获取模型。单文件 <2GB，可直接挂 GitHub Release 或网盘分发。
 2. **v5.3 完整版（带模型，网盘）**：本地构建会把 `output/` 下的 4 个文件（`.exe` + 3×`.bin`）打包为 **`output/VoxCPM2_TTS_v5.3_Setup.zip`**（位于 `output/` 目录，但已被 `.gitignore` 排除、**不随源码 clone**，约 5.24 GB 超过 GitHub 单文件限制）。请从下方网盘链接下载，或本地按「构建说明」自行生成，解压后双击 `VoxCPM2_TTS_v5.3_Setup.exe` 即可安装。
    - 网盘分发下载（阿里云盘）：[https://www.alipan.com/s/jraDcmeo1y6](https://www.alipan.com/s/jraDcmeo1y6)　提取码：`i9u7`
    - 也可由你自己或他人从源码重新构建，见下方「构建说明」。
@@ -30,7 +30,7 @@
 
 ### 无模型版说明（VoxCPM2_TTS_v5.3_nomodel_Setup）
 
-安装包**不含模型权重**（v5.3.7 单文件约 1.83 GB，v5.3 旧版约 1.56 GB，均远小于完整版 5.24 GB），适合带宽有限、或希望模型走更快国内源的用户。无模型版为**单个自包含 `.exe`**，双击即安装、无需额外文件。安装方式与普通版完全一致，区别仅在**安装后需自行放入模型**：
+安装包**不含模型权重**（v5.3.7 单文件约 1.71GB，v5.3 旧版约 1.56GB，均远小于完整版 5.24GB），适合带宽有限、或希望模型走更快国内源的用户。无模型版为**单个自包含 `.exe`**，双击即安装、无需额外文件。安装方式与普通版完全一致，区别仅在**安装后需自行放入模型**：
 
 1. 安装完成后首次启动会提示「模型缺失」——这是正常的，不是故障（网页端状态栏显示「模型缺失（可点页面内下载）」，控制台也有明确指引）。
 2. 获取模型（任选其一，网页内下载与手动方式效果完全相同）：
@@ -48,7 +48,7 @@
 ## 版本历史
 
 - **v5.3.7（当前，2026-09-25，APP 版本号 5.3.7）**：
-  - **打包**：Inno Setup 7.0.2 + 无模型版单文件 exe（约 1.83 GB，`payload_nomodel` + ISCC `/DVoxNoModel /DVersion=5.3.7`；安装端 64 位 7za 解压 + 看门狗/双层进度）。随包新增：8 个音色档案（`voxcpm_profiles.json`：7 克隆 + 甜妹女生无参考）与 7 个档案参考 wav（`cache/voxcpm_web_ui/voice_preview_*.wav`，共 2.9MB；git 侧已加 `.gitignore` 例外规则入库，音色资产可溯源重建）；`voxcpm_web_config.json` 改为**空模板**（不写死机器专属路径：模型目录自动检测、输出目录默认用户桌面、qwen3 模型首用自动下载）。
+  - **打包**：Inno Setup 7.0.2 + 无模型版单文件 exe（约 1.71GB，`payload_nomodel` + ISCC `/DVoxNoModel /DVersion=5.3.7`；安装端 64 位 7za 解压 + 看门狗/双层进度）。随包新增：8 个音色档案（`voxcpm_profiles.json`：7 克隆 + 甜妹女生无参考）与 7 个档案参考 wav（`cache/voxcpm_web_ui/voice_preview_*.wav`，共 2.9MB；git 侧已加 `.gitignore` 例外规则入库，音色资产可溯源重建）；`voxcpm_web_config.json` 改为**空模板**（不写死机器专属路径：模型目录自动检测、输出目录默认用户桌面、qwen3 模型首用自动下载）。
   - **Web UI（使用手册 §12）**：合成记录与音色档案**可达性校验**（wav 丢失的记录自动从列表 + 恢复备份中清除并持久化，`/api/history/check`）；新增「合成试听」卡（波形 + 播放/下载）；共享波形/调速条并入「最近合成记录」标题行；待合成文本框固定 3 行；seed 参数；命令行窗口 toggle 常显；深/浅主题；设置页新增 qwen3 时间戳模型**单独下载/删除**入口。
   - **时间戳**：qwen3 字符/词级时间戳引擎（双引擎 qwen3/whisper，手册 §11）；qwen3 模型**不随包**（包内删 6 个模型文件瘦身），首用自动下载（`hf_hub_download` 拉 6 文件→本地加载；无网则报错退出、CLI 降级 whisper）。
   - **OpenAI 兼容 API**：`Scripts/voxcpm_openai.py`（:8020，桥接后端 WebUI :19001）+ `Scripts/start_openai_api.bat` 一键拉起（后端未起会自动先拉 WebUI）；快速参考 `app/OpenAI_API_QuickRef.md`（随包于安装目录根，随仓可在线阅读）。
@@ -350,7 +350,7 @@ snapshot_download('iic/speech_zipenhancer_ans_multiloss_16k_base', local_dir='ap
 
 # 6. 编译安装包（脚本会先把 app/ 7z 预压缩为 payload/app.7z，再调用 ISCC）
 powershell -ExecutionPolicy Bypass -File build_installer.ps1
-#    无模型版（v5.3.7 分发形态：payload_nomodel + /DVoxNoModel，产物单文件约 1.83GB，
+#    无模型版（v5.3.7 分发形态：payload_nomodel + /DVoxNoModel，产物单文件约 1.71GB，
 #    文件名版本号取自 app/version.txt → VoxCPM2_TTS_v{版本}_nomodel_Setup.exe）：
 powershell -ExecutionPolicy Bypass -File build_installer.ps1 -NoModel
 #   或直接： "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer\VoxCPM2_TTS.iss
