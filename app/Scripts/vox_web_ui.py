@@ -1919,6 +1919,33 @@ HTML_CONTENT = r"""
     pointer-events: none;
     opacity: 0.7;
   }
+  .text-area-resizer {
+    position: absolute;
+    left: 8px;
+    right: 8px;
+    bottom: -7px;
+    height: 12px;
+    cursor: ns-resize;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 3;
+  }
+  .text-area-resizer::before {
+    content: '';
+    width: 44px;
+    height: 4px;
+    border-radius: 3px;
+    background: var(--border);
+    opacity: 0.55;
+    transition: width .15s ease, background .15s ease, opacity .15s ease;
+  }
+  .text-area-resizer:hover::before,
+  .text-area-resizer.dragging::before {
+    width: 64px;
+    background: var(--accent);
+    opacity: 1;
+  }
   textarea {
     flex: 1;
     width: 100%;
@@ -2546,6 +2573,7 @@ HTML_CONTENT = r"""
       <div class="text-area-wrap">
         <textarea id="textInput" placeholder="在此输入要合成语音的文本..."></textarea>
         <div class="text-area-hint">或使用上方「上传TXT」按钮加载文本文件</div>
+        <div class="text-area-resizer" id="textInputResizer" title="按住上下拖动，调整文本框高度"></div>
       </div>
     </div>
 
@@ -3567,6 +3595,36 @@ function bindTextArea() {
     reader.readAsText(file, 'utf-8');
     txtInput.value = '';
   };
+
+  // 文本框高度拖拽（自绘手柄：按住底部横条上下拖动，脱离 flex 拉伸后手动控高）
+  const wrap = document.querySelector('.text-area-wrap');
+  const rz = document.getElementById('textInputResizer');
+  if (wrap && rz) {
+    rz.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      rz.classList.add('dragging');
+      const startY = e.clientY;
+      const startH = wrap.getBoundingClientRect().height;
+      wrap.style.flex = '0 0 auto';            // 脱离卡片 stretch，进入手动控高
+      wrap.style.height = startH + 'px';
+      document.body.style.userSelect = 'none';
+      document.body.style.cursor = 'ns-resize';
+      const move = (ev) => {
+        let h = startH + (ev.clientY - startY);
+        h = Math.max(120, Math.min(900, Math.round(h)));
+        wrap.style.height = h + 'px';
+      };
+      const up = () => {
+        document.removeEventListener('mousemove', move);
+        document.removeEventListener('mouseup', up);
+        document.body.style.userSelect = '';
+        document.body.style.cursor = '';
+        rz.classList.remove('dragging');
+      };
+      document.addEventListener('mousemove', move);
+      document.addEventListener('mouseup', up);
+    });
+  }
 }
 
 function bindRefUpload() {
