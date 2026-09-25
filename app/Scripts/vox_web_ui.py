@@ -1999,7 +1999,9 @@ HTML_CONTENT = r"""
     position: relative;
     flex: 0 0 auto;
     display: flex;
+    height: 94px;   /* 默认三行：line-height1.5×15px×3 + padding24 + border2 ≈ 94px；自绘调高手柄可覆盖此值 */
   }
+  #textInput { line-height: 1.5; }
   .text-area-hint {
     position: absolute;
     right: 14px;
