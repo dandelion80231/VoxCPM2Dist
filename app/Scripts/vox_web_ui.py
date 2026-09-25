@@ -1594,7 +1594,7 @@ HTML_CONTENT = r"""
     letter-spacing: 1px;
   }
   .logo span { color: var(--text); font-weight: 400; }
-  .header-left { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+  .header-left { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; flex-shrink: 0; }
   .header-sample-rate {
     display: flex; align-items: center; gap: 6px;
     font-size: 11px; color: var(--text2);
@@ -1616,9 +1616,9 @@ HTML_CONTENT = r"""
   }
   .brand-stack {
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
     align-items: center;
-    gap: 2px;
+    gap: 6px;
     flex-shrink: 0;
     margin-right: 2px;
   }
@@ -2414,8 +2414,7 @@ HTML_CONTENT = r"""
   </div>
   <div class="header-right">
     <div class="theme-switch" id="themeSwitch">
-      <button data-theme="dark" onclick="setTheme('dark')" title="深色">🌙</button>
-      <button data-theme="light" onclick="setTheme('light')" title="浅色">☀️</button>
+      <button id="themeToggle" onclick="toggleTheme()" title="切换深浅色">🌙</button>
       <input type="color" id="customBg" onchange="setCustomBg(this.value)" title="自定义背景色">
     </div>
     <button class="status-badge" style="cursor:pointer" onclick="openSettings()" title="路径设置">⚙ 设置</button>
@@ -3906,15 +3905,36 @@ function applyTheme(theme, customBg) {
     ['--bg','--surface','--surface2','--border','--text','--text2','--input-bg','--input-bg-focus'].forEach(v => root.style.removeProperty(v));
     document.body.classList.remove('custom-bg-active');
   }
-  document.querySelectorAll('#themeSwitch button[data-theme]').forEach(b => {
-    b.classList.toggle('active', b.dataset.theme === theme);
-  });
+  const tgl = document.getElementById('themeToggle');
+  if (tgl) {
+    let base = theme;
+    if (theme === 'custom' && customBg) {
+      const c = hexToRgb(customBg);
+      const lum = (0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b) / 255;
+      base = lum < 0.5 ? 'dark' : 'light';
+    }
+    const target = (base === 'light') ? 'dark' : 'light';
+    tgl.textContent = (target === 'dark') ? '🌙' : '☀️';
+    tgl.title = '切换' + (target === 'dark' ? '深色' : '浅色');
+    tgl.classList.toggle('active', theme !== 'custom');
+  }
   const colorInput = document.getElementById('customBg');
   if (colorInput) colorInput.classList.toggle('active', theme === 'custom');
   localStorage.setItem('voxcpm_theme', theme);
   if (theme === 'custom') localStorage.setItem('voxcpm_custom_bg', customBg);
 }
 function setTheme(t) { applyTheme(t); }
+function toggleTheme() {
+  const root = document.documentElement;
+  let cur = root.getAttribute('data-theme') || 'dark';
+  if (cur === 'custom') {
+    const bg = localStorage.getItem('voxcpm_custom_bg') || '#000';
+    const c = hexToRgb(bg);
+    const lum = (0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b) / 255;
+    cur = lum < 0.5 ? 'dark' : 'light';
+  }
+  applyTheme(cur === 'light' ? 'dark' : 'light');
+}
 function setCustomBg(color) { applyTheme('custom', color); }
 function initTheme() {
   const t = localStorage.getItem('voxcpm_theme') || 'dark';
