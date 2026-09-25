@@ -49,7 +49,17 @@ app/Scripts/verify_baseline/
 app/Scripts/verify_lora/
 app/Scripts/verify_xing_baseline/
 app/Scripts/verify_xing_lora/
-app/cache/
+# 7 个音色档案参考 wav 除外（随安装包分发的资产，需可溯源）
+app/cache/*
+!app/cache/voxcpm_web_ui/
+app/cache/voxcpm_web_ui/*
+!app/cache/voxcpm_web_ui/voice_preview_1789912313.wav
+!app/cache/voxcpm_web_ui/voice_preview_1789912394.wav
+!app/cache/voxcpm_web_ui/voice_preview_1789912481.wav
+!app/cache/voxcpm_web_ui/voice_preview_1790314932.wav
+!app/cache/voxcpm_web_ui/voice_preview_1790315723.wav
+!app/cache/voxcpm_web_ui/voice_preview_1790315910.wav
+!app/cache/voxcpm_web_ui/voice_preview_1790316182.wav
 
 # 临时分析/规格脚本与备份
 calc_size*.py
