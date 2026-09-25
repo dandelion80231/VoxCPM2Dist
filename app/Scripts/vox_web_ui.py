@@ -1789,6 +1789,9 @@ HTML_CONTENT = r"""
     transition: transform 0.15s, border-color 0.15s, box-shadow 0.15s;
   }
   .param-card:hover { border-color: rgba(108,142,255,0.4); box-shadow: var(--shadow-md); transform: translateY(-2px); }
+  /* 统一悬停上浮效果：主内容卡片与 param-card 一致（边框提亮 + 阴影 + 上浮 2px） */
+  .text-card, .control-card, .ref-card { transition: transform 0.15s, border-color 0.15s, box-shadow 0.15s; }
+  .text-card:hover, .control-card:hover, .ref-card:hover { border-color: rgba(108,142,255,0.4); box-shadow: var(--shadow-md); transform: translateY(-2px); }
   .param-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; min-height: 36px; }
   .param-title { display: flex; align-items: baseline; gap: 10px; flex: 1; min-width: 0; }
   .param-title .param-unit { align-self: baseline; padding-bottom: 0; margin-left: 0; font-size: 13px; color: var(--text2); }
@@ -1919,7 +1922,8 @@ HTML_CONTENT = r"""
     pointer-events: none;
     opacity: 0.7;
   }
-  .text-area-resizer {
+  .text-area-resizer,
+  .prompt-resizer {
     position: absolute;
     left: 8px;
     right: 8px;
@@ -1931,7 +1935,8 @@ HTML_CONTENT = r"""
     justify-content: center;
     z-index: 3;
   }
-  .text-area-resizer::before {
+  .text-area-resizer::before,
+  .prompt-resizer::before {
     content: '';
     width: 44px;
     height: 4px;
@@ -1941,7 +1946,9 @@ HTML_CONTENT = r"""
     transition: width .15s ease, background .15s ease, opacity .15s ease;
   }
   .text-area-resizer:hover::before,
-  .text-area-resizer.dragging::before {
+  .text-area-resizer.dragging::before,
+  .prompt-resizer:hover::before,
+  .prompt-resizer.dragging::before {
     width: 64px;
     background: var(--accent);
     opacity: 1;
@@ -2223,6 +2230,7 @@ HTML_CONTENT = r"""
   .ref-dur { color: var(--accent2); }
   .ref-warn { margin-top: 6px; font-size: 11px; color: var(--yellow); display: none; }
   .prompt-text-wrap { margin-top: 10px; }
+  .prompt-resize-wrap { position: relative; }
   .prompt-text-input {
     width: 100%;
     min-height: 56px;
@@ -2234,7 +2242,7 @@ HTML_CONTENT = r"""
     font-size: 13px;
     font-family: var(--font-sans);
     line-height: 1.55;
-    resize: vertical;
+    resize: none;
     outline: none;
     transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
   }
@@ -2580,7 +2588,10 @@ HTML_CONTENT = r"""
     <!-- 音色描述 + 示例 + 音色试听（试听横排在描述区下方，不拉宽外框） -->
     <div class="control-card">
       <h3>音色描述（可选，留空使用左侧预设；也可写方言/角色）</h3>
-      <textarea id="controlText" class="prompt-text-input" placeholder="例如：25岁温柔甜美女声，带一点播音腔。或『深宫太后，威严庄重』『河南方言大叔』"></textarea>
+      <div class="prompt-resize-wrap">
+        <textarea id="controlText" class="prompt-text-input" placeholder="例如：25岁温柔甜美女声，带一点播音腔。或『深宫太后，威严庄重』『河南方言大叔』"></textarea>
+        <div class="prompt-resizer" id="controlTextResizer" title="按住上下拖动，调整高度"></div>
+      </div>
       <div class="example-chips" id="exampleChips">
         <div class="preview-inline" style="display:flex;align-items:center;gap:6px;margin-left:auto;margin-right:36px;">
           <button id="voicePreviewBtn" class="mode-btn" onclick="runVoicePreview()" title="试听（有参考音频时直接播放，否则生成短句）" style="padding:4px 10px;font-size:12px;">▶ 试听</button>
@@ -2634,7 +2645,10 @@ HTML_CONTENT = r"""
       </div>
       <div class="prompt-text-wrap" id="promptWrap" style="display:none">
         <label class="param-label">参考音频文本（终极克隆，可选）</label>
-        <textarea id="promptText" class="prompt-text-input" placeholder="填入参考音频的原文转录，可显著提升音色相似度与稳定性（留空则为普通固定克隆）" oninput="onPromptInput()"></textarea>
+        <div class="prompt-resize-wrap">
+          <textarea id="promptText" class="prompt-text-input" placeholder="填入参考音频的原文转录，可显著提升音色相似度与稳定性（留空则为普通固定克隆）" oninput="onPromptInput()"></textarea>
+          <div class="prompt-resizer" id="promptTextResizer" title="按住上下拖动，调整高度"></div>
+        </div>
         <div class="ref-warn" id="ultimateHint" style="display:none">⚠ 终极克隆模式：将忽略上方「音色描述」，以参考音频 + 文本还原音色。</div>
       </div>
       <label class="toggle-row" id="denoiseRow">
@@ -3607,6 +3621,8 @@ function bindTextArea() {
       const startH = wrap.getBoundingClientRect().height;
       wrap.style.flex = '0 0 auto';            // 脱离卡片 stretch，进入手动控高
       wrap.style.height = startH + 'px';
+      const card = wrap.closest('.text-card');
+      if (card) { card.style.flex = '0 0 auto'; card.style.minHeight = 'auto'; }  // 外边框跟随收缩/扩张
       document.body.style.userSelect = 'none';
       document.body.style.cursor = 'ns-resize';
       const move = (ev) => {
@@ -3625,6 +3641,39 @@ function bindTextArea() {
       document.addEventListener('mouseup', up);
     });
   }
+
+  // 音色描述 / 参考转录 的自绘调高手柄（同 #textInput）
+  bindPromptResizer('controlText');
+  bindPromptResizer('promptText');
+}
+
+// 自绘调高手柄：按住底部横条上下拖动，调整 textarea 高度（.prompt-text-input 已设 resize:none）
+function bindPromptResizer(taId) {
+  const ta = document.getElementById(taId);
+  const rz = document.getElementById(taId + 'Resizer');
+  if (!ta || !rz) return;
+  rz.addEventListener('mousedown', (e) => {
+    e.preventDefault();
+    rz.classList.add('dragging');
+    const startY = e.clientY;
+    const startH = ta.getBoundingClientRect().height;
+    document.body.style.userSelect = 'none';
+    document.body.style.cursor = 'ns-resize';
+    const move = (ev) => {
+      let h = startH + (ev.clientY - startY);
+      h = Math.max(56, Math.min(600, Math.round(h)));
+      ta.style.height = h + 'px';
+    };
+    const up = () => {
+      document.removeEventListener('mousemove', move);
+      document.removeEventListener('mouseup', up);
+      document.body.style.userSelect = '';
+      document.body.style.cursor = '';
+      rz.classList.remove('dragging');
+    };
+    document.addEventListener('mousemove', move);
+    document.addEventListener('mouseup', up);
+  });
 }
 
 function bindRefUpload() {
