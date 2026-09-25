@@ -3828,7 +3828,7 @@ function bindTextArea() {
       document.body.style.cursor = 'ns-resize';
       const move = (ev) => {
         let h = startH + (ev.clientY - startY);
-        h = Math.max(120, Math.min(900, Math.round(h)));
+        h = Math.max(94, Math.min(900, Math.round(h)));   // 下限=三行默认高94px，可拖回3行
         wrap.style.height = h + 'px';
       };
       const up = () => {
