@@ -3303,16 +3303,8 @@ function onPromptInput() {
 }
 
 // 从已加载的参考音频现算 64-bin 归一化 peaks（与后端 /api/voice-preview 同口径，供直接试听画波形）
-async function computeRefPeaks() {
-  let ab;
-  if (refFile) {
-    ab = await refFile.arrayBuffer();
-  } else if (currentRefPath) {
-    const fname = currentRefPath.split(/[\\/]/).pop();
-    ab = await (await fetch('/api/audio/' + encodeURIComponent(fname))).arrayBuffer();
-  } else {
-    return null;
-  }
+// 解码 ArrayBuffer → 64-bin 归一化 peaks（与后端 /api/voice-preview 同口径，供直接试听画波形）
+async function peaksFromBuffer(ab) {
   try {
     const AC = window.AudioContext || window.webkitAudioContext;
     const ctx = new AC();
@@ -3346,45 +3338,43 @@ async function runVoicePreview() {
   // ── 直接试听：已有加载的参考音频（音色档案 currentRefPath 或上传的 refFile）时，
   //    直接播放该参考（免 GPU 推理、秒出），不重新生成短句；无参考才生成 ──
   if (currentMode === 'fixed_clone' && (refFile || currentRefPath)) {
+    // 一次取参考音频，既用于播放又用于算波形（避免双 fetch + 时延）
     let directUrl = '';
+    let ab = null;
     if (refFile) {
-      directUrl = URL.createObjectURL(refFile);
+      directUrl = URL.createObjectURL(refFile);      // 原 File 播放（duration 元数据可靠）
+      ab = await refFile.arrayBuffer();
     } else {
       const fname = currentRefPath.split(/[\\/]/).pop();
-      directUrl = '/api/audio/' + encodeURIComponent(fname);
+      const blob = await (await fetch('/api/audio/' + encodeURIComponent(fname))).blob();
+      directUrl = URL.createObjectURL(blob);
+      ab = await blob.arrayBuffer();
     }
+    const peaks = ab ? await peaksFromBuffer(ab) : null;   // 先算好 peaks，进度从 t=0 就能跟
     audio.src = directUrl;
     lastPreviewUrl = directUrl;
     if (currentRefPath && !refFile) lastPreviewPath = currentRefPath;   // 档案参考→可再存档案
     status.style.color = '';
     status.textContent = '▶ 直接试听参考音频（未重新合成）';
+    if (peaks) drawPreviewWave(peaks);
     const pb = document.getElementById('previewPlayBtn');
     try {
       await audio.play();
       pb.textContent = '⏸'; pb.title = '暂停';
-      audio.onended = () => { pb.textContent = '▶'; pb.title = '播放'; };
     } catch (e) {
       status.textContent = '（浏览器限制自动播放，点 ▶）';
     }
-    // 波形：按参考音频现算 peaks 并绘制（进度动画与生成路径同口径）
-    computeRefPeaks().then(peaks => {
-      if (!peaks) return;
-      drawPreviewWave(peaks);
+    audio.onended = () => { pb.textContent = '▶'; pb.title = '播放'; };
+    if (peaks) {
       const _anim = () => {
-        if (audio.ended) {
-          const p2 = document.getElementById('previewPlayBtn');
-          p2.textContent = '▶'; p2.title = '播放';
-          drawPreviewWave(peaks);   // 复位整条波形
-          return;
-        }
-        if (!audio.paused) {
-          const prog = audio.duration ? audio.currentTime / audio.duration : 0;
-          drawPreviewWave(peaks, prog);
+        if (audio.ended) { drawPreviewWave(peaks); return; }   // 复位整条波形 + 停止循环
+        if (!audio.paused && isFinite(audio.duration) && audio.duration > 0) {
+          drawPreviewWave(peaks, audio.currentTime / audio.duration);
         }
         requestAnimationFrame(_anim);
       };
       requestAnimationFrame(_anim);
-    }).catch(() => {});
+    }
     return;
   }
 
