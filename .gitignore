@@ -60,3 +60,8 @@ ts_spec*.txt
 app/Scripts/*.bak-*
 __nomodel_exclude/
 app/Scripts/exports/
+
+# 临时/构建产物（本地开发残留，不入库）
+build/
+_fix_config.ps1
+launch_ui18978.bat
