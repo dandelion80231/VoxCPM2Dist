@@ -3913,9 +3913,9 @@ function applyTheme(theme, customBg) {
       const lum = (0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b) / 255;
       base = lum < 0.5 ? 'dark' : 'light';
     }
-    const target = (base === 'light') ? 'dark' : 'light';
-    tgl.textContent = (target === 'dark') ? '🌙' : '☀️';
-    tgl.title = '切换' + (target === 'dark' ? '深色' : '浅色');
+    // 图标跟随「当前」主题：浅色=☀️(太阳)、深色=🌙(月亮)；点击切到相反主题
+    tgl.textContent = (base === 'light') ? '☀️' : '🌙';
+    tgl.title = '切换到' + (base === 'light' ? '深色' : '浅色');
     tgl.classList.toggle('active', theme !== 'custom');
   }
   const colorInput = document.getElementById('customBg');
