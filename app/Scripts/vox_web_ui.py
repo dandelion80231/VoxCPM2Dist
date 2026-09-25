@@ -1984,8 +1984,8 @@ HTML_CONTENT = r"""
     display: flex;
     flex-direction: column;
     gap: 10px;
-    flex: 1;
-    min-height: 180px;
+    flex: 0 0 auto;
+    min-height: auto;
     box-shadow: var(--shadow-sm);
   }
   .text-card-header {
@@ -1997,9 +1997,8 @@ HTML_CONTENT = r"""
   .char-count { font-size: 12px; color: var(--text2); }
   .text-area-wrap {
     position: relative;
-    flex: 1;
+    flex: 0 0 auto;
     display: flex;
-    min-height: 120px;
   }
   .text-area-hint {
     position: absolute;
@@ -2669,7 +2668,7 @@ HTML_CONTENT = r"""
         </div>
       </div>
       <div class="text-area-wrap">
-        <textarea id="textInput" placeholder="在此输入要合成语音的文本..."></textarea>
+        <textarea id="textInput" rows="3" placeholder="在此输入要合成语音的文本..."></textarea>
         <div class="text-area-hint">或使用上方「上传TXT」按钮加载文本文件</div>
         <div class="text-area-resizer" id="textInputResizer" title="按住上下拖动，调整文本框高度"></div>
       </div>
