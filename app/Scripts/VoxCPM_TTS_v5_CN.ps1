@@ -13,6 +13,11 @@ if (-not $VERSION) { $VERSION = '5.3' }
 $PYTHON    = Join-Path $APP_DIR "python_cuda\python.exe"
 $SCRIPT    = Join-Path $SCRIPT_DIR "voxcpm_tts_v5_longtext.py"
 
+# 引擎 stdout/stderr 强制 UTF-8：子进程默认继承 GBK 控制台码页，第三方库日志含
+# PUA/生僻字符时 print 会抛 UnicodeEncodeError（v5.3.7 菜单新增项实测发现）。
+$env:PYTHONIOENCODING = "utf-8"
+$env:PYTHONUTF8       = "1"
+
 # ---------- 模型/输出路径（离线优先使用随包模型） ----------
 $env:VOXCPM_MODEL_DIR = Join-Path $APP_DIR "model\openbmb\VoxCPM2"
 if (-not $env:HF_ENDPOINT) { $env:HF_ENDPOINT = "https://hf-mirror.com" }
@@ -131,6 +136,18 @@ function Show-Menu {
     Write-Host "[其他]" -ForegroundColor Yellow
     Write-Host "  13 - 克隆已有音频（Controllable Clone）"
     Write-Host "  14 - 终极克隆（Ultimate Clone）"
+    Write-Host ""
+    Write-Host "[音色档案 / 语料]（与 Web UI 共用后端）" -ForegroundColor Yellow
+    Write-Host "  15 - 音色档案管理（列表/保存/删除/导出/导入）"
+    Write-Host "  16 - 多音字语料管理（导入/导出）"
+    Write-Host ""
+    Write-Host "[合成参数]（与 Web UI 设置页等价）" -ForegroundColor Yellow
+    Write-Host "  17 - 可复现种子合成（同种子结果可复现）"
+    Write-Host "  18 - 时间戳 / SRT 字幕（词/字级对齐，首用自动下载 qwen3 模型）"
+    Write-Host "  19 - 多音字 LoRA 挂载合成"
+    Write-Host "  20 - CPU 模式合成（--no-cuda）"
+    Write-Host "  21 - 指定输出目录合成"
+    Write-Host "  22 - 防漂移：每 N 段更新一次参考音频"
     Write-Host "  0  - 退出"
     Write-Host ""
     Write-Host "[直接输入] 输入任意文本直接合成（>180字自动长文本自播种模式）" -ForegroundColor Green
@@ -162,7 +179,7 @@ function Invoke-TTS {
                      "--split", "auto", "--chunk-size", "180",
                      "--crossfade", "80")
         if ($ExtraArgs) {
-            $argList += $ExtraArgs -split " "
+            $argList += @($ExtraArgs -split "\s+")
         }
 
         Write-Host ""
@@ -181,7 +198,7 @@ function Invoke-TTS {
         $argList += @("-c", $Control)
     }
     if ($ExtraArgs) {
-        $argList += $ExtraArgs -split " "
+        $argList += @($ExtraArgs -split "\s+")
     }
 
     Write-Host ""
@@ -374,6 +391,204 @@ while ($true) {
             & $PYTHON $SCRIPT -t $text --prompt-audio $ref --prompt-text $refText --reference $ref
             Write-Host ""
             Write-Host "[完成] 终极克隆合成结束！" -ForegroundColor Green
+            pause
+        }
+        "15" {
+            Write-Host ""
+            Write-Host "[音色档案管理] 与 Web UI 共用（voxcpm_profiles.json，随包已含 8 个预设档案）" -ForegroundColor Yellow
+            Write-Host "  1 - 列出全部档案"
+            Write-Host "  2 - 保存当前配置为档案"
+            Write-Host "  3 - 删除档案"
+            Write-Host "  4 - 导出档案 JSON（留空自动存 exports\ 目录）"
+            Write-Host "  5 - 导入档案 JSON"
+            Write-Host "  0 - 返回"
+            $psel = Read-Host "请选择"
+            switch ($psel) {
+                "1" {
+                    & $PYTHON $SCRIPT --list-profiles
+                }
+                "2" {
+                    $pname = (Read-Host "档案名称（不可含 ':'，如：深宫太后").Trim()
+                    if ([string]::IsNullOrWhiteSpace($pname)) {
+                        Write-Host "[错误] 档案名不能为空" -ForegroundColor Red
+                        break
+                    }
+                    $pv = (Read-Host "预设音色（1/2/3/4 或预设名，留空默认").Trim()
+                    $pc = (Read-Host "音色描述（可留空").Trim()
+                    $pm = Read-Host "模式: 1=默认 voice_design  2=自播种  3=固定参考（留空=1）"
+                    $pargs = @("--profile-save", $pname)
+                    if ($pv) { $pargs += @("--voice", $pv) }
+                    if ($pc) { $pargs += @("-c", $pc) }
+                    if ($pm -eq "2") { $pargs += "--self-seeding" }
+                    if ($pm -eq "3") {
+                        $pref = (Read-Host "参考音频路径").Trim().Trim([char]34)
+                        $ppt  = (Read-Host "参考音频原文本（可留空").Trim()
+                        if (-not (Test-Path $pref)) {
+                            Write-Host "[错误] 参考音频不存在: $pref" -ForegroundColor Red
+                            break
+                        }
+                        $pargs += @("--reference", $pref)
+                        if ($ppt) { $pargs += @("--prompt-text", $ppt) }
+                    }
+                    & $PYTHON $SCRIPT @pargs
+                }
+                "3" {
+                    $pname = Read-Host "要删除的档案名"
+                    & $PYTHON $SCRIPT --profile-delete $pname
+                }
+                "4" {
+                    $ppath = (Read-Host "导出路径（留空自动存 exports\ 目录").Trim().Trim([char]34)
+                    if ($ppath) { & $PYTHON $SCRIPT --profile-export $ppath } else { & $PYTHON $SCRIPT --profile-export }
+                }
+                "5" {
+                    $ipath = (Read-Host "要导入的档案 JSON 文件").Trim().Trim([char]34)
+                    if (-not (Test-Path $ipath)) {
+                        Write-Host "[错误] 文件不存在: $ipath" -ForegroundColor Red
+                    } else {
+                        & $PYTHON $SCRIPT --profile-import $ipath
+                    }
+                }
+            }
+            pause
+        }
+        "16" {
+            Write-Host ""
+            Write-Host "[多音字语料] 与 Web UI 共用；每行一条多音字修正（同 Web UI 语料编辑器口径，坏行导入时自动跳过）" -ForegroundColor Yellow
+            Write-Host "  1 - 导入语料文本文件（UTF-8）"
+            Write-Host "  2 - 导出语料到文件（留空自动存 exports\ 目录）"
+            Write-Host "  0 - 返回"
+            $csel = Read-Host "请选择"
+            switch ($csel) {
+                "1" {
+                    $cpath = (Read-Host "要导入的语料文件").Trim().Trim([char]34)
+                    if (-not (Test-Path $cpath)) {
+                        Write-Host "[错误] 文件不存在: $cpath" -ForegroundColor Red
+                    } else {
+                        & $PYTHON $SCRIPT --corpus-import $cpath
+                    }
+                }
+                "2" {
+                    $cpath = (Read-Host "导出路径（留空自动存 exports\ 目录").Trim().Trim([char]34)
+                    if ($cpath) { & $PYTHON $SCRIPT --corpus-export $cpath } else { & $PYTHON $SCRIPT --corpus-export }
+                }
+            }
+            pause
+        }
+        "17" {
+            Write-Host ""
+            Write-Host "[可复现种子] 同种子 + 同文本 + 同设置 结果近似一致（官方特性；留空=随机）" -ForegroundColor Yellow
+            $text = Read-Host "请输入文本"
+            $seed = Read-Host "种子数字（如 42，留空随机）"
+            $controlInput = Read-Host "请输入音色描述（或输入 1/2/3/4 使用预设，留空默认温柔女声）"
+            $ctrl = if ($controlInput) { Resolve-Voice -InputStr $controlInput } else { $null }
+            $extra = ""
+            if ($seed) { $extra = "--seed $seed" }
+            Invoke-TTS -Text $text -Control $ctrl -ExtraArgs $extra
+            pause
+        }
+        "18" {
+            Write-Host ""
+            Write-Host "[时间戳/SRT] 输出词/字级时间戳（.timestamps.json；Qwen3 对齐优先，首用自动下载 ~1.75GB；不可用自动降级 whisper）" -ForegroundColor Yellow
+            $text = Read-Host "请输入文本"
+            $controlInput = Read-Host "请输入音色描述（或输入 1/2/3/4 使用预设，留空默认温柔女声）"
+            $wantSrt = Read-Host "同时输出 SRT 字幕文件？(Y/N)"
+            $ctrl = if ($controlInput) { Resolve-Voice -InputStr $controlInput } else { $null }
+            $extra = "--timestamps"
+            if ($wantSrt -match "^[Yy]") { $extra = "--timestamps --timestamps-srt" }
+            Invoke-TTS -Text $text -Control $ctrl -ExtraArgs $extra
+            pause
+        }
+        "19" {
+            Write-Host ""
+            Write-Host "[多音字 LoRA] 挂载多音字修正 LoRA 权重（训练产出的 step_XXXXXXX 目录，或 lora_weights.safetensors / .ckpt）；留空=不挂载" -ForegroundColor Yellow
+            $lora = (Read-Host "LoRA 权重路径（留空跳过").Trim().Trim([char]34)
+            $text = Read-Host "请输入文本"
+            $controlInput = Read-Host "请输入音色描述（或输入 1/2/3/4 使用预设，留空默认温柔女声）"
+            if ($lora -and -not (Test-Path $lora)) {
+                Write-Host "[错误] LoRA 路径不存在: $lora" -ForegroundColor Red
+                pause
+                continue
+            }
+            $loraArgs = @()
+            if ($lora) { $loraArgs += @("--lora", $lora) }
+            $loraArgs += @("-t", $text)
+            $ctrl = if ($controlInput) { Resolve-Voice -InputStr $controlInput } else { $null }
+            if ($ctrl) { $loraArgs += @("-c", $ctrl) }
+            if ($text.Length -gt 180) { $loraArgs += @("--self-seeding", "--split", "auto", "--chunk-size", "180", "--crossfade", "80") }
+            Write-Host ""
+            Write-Host "[合成中] 请稍候..." -ForegroundColor Cyan
+            & $PYTHON $SCRIPT @loraArgs
+            Write-Host ""
+            Write-Host "[完成] LoRA 合成结束！" -ForegroundColor Green
+            pause
+        }
+        "20" {
+            Write-Host ""
+            Write-Host "[CPU 模式] 强制 CPU 推理（--no-cuda；无 GPU / 显存不足场景，速度较慢）" -ForegroundColor Yellow
+            $text = Read-Host "请输入文本"
+            $controlInput = Read-Host "请输入音色描述（或输入 1/2/3/4 使用预设，留空默认温柔女声）"
+            $ctrl = if ($controlInput) { Resolve-Voice -InputStr $controlInput } else { $null }
+            Invoke-TTS -Text $text -Control $ctrl -ExtraArgs "--no-cuda"
+            pause
+        }
+        "21" {
+            Write-Host ""
+            Write-Host "[指定输出目录] 结果 wav 写入指定目录（默认桌面）" -ForegroundColor Yellow
+            $outdir = (Read-Host "输出目录（留空=桌面").Trim().Trim([char]34)
+            $text = Read-Host "请输入文本"
+            $controlInput = Read-Host "请输入音色描述（或输入 1/2/3/4 使用预设，留空默认温柔女声）"
+            $dirArgs = @()
+            if ($outdir) {
+                if (-not (Test-Path $outdir)) { New-Item -ItemType Directory -Path $outdir -Force | Out-Null }
+                $dirArgs += @("--dir", $outdir)
+            }
+            $dirArgs += @("-t", $text)
+            $ctrl = if ($controlInput) { Resolve-Voice -InputStr $controlInput } else { $null }
+            if ($ctrl) { $dirArgs += @("-c", $ctrl) }
+            if ($text.Length -gt 180) { $dirArgs += @("--self-seeding", "--split", "auto", "--chunk-size", "180", "--crossfade", "80") }
+            Write-Host ""
+            Write-Host "[合成中] 请稍候..." -ForegroundColor Cyan
+            & $PYTHON $SCRIPT @dirArgs
+            $destDesc = "桌面"
+            if ($outdir) { $destDesc = $outdir }
+            Write-Host ""
+            Write-Host "[完成] 合成结束！输出目录: $destDesc" -ForegroundColor Green
+            pause
+        }
+        "22" {
+            Write-Host ""
+            Write-Host "[防漂移] 长文本固定参考模式：每 N 段更新一次参考音频，防后段音色漂移（0=不更新）" -ForegroundColor Yellow
+            $file = Read-Host "请输入文本文件路径"
+            $file = $file.Trim().Trim([char]34)
+            if (-not (Test-Path $file)) {
+                Write-Host "[错误] 文件不存在: $file" -ForegroundColor Red
+                pause
+                continue
+            }
+            $controlInput = Read-Host "请输入音色描述（或输入 1/2/3/4 使用预设）"
+            $control = Resolve-Voice -InputStr $controlInput
+            $n = Read-Host "参考更新间隔（段数，留空或 0=不更新）"
+            $refPath = (Read-Host "参考音频路径（留空自动生成").Trim().Trim([char]34)
+            $argList = @("-f", $file, "-c", $control, "--split", "auto", "--chunk-size", "180")
+            if ($n -and $n -ne "0") { $argList += @("--update-ref", $n) }
+            if (-not $refPath) {
+                Write-Host "[参考音频] 正在生成多语调参考音频（更丰富的韵律采样）..." -ForegroundColor Yellow
+                $refText = "你好，欢迎使用语音合成系统。今天将为您带来一段精彩的语音合成演示，让我们一起体验人工智能技术带来的便捷与乐趣。我们的技术正在不断进步，力求为您提供更加自然流畅的语音体验。"
+                $refFile = Join-Path $desktop "ref_voice_upd.wav"
+                & $PYTHON $SCRIPT -t $refText -c $control --cfg 3.0 --steps 20 -o $refFile
+                $refPath = $refFile
+            }
+            if (-not (Test-Path $refPath)) {
+                Write-Host "[错误] 参考音频不存在: $refPath" -ForegroundColor Red
+                pause
+                continue
+            }
+            $argList += @("--reference", $refPath)
+            Write-Host ""
+            Write-Host "[合成中] 长文本分段处理中（防漂移模式），请稍候..." -ForegroundColor Cyan
+            & $PYTHON $SCRIPT @argList
+            Write-Host ""
+            Write-Host "[完成] 防漂移合成结束！" -ForegroundColor Green
             pause
         }
         default {
