@@ -1,4 +1,4 @@
-# VoxCPM2 TTS 中文版 使用手册(v5.3.7，2026-09-26 修订)
+# VoxCPM2 TTS 中文版 使用手册(v5.3.8，2026-09-27 修订)
 
 离线可用的中文 TTS(文本转语音)工具包:自带 CUDA Python 运行时 + 引擎 + Web 界面 +
 **OpenAI 兼容 API(v5.3.7 新增)**。所有合成在本机完成,不联网、不上传。
@@ -42,7 +42,7 @@ LoRA 多音字训练(Scripts\training)。
 双击 `Scripts\Launch_TTS_Menu.bat` 或
 `Scripts\VoxCPM_TTS_v5_CN.ps1`(PowerShell),按菜单选功能。
 
-菜单项速查(1–14 为原有;**15–22 为 2026-09-26 菜单新增**;随时也可直接输文本/完整参数透传):
+菜单项速查(1–14 为原有;**15–22 为 v5.3.8 新增（本包已含）**;随时也可直接输文本/完整参数透传):
 
 | 编号 | 功能 | 说明 |
 |---|------|------|
@@ -64,7 +64,7 @@ LoRA 多音字训练(Scripts\training)。
 | **21** | 指定输出目录 | 结果 wav 写入指定目录(默认桌面) |
 | **22** | 防漂移 | 长文本固定参考模式:每 N 段更新一次参考音频,防后段音色漂移(0=不更新) |
 
-> 15–22 所需引擎参数(`--seed/--timestamps-srt/--lora/--no-cuda/--dir/--update-ref`)v5.3.7 引擎均已具备;若已装 v5.3.7 安装包,把仓库最新 `Scripts\VoxCPM_TTS_v5_CN.ps1` 覆盖到安装目录 `Scripts\` 即可启用(引擎 `.py` 无需更换)。
+> 15–22 所需引擎参数(`--seed/--timestamps-srt/--lora/--no-cuda/--dir/--update-ref`)v5.3.7 引擎均已具备;若已装 v5.3.7 安装包,把仓库最新 `Scripts\VoxCPM_TTS_v5_CN.ps1` 覆盖到安装目录 `Scripts\` 即可启用(引擎 `.py` 无需更换);v5.3.8 安装包已直接包含,无需覆盖。
 
 ### ③ OpenAI 兼容 API(v5.3.7 新增,给工具/工作台对接用)
 双击 `Scripts\start_openai_api.bat`:
