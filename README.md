@@ -54,6 +54,7 @@
   - **OpenAI 兼容 API**：`Scripts/voxcpm_openai.py`（:8020，桥接后端 WebUI :19001）+ `Scripts/start_openai_api.bat` 一键拉起（后端未起会自动先拉 WebUI）；快速参考 `app/OpenAI_API_QuickRef.md`（随包于安装目录根，随仓可在线阅读）。
   - **文档**：`app/VoxCPM2_使用手册.md` 更新至 v5.3.7（12 章）。
   - **验证**：7z 全量 diff（仅 4 更新 + 7 新增）→ payload 原位更新 → exe 嵌入字节级验证 → 静默安装验证（8 档案 `ref_ok` 全真 + 主页 200）。构建注意：7z 26.02 存在反斜杠路径 bug，payload 更新须用正斜杠相对路径。
+  - **菜单增补（2026-09-26，仓库版；v5.3.7 安装包内为旧 14 项菜单）**：`Scripts/VoxCPM_TTS_v5_CN.ps1` 新增 15–22 八项——15 音色档案管理（列表/保存/删除/导出/导入）、16 多音字语料管理（导入/导出）、17 可复现种子合成（`--seed`）、18 时间戳/SRT（`--timestamps[-srt]`）、19 多音字 LoRA 挂载（`--lora`）、20 CPU 模式（`--no-cuda`）、21 指定输出目录（`--dir`）、22 防漂移（`--update-ref` 每 N 段更新参考）；并在脚本顶部设 `PYTHONIOENCODING/PYTHONUTF8` 根治第三方库 PUA 字符引发的 GBK print 崩溃。所需引擎参数 v5.3.7 引擎均已具备——已装用户只需把仓库最新 `.ps1` 覆盖到安装目录 `Scripts\` 即可启用（引擎 `.py` 无需更换）。使用手册 §3② 已同步补菜单项速查表。
 - **v5.3.5（发布 tag，APP 版本仍为 5.3）**：多音字 LoRA 训练完整经验文档 + 语料工具链入库；网页端 LoRA 挂载状态面板实时刷新修复；听测验证工具链（`app/Scripts/verify_listen.py`、`verify_xing.py`）。
 - **v5.3.3（发布 tag，APP 版本仍为 5.3）**：网页端新增「下载/校验模型」按钮——模型缺失时页面顶部自动出现「📦 下载模型」卡片，点击即在后台线程拉取模型（约 5GB，断点续传 + 实时进度条），无需切出浏览器；「⚙ 设置 → 下载/校验模型」也提供常驻入口用于更新/校验已装模型。后端新增 `POST /api/download-model`、`GET /api/download-model/status`、`POST /api/download-model/cancel` 三接口；`download_model.py` 重构为可编程 + 进度回调（`progress_cb`/`should_stop`），CLI 双击 `下载模型.bat` 行为不变。Web UI 保持单一源码，按钮按 `model_present()` 运行时显示，带模型版（模型已随包）自动隐藏，两个版本安装包无需分叉。**分发**：本次先将无模型版（单文件 exe，约 1.56GB）发布到 GitHub Release；带模型版（含完整模型，约 5GB）沿用云盘分发，后续随云盘重新上传即含本功能（代码同源，无需分别维护）。**2026-07-17 补丁**：该 tag 已重新指向修复 commit——模型已存在时点「下载/校验模型」按钮改为给出文件级反馈（设置弹窗常驻列出 7 个模型文件状态：✓完整 / ✗异常 + 体积 + 问题说明），启动脚本还原为简洁形态（双击快捷方式窗口一闪、服务后台静默运行）；安装包文件名仍为 `VoxCPM2_TTS_v5.3_nomodel_Setup.exe`（`.iss` 的 Version 固定 5.3，不含补丁号，与惯例一致）。
 - **v5.3.4（发布 tag，APP 版本仍为 5.3）**：新增「多音字修正 LoRA」微调通道——VoxCPM2 是 tokenizer-free 字符级 TTS，多音字读音靠上下文消歧，多数能读对、少数生僻字会读错；本版内置 LoRA 训练 + 挂载管线，可用少量录音微调出「多音字修正权重」，挂载后让模型在该类字上读得更准（根治方案，需自备 GPU + 朗读数据）。**勘误（v5.4）**：此处原文称 "VoxCPM2 **不支持** `{pinyin}`/`{ni3}` 音素注入" 有误——VoxCPM2 原生支持音素输入（须 `normalize=False`，见下文「音素输入」说明），当时的结论源于分发包默认归一化破坏了音素串的误判。**训练侧**：`app/Scripts/training/`（核心 `train_voxcpm_finetune.py` 修复了 `datasets` 5.0.0 强制 `torchcodec`（离线包无 ffmpeg）崩溃——monkeypatch `Audio.decode_example` 改用 soundfile 恢复旧 dict 接口；`voxcpm_finetune_lora.yaml` 默认 `r=32, alpha=32` 仅挂 LM；`train_polyphone_lora.ps1` 一键启动）、数据准备 `prepare_polyphone_lora_data.py`/`bootstrap_lora_audio.py`、验证对比 `verify_lora.py`、`lora_helper.py`（从训练产出的 `lora_config.json` 重建 LoRAConfig，规避「只给权重路径→自动建默认 r=8→与训练 r=32 形状不匹配→加载失败」的隐藏坑）。**挂载侧**：网页 UI 设置新增「多音字 LoRA 权重」输入 + 状态栏显示「已挂载 / 未挂载」；CLI `--lora <目录>` 或环境变量 `VOXCPM_LORA`；留空 = 原版模型。LoRA 权重仅数 MB~数十 MB，可随包/网盘分发，用户填路径即启用，无需重训。训练数据 `lora_audio/` 与产出 `lora_output/` 已 gitignore，不入库（详见 README「多音字修正（LoRA）」一节）。
@@ -129,6 +130,19 @@ VoxCPM2 TTS 中文版是一个**完全离线、开箱即用**的中文语音合�
 **其他**
 - 13 克隆已有音频（Controllable Clone）
 - 14 终极克隆（Ultimate Clone）
+
+**音色档案 / 语料**（与 Web UI 共用后端，2026-09-26 菜单新增）
+- 15 音色档案管理（列表/保存/删除/导出/导入）
+- 16 多音字语料管理（导入/导出）
+
+**合成参数**（与 Web UI 设置页等价，2026-09-26 菜单新增）
+- 17 可复现种子合成（同种子结果可复现）
+- 18 时间戳 / SRT 字幕（词/字级对齐，首用自动下载 qwen3 模型）
+- 19 多音字 LoRA 挂载合成
+- 20 CPU 模式合成（--no-cuda）
+- 21 指定输出目录合成
+- 22 防漂移：每 N 段更新一次参考音频
+
 - 0 退出
 
 > 直接输入任意文本即可直接合成（默认温柔女声）；输入超过 180 字会自动走自播种长文本模式，整段音色统一。也可输入完整 Python 参数（如 `-f 文件.txt --reference ref.wav`）进行高级控制。
